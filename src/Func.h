@@ -265,17 +265,17 @@ public:
      * Func with multiple outputs. */
     EXPORT Stage operator=(const Tuple &);
 
-    /** Define this function as a sum reduction over the negative of
-     * the given expression. The expression should refer to some RDom
-     * to sum over. If the function does not already have a pure
-     * definition, this sets it to zero.
-     */
-    EXPORT Stage operator+=(Expr);
-
     /** Define this function as a sum reduction over the given
      * expression. The expression should refer to some RDom to sum
      * over. If the function does not already have a pure definition,
      * this sets it to zero.
+     */
+    EXPORT Stage operator+=(Expr);
+
+    /** Define this function as a sum reduction over the negative of
+     * the given expression. The expression should refer to some RDom
+     * to sum over. If the function does not already have a pure
+     * definition, this sets it to zero.
      */
     EXPORT Stage operator-=(Expr);
 
@@ -540,7 +540,7 @@ public:
      * pointer to the compiled pipeline. Default is to use the Target
      * returned from Halide::get_jit_target_from_environment()
      */
-     EXPORT void *compile_jit(const Target &target = get_jit_target_from_environment());
+    EXPORT void *compile_jit(const Target &target = get_jit_target_from_environment());
 
     /** Set the error handler function that be called in the case of
      * runtime errors during halide pipelines. If you are compiling

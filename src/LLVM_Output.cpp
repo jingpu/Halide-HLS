@@ -83,7 +83,9 @@ void get_target_options(const llvm::Module *module, llvm::TargetOptions &options
     #endif
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
+    #if LLVM_VERSION < 37
     options.DisableTailCalls = false;
+    #endif
     options.StackAlignmentOverride = 0;
     options.TrapFuncName = "";
     options.PositionIndependentExecutable = true;
@@ -209,6 +211,16 @@ void emit_file(llvm::Module *module, const std::string &filename, llvm::TargetMa
     // Get the target specific parser.
     llvm::TargetMachine *target_machine = get_target_machine(module);
     internal_assert(target_machine) << "Could not allocate target machine!\n";
+
+    if (!(*(target_machine->getDataLayout()) == module->getDataLayout())) {
+        // This *might* be indicative on a bug elsewhere, but might
+        // also be fine. It depends on what the differences are
+        // precisely. Notify when in debug mode.
+        Internal::debug(1) << "Warning: module's data layout does not match target machine's\n"
+                           << target_machine->getDataLayout()->getStringRepresentation() << "\n"
+                           << module->getDataLayout().getStringRepresentation() << "\n";
+        module->setDataLayout(*target_machine->getDataLayout());
+    }
 
     std::unique_ptr<llvm::raw_fd_ostream> out(new_raw_fd_ostream(filename));
 

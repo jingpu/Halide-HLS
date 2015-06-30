@@ -175,7 +175,8 @@ public:
  * the function (if any). It is rare that this function is necessary
  * (e.g. to pass the user context to an extern function written in C). */
 inline Expr user_context_value() {
-    return Internal::Variable::make(Handle(), "__user_context", Internal::Parameter(Handle(), false, 0));
+    return Internal::Variable::make(Handle(), "__user_context",
+        Internal::Parameter(Handle(), false, 0, "__user_context", true));
 }
 
 /** A handle on the output buffer of a pipeline. Used to make static
@@ -207,7 +208,7 @@ public:
     EXPORT Type type() const;
 
     /** Is this parameter handle non-NULL */
-    EXPORT bool defined();
+    EXPORT bool defined() const;
 
     /** Get an expression representing the minimum coordinates of this image
      * parameter in the given dimension. */
