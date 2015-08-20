@@ -41,6 +41,7 @@ set(RUNTIME_CPP
   nacl_host_cpu_count
   opencl
   opengl
+  openglcompute
   osx_clock
   osx_get_symbol
   osx_host_cpu_count
@@ -186,11 +187,6 @@ foreach (i ${RUNTIME_BC} )
   list(APPEND INITIAL_MODULES "${INITMOD}")
 endforeach()
 
-add_library(InitialModules STATIC
-  ${INITIAL_MODULES})
-
-add_dependencies(InitialModules
-  bitcode2cpp)
 
 set(HEADER_FILES
   AddImageChecks.h
@@ -211,6 +207,7 @@ set(HEADER_FILES
   CodeGen_MIPS.h
   CodeGen_OpenCL_Dev.h
   CodeGen_OpenGL_Dev.h
+  CodeGen_OpenGLCompute_Dev.h
   CodeGen_PNaCl.h
   CodeGen_PTX_Dev.h
   CodeGen_Posix.h
@@ -228,6 +225,7 @@ set(HEADER_FILES
   Extern.h
   FastIntegerDivide.h
   FindCalls.h
+  Float16.h
   Func.h
   Function.h
   Generator.h
@@ -278,6 +276,7 @@ set(HEADER_FILES
   Schedule.h
   ScheduleFunctions.h
   Scope.h
+  SelectGPUAPI.h
   Simplify.h
   SkipStages.h
   SlidingWindow.h
@@ -311,9 +310,9 @@ file(COPY runtime/HalideRuntime.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 file(COPY runtime/HalideRuntimeCuda.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 file(COPY runtime/HalideRuntimeOpenCL.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 file(COPY runtime/HalideRuntimeOpenGL.h DESTINATION "${CMAKE_BINARY_DIR}/include")
+file(COPY runtime/HalideRuntimeOpenGLCompute.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 file(COPY runtime/HalideRuntimeRenderscript.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 
-add_definitions("-DCOMPILING_HALIDE")
 
 IF ((LLVM_VERSION LESS 36) OR (TARGET_NATIVE_CLIENT))
   set(BITWRITER_FILES
@@ -348,6 +347,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_MIPS.cpp
   CodeGen_OpenCL_Dev.cpp
   CodeGen_OpenGL_Dev.cpp
+  CodeGen_OpenGLCompute_Dev.cpp
   CodeGen_PNaCl.cpp
   CodeGen_PTX_Dev.cpp
   CodeGen_Posix.cpp
@@ -364,6 +364,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ExprUsesVar.cpp
   FastIntegerDivide.cpp
   FindCalls.cpp
+  Float16.cpp
   Func.cpp
   Function.cpp
   FuseGPUThreadLoops.cpp
@@ -412,6 +413,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   RemoveUndef.cpp
   Schedule.cpp
   ScheduleFunctions.cpp
+  SelectGPUAPI.cpp
   Simplify.cpp
   SkipStages.cpp
   SlidingWindow.cpp
@@ -434,6 +436,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ${BITWRITER_FILES}
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES}
+  ${INITIAL_MODULES}
 )
 
 # List of LLVM Components required
@@ -493,6 +496,7 @@ if (TARGET_MIPS)
 endif()
 
 target_compile_definitions(Halide PRIVATE "-DLLVM_VERSION=${LLVM_VERSION}")
+target_compile_definitions(Halide PRIVATE "-DCOMPILING_HALIDE")
 
 if (MSVC)
   # Suppress some warnings
@@ -525,7 +529,12 @@ else()
   string(REPLACE " " ";" LIBS "${LIBS_SPACES}")
 endif()
 
-target_link_libraries(Halide PUBLIC InitialModules ${LIBS})
+# When building a shared library the LLVM libraries will be
+# embedded in the Halide library. When building a static library
+# LLVM is not embedded but CMake knows that when building an executable
+# against the Halide static library that it needs to link LLVM too so
+# PRIVATE scope is the correct choice here.
+target_link_libraries(Halide PRIVATE ${LIBS})
 
 if (NOT WIN32)
   if (${LLVM_VERSION} GREATER 34)
@@ -541,6 +550,6 @@ if (NOT WIN32)
 endif()
 
 add_dependencies(Halide
-  InitialModules
+  bitcode2cpp
   build_halide_h
 )
