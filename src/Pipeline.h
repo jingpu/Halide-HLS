@@ -176,6 +176,14 @@ public:
                              const std::string &fn_name,
                              const Target &target = get_target_from_environment());
 
+    /** Statically compile a pipeline to HLS C source code.
+     * Vectorization will fail, and parallelization will
+     * produce serial code. */
+    EXPORT void compile_to_hls(const std::string &filename,
+                               const std::vector<Argument> &,
+                               const std::string &fn_name,
+                               const Target &target = get_target_from_environment());
+
     /** Write out an internal representation of lowered code. Useful
      * for analyzing and debugging scheduling. Can emit html or plain
      * text. */
@@ -426,7 +434,7 @@ bool voidable_halide_type(Type &t) {
 template<>
 inline bool voidable_halide_type<void>(Type &t) {
     return true;
-}        
+}
 
 template <typename T>
 bool scalar_arg_type_or_buffer(Type &t) {

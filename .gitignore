@@ -217,3 +217,5 @@ test/*.lowered
 src/.tags
 src/.tags_sorted_by_file
 
+# HLS backend
+.dir-locals.el

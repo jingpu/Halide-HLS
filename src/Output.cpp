@@ -1,4 +1,5 @@
 #include "CodeGen_C.h"
+#include "CodeGen_HLS.h"
 #include "StmtToHtml.h"
 #include "Output.h"
 #include "LLVM_Headers.h"
@@ -99,6 +100,15 @@ void compile_module_to_c_source(const Module &module, std::string filename) {
     Internal::CodeGen_C cg(file, false);
     cg.compile(module);
 }
+
+void compile_module_to_hls_source(const Module &module, std::string filename) {
+    if (filename.empty()) filename = module.name() + ".c";
+
+    std::ofstream file(filename.c_str());
+    Internal::CodeGen_HLS cg(file, false);
+    cg.compile(module);
+}
+
 
 void compile_module_to_c(const Module &module,
               std::string h_filename,

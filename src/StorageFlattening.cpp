@@ -96,102 +96,118 @@ private:
     using IRMutator::visit;
 
     void visit(const Realize *realize) {
-        realizations.push(realize->name, 1);
+        // if it is a realize node of a stream or a stencil, skip it
+        if (ends_with(realize->name, ".stencil") ||
+            ends_with(realize->name, ".stencil_update") ||
+            ends_with(realize->name, ".stream")) {
+            Stmt body = mutate(realize->body);
 
-        Stmt body = mutate(realize->body);
+            debug(3) << "Not attempting to flatten " << realize->name << " because it is a stream or a stencil.\n";
+            if (body.same_as(realize->body)) {
+                stmt = realize;
+            } else {
+                stmt = Realize::make(realize->name, realize->types, realize->bounds,
+                                     realize->condition, body);
+            }
+        } else {
 
-        // Compute the size
-        std::vector<Expr> extents;
-        for (size_t i = 0; i < realize->bounds.size(); i++) {
-          extents.push_back(realize->bounds[i].extent);
-          extents[i] = mutate(extents[i]);
-        }
-        Expr condition = mutate(realize->condition);
+            realizations.push(realize->name, 1);
 
-        realizations.pop(realize->name);
+            Stmt body = mutate(realize->body);
 
-        vector<int> storage_permutation;
-        {
-            map<string, Function>::const_iterator iter = env.find(realize->name);
-            internal_assert(iter != env.end()) << "Realize node refers to function not in environment.\n";
-            const vector<string> &storage_dims = iter->second.schedule().storage_dims();
-            const vector<string> &args = iter->second.args();
-            for (size_t i = 0; i < storage_dims.size(); i++) {
-                for (size_t j = 0; j < args.size(); j++) {
-                    if (args[j] == storage_dims[i]) {
-                        storage_permutation.push_back((int)j);
+            // Compute the size
+            std::vector<Expr> extents;
+            for (size_t i = 0; i < realize->bounds.size(); i++) {
+                extents.push_back(realize->bounds[i].extent);
+                extents[i] = mutate(extents[i]);
+            }
+            Expr condition = mutate(realize->condition);
+
+            realizations.pop(realize->name);
+
+            vector<int> storage_permutation;
+            {
+                map<string, Function>::const_iterator iter = env.find(realize->name);
+                internal_assert(iter != env.end()) << "Realize node refers to function not in environment.\n";
+                const vector<string> &storage_dims = iter->second.schedule().storage_dims();
+                const vector<string> &args = iter->second.args();
+                for (size_t i = 0; i < storage_dims.size(); i++) {
+                    for (size_t j = 0; j < args.size(); j++) {
+                        if (args[j] == storage_dims[i]) {
+                            storage_permutation.push_back((int)j);
+                        }
                     }
+                    internal_assert(storage_permutation.size() == i+1);
                 }
-                internal_assert(storage_permutation.size() == i+1);
-            }
-        }
-
-        internal_assert(storage_permutation.size() == realize->bounds.size());
-
-        stmt = body;
-        for (size_t idx = 0; idx < realize->types.size(); idx++) {
-            string buffer_name = realize->name;
-            if (realize->types.size() > 1) {
-                buffer_name = buffer_name + '.' + std::to_string(idx);
             }
 
-            // Make the names for the mins, extents, and strides
-            int dims = realize->bounds.size();
-            vector<string> min_name(dims), extent_name(dims), stride_name(dims);
-            for (int i = 0; i < dims; i++) {
-                string d = std::to_string(i);
-                min_name[i] = buffer_name + ".min." + d;
-                stride_name[i] = buffer_name + ".stride." + d;
-                extent_name[i] = buffer_name + ".extent." + d;
-            }
-            vector<Expr> min_var(dims), extent_var(dims), stride_var(dims);
-            for (int i = 0; i < dims; i++) {
-                min_var[i] = Variable::make(Int(32), min_name[i]);
-                extent_var[i] = Variable::make(Int(32), extent_name[i]);
-                stride_var[i] = Variable::make(Int(32), stride_name[i]);
-            }
+            internal_assert(storage_permutation.size() == realize->bounds.size());
 
-            // Promote the type to be a multiple of 8 bits
-            Type t = realize->types[idx];
-            t.bits = t.bytes() * 8;
+            stmt = body;
+            for (size_t idx = 0; idx < realize->types.size(); idx++) {
+                string buffer_name = realize->name;
+                if (realize->types.size() > 1) {
+                    buffer_name = buffer_name + '.' + std::to_string(idx);
+                }
 
-            // Create a buffer_t object for this allocation.
-            vector<Expr> args(dims*3 + 2);
-            //args[0] = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
-            Expr first_elem = Load::make(t, buffer_name, 0, Buffer(), Parameter());
-            args[0] = Call::make(Handle(), Call::address_of, {first_elem}, Call::Intrinsic);
-            args[1] = realize->types[idx].bytes();
-            for (int i = 0; i < dims; i++) {
-                args[3*i+2] = min_var[i];
-                args[3*i+3] = extent_var[i];
-                args[3*i+4] = stride_var[i];
-            }
-            Expr buf = Call::make(Handle(), Call::create_buffer_t,
-                                  args, Call::Intrinsic);
-            stmt = LetStmt::make(buffer_name + ".buffer",
-                                 buf,
-                                 stmt);
+                // Make the names for the mins, extents, and strides
+                int dims = realize->bounds.size();
+                vector<string> min_name(dims), extent_name(dims), stride_name(dims);
+                for (int i = 0; i < dims; i++) {
+                    string d = std::to_string(i);
+                    min_name[i] = buffer_name + ".min." + d;
+                    stride_name[i] = buffer_name + ".stride." + d;
+                    extent_name[i] = buffer_name + ".extent." + d;
+                }
+                vector<Expr> min_var(dims), extent_var(dims), stride_var(dims);
+                for (int i = 0; i < dims; i++) {
+                    min_var[i] = Variable::make(Int(32), min_name[i]);
+                    extent_var[i] = Variable::make(Int(32), extent_name[i]);
+                    stride_var[i] = Variable::make(Int(32), stride_name[i]);
+                }
 
-            // Make the allocation node
-            stmt = Allocate::make(buffer_name, t, extents, condition, stmt);
+                // Promote the type to be a multiple of 8 bits
+                Type t = realize->types[idx];
+                t.bits = t.bytes() * 8;
 
-            // Compute the strides
-            for (int i = (int)realize->bounds.size()-1; i > 0; i--) {
-                int prev_j = storage_permutation[i-1];
-                int j = storage_permutation[i];
-                Expr stride = stride_var[prev_j] * extent_var[prev_j];
-                stmt = LetStmt::make(stride_name[j], stride, stmt);
-            }
-            // Innermost stride is one
-            if (dims > 0) {
-                int innermost = storage_permutation.empty() ? 0 : storage_permutation[0];
-                stmt = LetStmt::make(stride_name[innermost], 1, stmt);
-            }
+                // Create a buffer_t object for this allocation.
+                vector<Expr> args(dims*3 + 2);
+                //args[0] = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
+                Expr first_elem = Load::make(t, buffer_name, 0, Buffer(), Parameter());
+                args[0] = Call::make(Handle(), Call::address_of, {first_elem}, Call::Intrinsic);
+                args[1] = realize->types[idx].bytes();
+                for (int i = 0; i < dims; i++) {
+                    args[3*i+2] = min_var[i];
+                    args[3*i+3] = extent_var[i];
+                    args[3*i+4] = stride_var[i];
+                }
+                Expr buf = Call::make(Handle(), Call::create_buffer_t,
+                                      args, Call::Intrinsic);
+                stmt = LetStmt::make(buffer_name + ".buffer",
+                                     buf,
+                                     stmt);
 
-            // Assign the mins and extents stored
-            for (size_t i = realize->bounds.size(); i > 0; i--) {
-                stmt = LetStmt::make(min_name[i-1], realize->bounds[i-1].min, stmt);
-                stmt = LetStmt::make(extent_name[i-1], realize->bounds[i-1].extent, stmt);
+                // Make the allocation node
+                stmt = Allocate::make(buffer_name, t, extents, condition, stmt);
+
+                // Compute the strides
+                for (int i = (int)realize->bounds.size()-1; i > 0; i--) {
+                    int prev_j = storage_permutation[i-1];
+                    int j = storage_permutation[i];
+                    Expr stride = stride_var[prev_j] * extent_var[prev_j];
+                    stmt = LetStmt::make(stride_name[j], stride, stmt);
+                }
+                // Innermost stride is one
+                if (dims > 0) {
+                    int innermost = storage_permutation.empty() ? 0 : storage_permutation[0];
+                    stmt = LetStmt::make(stride_name[innermost], 1, stmt);
+                }
+
+                // Assign the mins and extents stored
+                for (size_t i = realize->bounds.size(); i > 0; i--) {
+                    stmt = LetStmt::make(min_name[i-1], realize->bounds[i-1].min, stmt);
+                    stmt = LetStmt::make(extent_name[i-1], realize->bounds[i-1].extent, stmt);
+                }
             }
         }
     }
@@ -288,7 +304,17 @@ private:
         // Handle the provide atomically if necessary. This logic is
         // currently very conservative, it will lower many provides
         // atomically that do not require it.
-        if (provide->values.size() == 1) {
+        if (ends_with(provide->name, ".stencil") ||
+            ends_with(provide->name, ".stencil_update")) {
+            // don't flatten stencil type
+            vector<Expr> new_values(provide->values.size());
+            for (size_t i = 0; i < provide->values.size(); i++) {
+                Expr old_value = provide->values[i];
+                Expr new_value = mutate(old_value);
+                new_values[i] = new_value;
+            }
+            result = Provide::make(provide->name, new_values, provide->args);
+        } else if (provide->values.size() == 1) {
             // If there is only one value, we don't need to worry
             // about atomicity.
             result = flatten_provide(provide);
@@ -315,8 +341,11 @@ private:
     }
 
     void visit(const Call *call) {
-
-        if (call->call_type == Call::Extern || call->call_type == Call::Intrinsic) {
+        if (ends_with(call->name, ".stencil") ||
+            ends_with(call->name, ".stencil_update")) {
+            // don't flatten stencil type
+            expr = call;
+        } else if (call->call_type == Call::Extern || call->call_type == Call::Intrinsic) {
             vector<Expr> args(call->args.size());
             bool changed = false;
             for (size_t i = 0; i < args.size(); i++) {

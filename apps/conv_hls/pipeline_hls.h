@@ -1,5 +1,5 @@
-#ifndef HALIDE__pipeline_c_h
-#define HALIDE__pipeline_c_h
+#ifndef HALIDE__pipeline_hls_h
+#define HALIDE__pipeline_hls_h
 #ifndef HALIDE_ATTRIBUTE_ALIGN
   #ifdef _MSC_VER
     #define HALIDE_ATTRIBUTE_ALIGN(x) __declspec(align(x))
@@ -29,9 +29,9 @@ struct halide_filter_metadata_t;
 #ifdef __cplusplus
 extern "C" {
 #endif
-int pipeline_c(buffer_t *_input_buffer, buffer_t *_output_buffer) HALIDE_FUNCTION_ATTRS;
-int pipeline_c_argv(void **args) HALIDE_FUNCTION_ATTRS;
-extern const halide_filter_metadata_t pipeline_c_metadata;
+int pipeline_hls(buffer_t *_input_buffer, buffer_t *_output_buffer) HALIDE_FUNCTION_ATTRS;
+int pipeline_hls_argv(void **args) HALIDE_FUNCTION_ATTRS;
+extern const halide_filter_metadata_t pipeline_hls_metadata;
 #ifdef __cplusplus
 }  // extern "C"
 #endif

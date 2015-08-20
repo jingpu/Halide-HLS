@@ -202,7 +202,8 @@ const string globals =
     "}\n";
 }
 
-CodeGen_C::CodeGen_C(ostream &s, bool is_header, const std::string &guard) : IRPrinter(s), id("$$ BAD ID $$"), is_header(is_header) {
+CodeGen_C::CodeGen_C(ostream &s, bool is_header, const std::string &guard, const std::string &additional_headers)
+    : IRPrinter(s), id("$$ BAD ID $$"), is_header(is_header) {
     if (is_header) {
         // If it's a header, emit an include guard.
         stream << "#ifndef HALIDE_" << print_name(guard) << '\n'
@@ -211,6 +212,7 @@ CodeGen_C::CodeGen_C(ostream &s, bool is_header, const std::string &guard) : IRP
 
     if (!is_header) {
         stream << headers;
+        stream << additional_headers;
     }
 
     // Throw in a definition of a buffer_t

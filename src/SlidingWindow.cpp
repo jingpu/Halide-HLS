@@ -362,6 +362,12 @@ class SlidingWindow : public IRMutator {
             return;
         }
 
+        // If the Function is scheduled as a stream, skip it
+        if (sched.is_stream()) {
+            IRMutator::visit(op);
+            return;
+        }
+
         Stmt new_body = op->body;
 
         debug(3) << "Doing sliding window analysis on realization of " << op->name << "\n";

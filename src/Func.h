@@ -498,6 +498,15 @@ public:
                              const std::string &fn_name = "",
                              const Target &target = get_target_from_environment());
 
+    /** Statically compile a pipeline to HLS C source code.
+     * Vectorization will fail, and parallelization will
+     * produce serial code. */
+    EXPORT void compile_to_hls(const std::string &filename,
+                               const std::vector<Argument> &,
+                               const std::string &fn_name = "",
+                               const Target &target = get_target_from_environment());
+
+
     /** Write out an internal representation of lowered code. Useful
      * for analyzing and debugging scheduling. Can emit html or plain
      * text. */
@@ -1451,6 +1460,9 @@ public:
     /** Equivalent to \ref Func::store_at, but schedules storage
      * outside the outermost loop. */
     EXPORT Func &store_root();
+
+    /** Schedule a function as a stream. */
+    EXPORT Func &stream();
 
     /** Aggressively inline all uses of this function. This is the
      * default schedule, so you're unlikely to need to call this. For

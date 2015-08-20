@@ -21,8 +21,10 @@ struct ScheduleContents {
     bool memoized;
     bool touched;
     bool allow_race_conditions;
+    bool is_stream;
 
-    ScheduleContents() : memoized(false), touched(false), allow_race_conditions(false) {};
+    ScheduleContents()
+        : memoized(false), touched(false), allow_race_conditions(false), is_stream(false) {};
 };
 
 
@@ -125,6 +127,14 @@ const ReductionDomain &Schedule::reduction_domain() const {
 
 void Schedule::set_reduction_domain(const ReductionDomain &d) {
     contents.ptr->reduction_domain = d;
+}
+
+bool &Schedule::is_stream() {
+    return contents.ptr->is_stream;
+}
+
+bool Schedule::is_stream() const {
+    return contents.ptr->is_stream;
 }
 
 bool &Schedule::allow_race_conditions() {

@@ -195,6 +195,18 @@ class StorageFolding : public IRMutator {
     void visit(const Realize *op) {
         Stmt body = mutate(op->body);
 
+        // if it is a realize node of a stream or a stencil, skip it
+        if (ends_with(op->name, ".stencil") ||
+            ends_with(op->name, ".stencil_update") ||
+            ends_with(op->name, ".stream")) {
+            debug(3) << "Not attempting to fold " << op->name << " because it is a stream or a stencil.\n";
+            if (body.same_as(op->body)) {
+                stmt = op;
+            } else {
+                stmt = Realize::make(op->name, op->types, op->bounds, op->condition, body);
+            }
+        }
+
         AttemptStorageFoldingOfFunction folder(op->name);
         IsBufferSpecial special(op->name);
         op->accept(&special);

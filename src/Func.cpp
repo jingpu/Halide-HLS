@@ -1135,6 +1135,12 @@ Func &Func::store_root() {
     return *this;
 }
 
+Func &Func::stream() {
+    invalidate_cache();
+    func.schedule().is_stream() = true;
+    return *this;
+}
+
 Func &Func::compute_inline() {
     invalidate_cache();
     func.schedule().compute_level() = LoopLevel();
@@ -1622,6 +1628,11 @@ void Func::compile_to_header(const string &filename, const vector<Argument> &arg
 void Func::compile_to_c(const string &filename, const vector<Argument> &args,
                         const string &fn_name, const Target &target) {
     pipeline().compile_to_c(filename, args, fn_name, target);
+}
+
+void Func::compile_to_hls(const string &filename, const vector<Argument> &args,
+                          const string &fn_name, const Target &target) {
+    pipeline().compile_to_hls(filename, args, fn_name, target);
 }
 
 void Func::compile_to_lowered_stmt(const string &filename,

@@ -217,6 +217,7 @@ SOURCE_FILES = \
   CodeGen_C.cpp \
   CodeGen_GPU_Dev.cpp \
   CodeGen_GPU_Host.cpp \
+  CodeGen_HLS.cpp \
   CodeGen_Internal.cpp \
   CodeGen_LLVM.cpp \
   CodeGen_MIPS.cpp \
@@ -289,6 +290,7 @@ SOURCE_FILES = \
   Simplify.cpp \
   SkipStages.cpp \
   SlidingWindow.cpp \
+  StreamOpt.cpp \
   Solve.cpp \
   StmtToHtml.cpp \
   StorageFlattening.cpp \

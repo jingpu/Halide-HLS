@@ -39,6 +39,7 @@
 #include "Simplify.h"
 #include "StorageFlattening.h"
 #include "StorageFolding.h"
+#include "StreamOpt.h"
 #include "Substitute.h"
 #include "Tracing.h"
 #include "UnifyDuplicateLets.h"
@@ -128,6 +129,10 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     debug(1) << "Uniquifying variable names...\n";
     s = uniquify_variable_names(s);
     debug(2) << "Lowering after uniquifying variable names:\n" << s << "\n\n";
+
+    debug(1) << "Performing streaming optimization..\n";
+    s = stream_opt(s, env);
+    debug(2) << "Lowering after streaming optimization:\n" << s << '\n';
 
     debug(1) << "Performing storage folding optimization...\n";
     s = storage_folding(s);

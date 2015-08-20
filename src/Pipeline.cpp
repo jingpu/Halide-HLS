@@ -217,6 +217,16 @@ void Pipeline::compile_to_c(const string &filename,
     compile_module_to_c_source(compile_to_module(args, fn_name, target), filename);
 }
 
+
+void Pipeline::compile_to_hls(const string &filename,
+                            const vector<Argument> &args,
+                            const string &fn_name,
+                            const Target &target) {
+    compile_module_to_hls_source(compile_to_module(args, fn_name, target), filename);
+}
+
+
+
 void Pipeline::print_loop_nest() {
     user_assert(defined()) << "Can't print loop nest of undefined Pipeline.\n";
     std::cerr << Halide::Internal::print_loop_nest(contents.ptr->outputs);

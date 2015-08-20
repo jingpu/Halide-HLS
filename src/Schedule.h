@@ -192,6 +192,12 @@ public:
     LoopLevel &compute_level();
     // @}
 
+    /** Scheduled as a stream? */
+    // @{
+    bool is_stream() const;
+    bool &is_stream();
+    // @}
+
     /** Are race conditions permitted? */
     // @{
     bool allow_race_conditions() const;
