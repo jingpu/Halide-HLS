@@ -9,6 +9,7 @@
 #endif
 #ifndef BUFFER_T_DEFINED
 #define BUFFER_T_DEFINED
+#include <stdbool.h>
 #include <stdint.h>
 typedef struct buffer_t {
     uint64_t dev;
@@ -31,7 +32,7 @@ extern "C" {
 #endif
 int pipeline_hls(buffer_t *_input_buffer, buffer_t *_output_buffer) HALIDE_FUNCTION_ATTRS;
 int pipeline_hls_argv(void **args) HALIDE_FUNCTION_ATTRS;
-extern const halide_filter_metadata_t pipeline_hls_metadata;
+extern const struct halide_filter_metadata_t pipeline_hls_metadata;
 #ifdef __cplusplus
 }  // extern "C"
 #endif

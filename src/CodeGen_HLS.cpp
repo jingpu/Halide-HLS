@@ -95,7 +95,7 @@ void CodeGen_HLS::visit(const Realize *op) {
         // create a stream type
         open_scope();
         internal_assert(op->types.size() == 1);
-        allocations.push(op->name, op->types[0]);
+        allocations.push(op->name, {op->types[0], "null"});
 
         do_indent();
         // C: hls::stream<Stencil<uint16_t, 1, 1, 1> > conv1_stencil_update_stream;
@@ -116,7 +116,7 @@ void CodeGen_HLS::visit(const Realize *op) {
         // create a stencil type
         open_scope();
         internal_assert(op->types.size() == 1);
-        allocations.push(op->name, op->types[0]);
+        allocations.push(op->name, {op->types[0], "null"});
 
         do_indent();
         // Stencil<uint16_t, 1, 1, 1> conv1_stencil_update;

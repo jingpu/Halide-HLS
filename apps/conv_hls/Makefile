@@ -20,7 +20,7 @@ include ./Makefile.autopilot
 all: test
 
 pipeline: pipeline.cpp
-	$(CXX) $(CXXFLAGS) -Wall pipeline.cpp $(LDFLAGS) ../../$(LIB_HALIDE) -o pipeline -lpthread -ldl -lz -ltinfo -g
+	$(CXX) $(CXXFLAGS) -Wall pipeline.cpp $(LDFLAGS) $(LIB_HALIDE) -o pipeline -lpthread -ldl -lz -ltinfo -g
 
 pipeline_hls.cpp: pipeline
 	./pipeline 1

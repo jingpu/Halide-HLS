@@ -1,10 +1,12 @@
-#include "pipeline_native.h"
-//#include "pipeline_c.h"
-#include "pipeline_hls.h"
-#include "../support/static_image.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+#include "halide_image.h"
+#include "pipeline_native.h"
+#include "pipeline_hls.h"
+
+using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
     Image<uint8_t> in(800, 800, 3);

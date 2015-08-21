@@ -16,6 +16,7 @@
 #endif
 #ifndef BUFFER_T_DEFINED
 #define BUFFER_T_DEFINED
+#include <stdbool.h>
 #include <stdint.h>
 typedef struct buffer_t {
     uint64_t dev;
@@ -511,28 +512,28 @@ static int __pipeline_hls(buffer_t *_input_buffer, buffer_t *_output_buffer) HAL
    int32_t _203 = halide_error_buffer_extents_too_large(NULL, "output", _201, _202);
    return _203;
   }
-  int32_t _204 = _output_min_1 + _output_extent_1;
-  int32_t _205 = _204 + 3;
-  int32_t _206 = _output_extent_1 + -1;
-  int32_t _207 = _206 >> 6;
-  int32_t _208 = _207 * 64;
-  int32_t _209 = _208 + _output_min_1;
-  int32_t _210 = _209 + 63;
-  int32_t _211 = _204 + -1;
-  int32_t _212 = min(_210, _211);
-  int32_t _213 = _212 + 4;
-  int32_t _214 = max(_205, _213);
-  int32_t _215 = _output_min_0 + _output_extent_0;
-  int32_t _216 = _215 + 3;
-  int32_t _217 = _output_extent_0 + -1;
-  int32_t _218 = _217 >> 6;
-  int32_t _219 = _218 * 64;
-  int32_t _220 = _219 + _output_min_0;
-  int32_t _221 = _220 + 63;
-  int32_t _222 = _215 + -1;
-  int32_t _223 = min(_221, _222);
-  int32_t _224 = _223 + 4;
-  int32_t _225 = max(_216, _224);
+  int32_t _204 = _output_extent_1 + -1;
+  int32_t _205 = _204 >> 6;
+  int32_t _206 = _205 * 64;
+  int32_t _207 = _206 + _output_min_1;
+  int32_t _208 = _207 + 63;
+  int32_t _209 = _output_min_1 + _output_extent_1;
+  int32_t _210 = _209 + -1;
+  int32_t _211 = min(_208, _210);
+  int32_t _212 = _211 + 4;
+  int32_t _213 = _209 + 3;
+  int32_t _214 = max(_212, _213);
+  int32_t _215 = _output_extent_0 + -1;
+  int32_t _216 = _215 >> 6;
+  int32_t _217 = _216 * 64;
+  int32_t _218 = _217 + _output_min_0;
+  int32_t _219 = _218 + 63;
+  int32_t _220 = _output_min_0 + _output_extent_0;
+  int32_t _221 = _220 + -1;
+  int32_t _222 = min(_219, _221);
+  int32_t _223 = _222 + 4;
+  int32_t _224 = _220 + 3;
+  int32_t _225 = max(_223, _224);
   int32_t _226 = _225 - _41;
   int32_t _227 = _226 + 5;
   int32_t _228 = _214 - _51;
@@ -734,11 +735,13 @@ static int __pipeline_hls(buffer_t *_input_buffer, buffer_t *_output_buffer) HAL
              _buffered_stencil_update(0, 0, 0) = _371;
              // consume buffered.stencil_update
              _buffered_stencil_update_stream.write(_buffered_stencil_update);
+             (void)0;
             } // realize _buffered_stencil_update
            } // for _buffered_scan_update_x
           } // for _buffered_scan_update_y
           // consume buffered.stencil_update.stream
           linebuffer<72, 72, 1>(_buffered_stencil_update_stream, _buffered_stencil_stream);
+          (void)0;
          } // realize _buffered_stencil_update_stream
          // consume buffered.stencil.stream
          // produce conv1.stencil_update.stream
@@ -750,6 +753,7 @@ static int __pipeline_hls(buffer_t *_input_buffer, buffer_t *_output_buffer) HAL
             Stencil<uint8_t, 5, 5, 1> _buffered_stencil;
             // produce buffered.stencil
             _buffered_stencil = _buffered_stencil_stream.read();
+            (void)0;
             // consume buffered.stencil
             {
              Stencil<uint16_t, 1, 1, 1> _conv1_stencil_update;
@@ -858,12 +862,14 @@ static int __pipeline_hls(buffer_t *_input_buffer, buffer_t *_output_buffer) HAL
              _conv1_stencil_update(0, 0, 0) = _472;
              // consume conv1.stencil_update
              _conv1_stencil_update_stream.write(_conv1_stencil_update);
+             (void)0;
             } // realize _conv1_stencil_update
            } // realize _buffered_stencil
           } // for _conv1_scan_update_x
          } // for _conv1_scan_update_y
          // consume conv1.stencil_update.stream
          linebuffer<68, 68, 1>(_conv1_stencil_update_stream, _conv1_stencil_stream);
+         (void)0;
         } // realize _conv1_stencil_update_stream
         // consume conv1.stencil.stream
         for (int _output_s0_y_yi = 0; _output_s0_y_yi < 0 + 64; _output_s0_y_yi++)
@@ -874,6 +880,7 @@ static int __pipeline_hls(buffer_t *_input_buffer, buffer_t *_output_buffer) HAL
            Stencil<uint16_t, 5, 5, 1> _conv1_stencil;
            // produce conv1.stencil
            _conv1_stencil = _conv1_stencil_stream.read();
+           (void)0;
            // consume conv1.stencil
            int32_t _473 = _output_s0_x_xo * 64;
            int32_t _474 = _473 + _output_min_0;
@@ -1012,11 +1019,13 @@ static int __pipeline_hls(buffer_t *_input_buffer, buffer_t *_output_buffer) HAL
              _buffered_stencil_update(0, 0, 0) = _579;
              // consume buffered.stencil_update
              _buffered_stencil_update_stream.write(_buffered_stencil_update);
+             (void)0;
             } // realize _buffered_stencil_update
            } // for _buffered_scan_update_x
           } // for _buffered_scan_update_y
           // consume buffered.stencil_update.stream
           linebuffer<72, 72, 1>(_buffered_stencil_update_stream, _buffered_stencil_stream);
+          (void)0;
          } // realize _buffered_stencil_update_stream
          // consume buffered.stencil.stream
          // produce conv1.stencil_update.stream
@@ -1028,6 +1037,7 @@ static int __pipeline_hls(buffer_t *_input_buffer, buffer_t *_output_buffer) HAL
             Stencil<uint8_t, 5, 5, 1> _buffered_stencil;
             // produce buffered.stencil
             _buffered_stencil = _buffered_stencil_stream.read();
+            (void)0;
             // consume buffered.stencil
             {
              Stencil<uint16_t, 1, 1, 1> _conv1_stencil_update;
@@ -1136,12 +1146,14 @@ static int __pipeline_hls(buffer_t *_input_buffer, buffer_t *_output_buffer) HAL
              _conv1_stencil_update(0, 0, 0) = _680;
              // consume conv1.stencil_update
              _conv1_stencil_update_stream.write(_conv1_stencil_update);
+             (void)0;
             } // realize _conv1_stencil_update
            } // realize _buffered_stencil
           } // for _conv1_scan_update_x
          } // for _conv1_scan_update_y
          // consume conv1.stencil_update.stream
          linebuffer<68, 68, 1>(_conv1_stencil_update_stream, _conv1_stencil_stream);
+         (void)0;
         } // realize _conv1_stencil_update_stream
         // consume conv1.stencil.stream
         for (int _output_s0_y_yi = 0; _output_s0_y_yi < 0 + 64; _output_s0_y_yi++)
@@ -1152,6 +1164,7 @@ static int __pipeline_hls(buffer_t *_input_buffer, buffer_t *_output_buffer) HAL
            Stencil<uint16_t, 5, 5, 1> _conv1_stencil;
            // produce conv1.stencil
            _conv1_stencil = _conv1_stencil_stream.read();
+           (void)0;
            // consume conv1.stencil
            int32_t _681 = _output_min_0 + _output_extent_0;
            int32_t _682 = _681 + _output_s0_x_xi;
