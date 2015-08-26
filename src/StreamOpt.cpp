@@ -515,6 +515,30 @@ class ReorderProducerConsumer : public IRVisitor {
         debug(3) << "visit Realize node " << op->name << '\n';
         Stmt new_body = pull_up_pc_node(op->body);
 
+        /* If the new body is the target PC node, and the consume node of it
+         * is a PC of the current realization, we can push the realize node down to
+         * the consume node and pull the target PC up.
+         * I.e.
+         *          before:                       after
+         *          realize B                      PC A
+         *             |                          /    \
+         *            PC A                  produce A  realize B
+         *            / \                                 |
+         *    produce A  PC B                            PC B
+         */
+        const ProducerConsumer *body_pc = new_body.as<ProducerConsumer>();
+        if (body_pc && body_pc->name == pc_name_) {
+            const ProducerConsumer *consumer_pc = body_pc->consume.as<ProducerConsumer>();
+            if (consumer_pc && consumer_pc->name == op->name) {
+                Stmt new_realize = Realize::make(op->name, op->types, op->bounds, op->condition,
+                                                 consumer_pc);
+                internal_assert(!body_pc->update.defined());
+                stmt_ = ProducerConsumer::make(pc_name_, body_pc->produce, Stmt(), new_realize);
+                return;
+            }
+        }
+
+        // Otherwise, we stop pulling the target futher.
         debug(3) << "Pulling stops at realize node " << op->name << '\n';
         stmt_ = Realize::make(op->name, op->types, op->bounds, op->condition, new_body);
     }
