@@ -1464,6 +1464,19 @@ public:
     /** Schedule a function as a stream. */
     EXPORT Func &stream();
 
+    /** Schedule a function onto the hardware accelerator.
+     * The accelerator takes f as the input function. */
+    EXPORT Func &accelerate_from(Func f);
+
+    /** Insert a buffer before this function.
+     * The buffered function will be stored as buffered.
+     * Buffered function will have the same values, and a clean
+     * schedule. This function will then call buffered function,
+     * i.e. this_func = buffered_func. The schedule of this
+     * function remains unchanged. Other functions will not be
+     * affected either. */
+    EXPORT Func &insert_buffer(Func &buffered);
+
     /** Aggressively inline all uses of this function. This is the
      * default schedule, so you're unlikely to need to call this. For
      * a Func with an update definition, that means it gets computed

@@ -413,6 +413,7 @@ public:
 // we push it down into produce and consume of the stencil.stream
 class AddStreamOperationForFunction : public IRMutator {
     Function func;
+    StencilSpecs specs;
 
     using IRMutator::visit;
 
@@ -427,16 +428,18 @@ class AddStreamOperationForFunction : public IRMutator {
             //       consume func.stencil
             //
             // After mutation:
-            //     produce func.stencil.stream {
+            //     realize func.stencil.stream {
+            //       produce func.stencil.stream {
+            //         realize func.stencil {
+            //           produce func.stencil {...}
+            //           write_stream(func.stencil.stream, func.stencil)
+            //         }
             //       realize func.stencil {
-            //         produce func.stencil {...}
-            //         write_stream(func.stencil.stream, func.stencil)
+            //         produce func.stencil {
+            //           read_stream(func.stencil.stream, func.stencil)
+            //         }
+            //         consume func.stencil
             //       }
-            //     realize func.stencil {
-            //       produce func.stencil {
-            //         read_stream(func.stencil.stream, func.stencil)
-            //       }
-            //       consume func.stencil
             //     }
 
             // check if the body of Realize node is a PC node
@@ -461,12 +464,20 @@ class AddStreamOperationForFunction : public IRMutator {
             Stmt realize_consume = Realize::make(op->name, op->types, op->bounds, op->condition, stencil_pc_consume);
 
             // create the PC node for stream
-            stmt = ProducerConsumer::make(stream_name, realize_produce, Stmt(), realize_consume);
+            Stmt stencil_pc = ProducerConsumer::make(stream_name, realize_produce, Stmt(), realize_consume);
+
+            // create a realizeation of the stencil stream
+            Region bounds;
+            for (StencilDimSpecs dim: specs.dims) {
+                Expr extent = make_const(Int(32), dim.size);
+                bounds.push_back(Range(0, extent));
+            }
+            stmt = Realize::make(stream_name, func.output_types(), bounds, const_true(), stencil_pc);
         }
     }
 
 public:
-    AddStreamOperationForFunction(Function f) : func(f) {}
+    AddStreamOperationForFunction(Function f, StencilSpecs s) : func(f), specs(s) {}
 };
 
 
@@ -500,218 +511,243 @@ public:
 
 
 /** This class implimenets a transformation on IR which pulls
- *  a target ProducerConsumer node towards the root level.
- *  The pulling stops either at the root or at any Realize node
+ *  the Realize and ProducerConsumer nodes for a target stream type
+ *  towards the root level.
  */
-class ReorderProducerConsumer : public IRVisitor {
-    string pc_name_;
-    Stmt stmt_;
+class PullUpTargetNode : public IRMutator {
+    string target;
     SearchIRNode<ProducerConsumer> searcher_;
 
-    using IRVisitor::visit;
+    using IRMutator::visit;
 
-    // Cannot pull PC node up across of Realize node
-    virtual void visit(const Realize *op) {
-        debug(3) << "visit Realize node " << op->name << '\n';
-        Stmt new_body = pull_up_pc_node(op->body);
-
-        /* If the new body is the target PC node, and the consume node of it
-         * is a PC of the current realization, we can push the realize node down to
-         * the consume node and pull the target PC up.
-         * I.e.
-         *          before:                       after
-         *          realize B                      PC A
-         *             |                          /    \
-         *            PC A                  produce A  realize B
-         *            / \                                 |
-         *    produce A  PC B                            PC B
-         */
-        const ProducerConsumer *body_pc = new_body.as<ProducerConsumer>();
-        if (body_pc && body_pc->name == pc_name_) {
-            const ProducerConsumer *consumer_pc = body_pc->consume.as<ProducerConsumer>();
-            if (consumer_pc && consumer_pc->name == op->name) {
-                Stmt new_realize = Realize::make(op->name, op->types, op->bounds, op->condition,
-                                                 consumer_pc);
-                internal_assert(!body_pc->update.defined());
-                stmt_ = ProducerConsumer::make(pc_name_, body_pc->produce, Stmt(), new_realize);
-                return;
-            }
+    // check whether the target realize and PC is at root of IR
+    bool is_target(Stmt s) {
+        const Realize *realize = s.as<Realize>();
+        if(realize && realize->name == target) {
+            const ProducerConsumer *pc = realize->body.as<ProducerConsumer>();
+            if(pc && pc->name == target)
+                return true;
         }
-
-        // Otherwise, we stop pulling the target futher.
-        debug(3) << "Pulling stops at realize node " << op->name << '\n';
-        stmt_ = Realize::make(op->name, op->types, op->bounds, op->condition, new_body);
+        return false;
     }
 
-    virtual void visit(const ProducerConsumer *op) {
-        debug(3) << "visit PC node " << op->name << '\n';
-        if (op->name == pc_name_) {
-            // the current node is the target pc node
-            stmt_ = op;
+    void visit(const Realize *op) {
+        debug(3) << "visit Realize node " << op->name << '\n';
+
+        if (op->name == target) {
+            // find the target
+            internal_assert(is_target(op));
+            stmt = op;
         } else {
-            bool in_produce = searcher_.search(op->produce, pc_name_);
-            bool in_consume = searcher_.search(op->consume, pc_name_);
+            internal_assert(ends_with(op->name, ".stream"))
+                << "we don't expect to visit non-stream realize node.\n";
+            const ProducerConsumer *body_pc = op->body.as<ProducerConsumer>();
+            internal_assert(body_pc && body_pc->name == op->name)
+                << "realize of a stream should followed by the PC of the stream.\n";
 
-            internal_assert((in_produce && !in_consume) ||
-                            (!in_produce && in_consume) );
+            Stmt body_before_swap = mutate(op->body);
 
-            /* Swap the current PC (PC1) and the target PC (PC2).
+            internal_assert(is_target(body_before_swap));
+            const Realize *realize_A = body_before_swap.as<Realize>();
+            const ProducerConsumer *pc_A = realize_A->body.as<ProducerConsumer>();
+            internal_assert(!pc_A->update.defined()); // cannot handle this case for now
+
+            /* After pull the target to the body, there might be two cases:
+             * the old body (PC B) is pushed down either into produce of PC A
+             * or into consume of PC A.
+             * Next, we need to push the current realize node (realize B) into
+             * PC A along the same direction.
+             *
              * case1: before swap             after swap
-             *          PC1                     PC2
-             *          / \                     / \
-             *         A   PC2                 PC1 C
-             *             / \                 / \
-             *            B   C               A   B
+             *        realize B                  realize A
+             *            |                          |
+             *        realize A                    PC A
+             *            |                        /   \
+             *          PC A               realize B   consume A
+             *          /  \                    |
+             *       PC B consume A           PC B
              *
              * case2: before swap             after swap
-             *          PC1                     PC2
-             *          / \                     / \
-             *        PC2  C                   A  PC1
-             *        / \                         / \
-             *       A   B                       B   C
+             *        realize B                  realize A
+             *            |                          |
+             *        realize A                    PC A
+             *            |                        /   \
+             *          PC A               produce A  realize B
+             *          /  \                             |
+             *   produce A  PC B                       PC B
              */
-            if (in_consume) {
+            bool in_produce = searcher_.search(pc_A->produce, op->name);
+
+            if (in_produce) {
                 // case 1
+                const ProducerConsumer *pc_B = pc_A->produce.as<ProducerConsumer>();
+                internal_assert(pc_B && pc_B->name == op->name);
+                Stmt new_realize_B = Realize::make(op->name, op->types, op->bounds, op->condition, pc_A->produce);
+                Stmt new_pc_A = ProducerConsumer::make(target, new_realize_B, Stmt(), pc_A->consume);
 
-                // pull target up to the root of the current consumer
-                Stmt consumer_before_swap = pull_up_pc_node(op->consume);
-
-                const ProducerConsumer *old_pc2 = consumer_before_swap.as<ProducerConsumer>();
-                if (old_pc2) {
-                    internal_assert(old_pc2 && old_pc2->name == pc_name_);
-                    internal_assert(!old_pc2->update.defined()); // cannot handle this case for now
-
-                    Stmt new_pc1 = ProducerConsumer::make(op->name, op->produce, op->update, old_pc2->produce);
-                    stmt_ = ProducerConsumer::make(pc_name_, new_pc1, Stmt(), old_pc2->consume);
-                } else {
-                    stmt_ = ProducerConsumer::make(op->name, op->produce, op->update, consumer_before_swap);
-                }
+                stmt = Realize::make(target, realize_A->types, realize_A->bounds, realize_A->condition, new_pc_A);
             } else {
                 // case 2
+                const ProducerConsumer *pc_B = pc_A->consume.as<ProducerConsumer>();
+                internal_assert(pc_B && pc_B->name == op->name);
+                Stmt new_realize_B = Realize::make(op->name, op->types, op->bounds, op->condition, pc_A->consume);
+                Stmt new_pc_A = ProducerConsumer::make(target, pc_A->produce, Stmt(), new_realize_B);
 
-                // pull target up to the root of the current produce
-                Stmt produce_before_swap = pull_up_pc_node(op->produce);
-
-                const ProducerConsumer *old_pc2 = produce_before_swap.as<ProducerConsumer>();
-                if (old_pc2) {
-                    internal_assert(old_pc2 && old_pc2->name == pc_name_);
-                    internal_assert(!old_pc2->update.defined()); // cannot handle this case for now
-
-                    Stmt new_pc1 = ProducerConsumer::make(op->name, old_pc2->consume, Stmt(), op->consume);
-                    stmt_ = ProducerConsumer::make(pc_name_, old_pc2->produce, op->update, new_pc1);
-                } else {
-                    stmt_ = ProducerConsumer::make(op->name, produce_before_swap, op->update, op->consume);
-                }
+                stmt = Realize::make(target, realize_A->types, realize_A->bounds, realize_A->condition, new_pc_A);
             }
         }
     }
 
+    void visit(const ProducerConsumer *op) {
+        debug(3) << "visit PC node " << op->name << '\n';
 
-    /* The rest of Stmt nodes have only one or no child Stmt */
-    virtual void visit(const LetStmt *op) {
+        bool in_produce = searcher_.search(op->produce, target);
+        bool in_consume = searcher_.search(op->consume, target);
+
+        internal_assert((in_produce && !in_consume) || (!in_produce && in_consume))
+            << "the target should be either in produce or in consume but in not both.\n";
+
+        /* Swap the current PC (B) and the target PC (A).
+         * case1: before swap             after swap
+         *          PC B                     realize A
+         *         /    \                        |
+         *   realize A  consume B              PC A
+         *        |                            /  \
+         *       PC A                  produce A  PC B
+         *       /   \                             / \
+         * produce A  consume A            comsume A  consume B
+         *
+         * case2: before swap             after swap
+         *          PC B                     realize A
+         *         /    \                        |
+         *   produce B realize A                PC A
+         *               |                      /  \
+         *              PC A                 PC B  consume A
+         *              / \                   / \
+         *      produce A  consume A   produce B produce A
+         */
+        if (in_produce) {
+            // case 1
+
+            // pull target up to the root of the current produce
+            Stmt produce_before_swap = mutate(op->produce);
+
+            internal_assert(is_target(produce_before_swap));
+            const Realize *realize = produce_before_swap.as<Realize>();
+            const ProducerConsumer *pc_A = realize->body.as<ProducerConsumer>();
+            internal_assert(!pc_A->update.defined()); // cannot handle this case for now
+
+            Stmt new_pc_B = ProducerConsumer::make(op->name, pc_A->consume, op->update, op->consume);
+            Stmt new_pc_A = ProducerConsumer::make(target, pc_A->produce, Stmt(), new_pc_B);
+
+            stmt = Realize::make(target, realize->types, realize->bounds, realize->condition, new_pc_A);
+        } else {
+            // case 2
+
+            // pull target up to the root of the current consumer
+            Stmt consume_before_swap = mutate(op->consume);
+
+            internal_assert(is_target(consume_before_swap));
+            const Realize *realize = consume_before_swap.as<Realize>();
+            const ProducerConsumer *pc_A = realize->body.as<ProducerConsumer>();
+            internal_assert(!pc_A->update.defined()); // cannot handle this case for now
+
+            Stmt new_pc_B = ProducerConsumer::make(op->name, op->produce, op->update, pc_A->produce);
+            Stmt new_pc_A = ProducerConsumer::make(target, new_pc_B, Stmt(), pc_A->consume);
+
+            stmt = Realize::make(target, realize->types, realize->bounds, realize->condition, new_pc_A);
+        }
+    }
+
+    void visit(const LetStmt *op) {
         debug(3) << "visit LetStmt node " << op->name << '\n';
-        Stmt body_before_swap = pull_up_pc_node(op->body);
+        Stmt body_before_swap = mutate(op->body);
 
-        const ProducerConsumer *pc = body_before_swap.as<ProducerConsumer>();
-        if (pc) {
-            /* Swap the current LetSmt and the target PC.
-             * e.g. before swap             after swap
-             *          LetStmt                  PC
-             *             |                    /  \
-             *            PC               LetStmt LetStmt
-             *            / \                  |     |
-             *           P   C                 P     C
-             */
-            internal_assert(pc && pc->name == pc_name_);
-            internal_assert(!pc->update.defined()); // cannot handle this case for now
+        internal_assert(is_target(body_before_swap));
+        const Realize *realize = body_before_swap.as<Realize>();
+        const ProducerConsumer *pc = realize->body.as<ProducerConsumer>();
 
-            Stmt new_produce = LetStmt::make(op->name, op->value, pc->produce);
-            Stmt new_consume = LetStmt::make(op->name, op->value, pc->consume);
+        /* Swap the current LetSmt and the target PC.
+         * e.g. before swap             after swap
+         *          LetStmt                realize
+         *             |                     |
+         *          realize                  PC
+         *             |                    /  \
+         *            PC               LetStmt LetStmt
+         *            / \                  |     |
+         *           P   C                 P     C
+         */
+        internal_assert(!pc->update.defined()); // cannot handle this case for now
 
-            stmt_ = ProducerConsumer::make(pc_name_, new_produce, Stmt(), new_consume);
-        } else {
-            stmt_ = LetStmt::make(op->name, op->value, body_before_swap);
-        }
+        Stmt new_produce = LetStmt::make(op->name, op->value, pc->produce);
+        Stmt new_consume = LetStmt::make(op->name, op->value, pc->consume);
+
+        Stmt new_pc = ProducerConsumer::make(target, new_produce, Stmt(), new_consume);
+        stmt = Realize::make(target, realize->types, realize->bounds, realize->condition, new_pc);
     }
 
-
-    virtual void visit(const For *op) {
+    void visit(const For *op) {
         debug(3) << "visit For node " << op->name << '\n';
-        Stmt body_before_swap = pull_up_pc_node(op->body);
+        Stmt body_before_swap = mutate(op->body);
 
-        const ProducerConsumer *pc = body_before_swap.as<ProducerConsumer>();
-        if (pc) {
-            internal_assert(pc && pc->name == pc_name_);
-            internal_assert(!pc->update.defined()); // cannot handle this case for now
+        internal_assert(is_target(body_before_swap));
+        const Realize *realize = body_before_swap.as<Realize>();
+        const ProducerConsumer *pc = realize->body.as<ProducerConsumer>();
+        internal_assert(!pc->update.defined()); // cannot handle this case for now
 
-            Stmt new_produce = For::make(op->name, op->min, op->extent, op->for_type,
-                                         op->device_api, pc->produce);
-            Stmt new_consume = For::make(op->name, op->min, op->extent, op->for_type,
-                                         op->device_api, pc->consume);
+        Stmt new_produce = For::make(op->name, op->min, op->extent, op->for_type,
+                                     op->device_api, pc->produce);
+        Stmt new_consume = For::make(op->name, op->min, op->extent, op->for_type,
+                                     op->device_api, pc->consume);
 
-            stmt_ = ProducerConsumer::make(pc_name_, new_produce, Stmt(), new_consume);
-        } else {
-            stmt_ = For::make(op->name, op->min, op->extent, op->for_type,
-                              op->device_api, body_before_swap);
-        }
+        Stmt new_pc = ProducerConsumer::make(target, new_produce, Stmt(), new_consume);
+        stmt = Realize::make(target, realize->types, realize->bounds, realize->condition, new_pc);
     }
 
-    virtual void visit(const Allocate *op) {
+    void visit(const Allocate *op) {
         debug(3) << "visit Allocate node " << op->name << '\n';
         internal_assert(false);
     }
 
-    virtual void visit(const IfThenElse *op) {
+    void visit(const IfThenElse *op) {
         // not sure if this a valid transformation across IfThenElse node
         internal_assert(false);
     }
 
-    virtual void visit(const Block *op) {
+    void visit(const Block *op) {
         // not sure if this a valid transformation across Block node
         internal_assert(false);
     }
 
-    virtual void visit(const AssertStmt *op) {
+    void visit(const AssertStmt *op) {
         // not sure if this a valid transformation across this type node
         internal_assert(false);
     }
 
-    virtual void visit(const Store *op) {
+    void visit(const Store *op) {
         // not sure if this a valid transformation across this type node
         internal_assert(false);
     }
 
-    virtual void visit(const Provide *op) {
+    void visit(const Provide *op) {
         // not sure if this a valid transformation across this type node
         internal_assert(false);
     }
 
-    virtual void visit(const Free *op) {
+    void visit(const Free *op) {
         // not sure if this a valid transformation across this type node
         internal_assert(false);
     }
 
-    virtual void visit(const Evaluate *op) {
+    void visit(const Evaluate *op) {
         // not sure if this a valid transformation across this type node
         internal_assert(false);
     }
 
 public:
-    ReorderProducerConsumer(string name) : pc_name_(name) {}
-
-    /** Pull up ProducerConsumer node named NAME up to root,
-     *  and push the rest down into either producer or consumer branch
-     */
-    Stmt pull_up_pc_node(Stmt root) {
-        // TODO check that the IR contains the target PC node
-        if (root.defined()) {
-            root.accept(this);
-        } else {
-            stmt_ = Stmt();
-        }
-        return stmt_;
+    PullUpTargetNode(string name) : target(name) {
+        internal_assert(ends_with(name, ".stream"));
     }
-
 };
 
 // Implements line buffers
@@ -1032,23 +1068,14 @@ class StreamOpt : public IRMutator {
             debug(3) << "IR after CreateStencilForFunction pass on Function " << func.name()
                      << ":\n" << new_body << '\n';
 
-            new_body = AddStreamOperationForFunction(func).mutate(new_body);
+            new_body = AddStreamOperationForFunction(func, specs).mutate(new_body);
             debug(3) << "IR after AddStreamOperationForFunction pass on Function " << func.name()
                      << ":\n" << new_body << '\n';
 
-            ReorderProducerConsumer reorder(op->name+".stencil.stream");
-            new_body = reorder.pull_up_pc_node(new_body);
+            PullUpTargetNode reorder(op->name+".stencil.stream");
+            new_body = reorder.mutate(new_body);
 
-            // create a realizeation of the stencil stream
-            Region bounds;
-            for (StencilDimSpecs dim: specs.dims) {
-                Expr extent = make_const(Int(32), dim.size);
-                bounds.push_back(Range(0, extent));
-            }
-            new_body = Realize::make(func.name()+".stencil.stream",
-                                     func.output_types(), bounds, const_true(), new_body);
-
-            debug(3) << "IR after ReorderProducerConsumer pass on Function " << func.name()
+            debug(3) << "IR after PullUpTargetNode pass on Function " << func.name()
                      << ":\n" << new_body << '\n';
 
 
@@ -1080,10 +1107,131 @@ public:
 
 };
 
+// This class groups the hardware pipeline for a Halide function
+// into a sub-tree
+class GroupHWPipelineForFunction : public IRMutator {
+    Function func;
+    const string input_stream;
+    const string output_stream;
 
+    using IRMutator::visit;
+    void visit(const Realize *op) {
+        // Before this pass of transformation, the IR for producing func looks like:
+        // produce func {
+        //   /* some loop tiles */
+        //   realize input_stream.stencil.stream {
+        //     produce input_stream.stencil.stream {...}
+        //     realize input.stencil.stream {
+        //       produce input.stencil.stream {...}
+        //       realize stage1.stencil.stream {
+        //         produce stage1.stencil.stream {...}
+        //         realize produce stage2.stencil.stream {
+        //           produce stage2.stencil.stream {...}
+        //           /* the rest stages */
+        //           realize func_buf.stencil.stream {
+        //             produce func_buf.stencil.stream {...}
+        //             func(...) = func_buf.stencil
+        // } } } } } }
+        //
+        // After the transforamtion, we want to group the computation in the hardware
+        // pipeline (i.e. input, stage1, stage2, and func_buf) into a sub-tree
+        // of IR.
+        // Here we decide to group those into the produce node of ProducerConsumer(PC)
+        // func_buf.stencil.stream.
+        // In practice, we need to pull the realize and PC node of func_buf.stencil.stream
+        // up to the current realize input.stencil.stream level.
+        //
+        // The result looks like:
+        // produce func {
+        //   /* some loop tiles */
+        //   realize input_stream.stencil.stream {
+        //     produce input_stream.stencil.stream {...}
+        //     realize func_buf.stencil.stream {
+        //       produce func_buf.stencil.stream {
+        //         realize input.stencil.stream {
+        //           produce input.stencil.stream {...}
+        //           realize stage1.stencil.stream {
+        //             produce stage1.stencil.stream {...}
+        //             realize produce stage2.stencil.stream {
+        //               produce stage2.stencil.stream {...}
+        //               /* the rest stages */
+        //               /* original produce of func_buf.stencil.steam */
+        //       } } } }
+        //       func(...) = func_buf.stencil
+        // } } }
+
+        if (op->name == input_stream) {
+            PullUpTargetNode reorder(output_stream);
+            stmt = reorder.mutate(op);
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+public:
+    // we have made assumptions on the naming convention of input/output stream names
+    // of the hardware pipeline
+    GroupHWPipelineForFunction(Function f) :
+        func(f),
+        input_stream(func.schedule().accelerator_input() + ".stencil.stream"),
+        output_stream(func.name() + "_stream.stencil.stream")  {
+        debug(3) << "input_stream " << input_stream << '\n'
+                 << "output_stream " << output_stream << '\n';
+    }
+};
+
+// This class groups the hardware pipeline for each accelerated Halide function
+// into a sub-tree, which helps the code generator find the closure of the pipeline
+class GroupHWPipeline : public IRMutator {
+    const map<string, Function> &env;
+
+    using IRMutator::visit;
+
+    void visit(const ProducerConsumer *op) {
+        debug(3) << "visit PC " << op->name << ":";
+        // Find the args for this function
+        map<string, Function>::const_iterator iter = env.find(op->name);
+
+        // If it's not in the environment it's some anonymous
+        // realization that we should skip (e.g. an inlined reduction)
+        if (iter == env.end()) {
+            debug(3) << "not found in env\n";
+            IRMutator::visit(op);
+            return;
+        }
+
+        const Schedule &sched = iter->second.schedule();
+        // If the Function is not scheduled to be accelerated on hardware, skip it
+        if (!sched.is_accelerated()) {
+            debug(3) << "not accelerated\n";
+            IRMutator::visit(op);
+            return;
+        }
+
+        debug(3) << "find a target function " << iter->second.name() << '\n';
+
+        // TODO check if the accelerator schedule is valid.
+        // for example if the pipeline input specified in the schedule are valid,
+        // or if the storage of the input, output, and intermediates are valid.
+
+        internal_assert(!op->update.defined());
+        Stmt new_produce = GroupHWPipelineForFunction(iter->second).mutate(op->produce);
+        if (new_produce.same_as(op->produce)) {
+            stmt = op;
+        } else {
+            stmt = ProducerConsumer::make(op->name, new_produce, Stmt(), op->consume);
+        }
+    }
+
+public:
+    GroupHWPipeline(const map<string, Function> &e) : env(e) {}
+
+};
 
 Stmt stream_opt(Stmt s, const map<string, Function> &env) {
-    return StreamOpt(env).mutate(s);
+    Stmt new_stmt = StreamOpt(env).mutate(s);
+    new_stmt = GroupHWPipeline(env).mutate(new_stmt);
+    return new_stmt;
 }
 
 }

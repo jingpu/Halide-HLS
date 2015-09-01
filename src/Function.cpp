@@ -2,6 +2,7 @@
 #include <stdlib.h>
 
 #include "IR.h"
+#include "Func.h"
 #include "Function.h"
 #include "Scope.h"
 #include "CSE.h"
@@ -18,6 +19,7 @@ namespace Internal {
 using std::vector;
 using std::string;
 using std::set;
+using std::ostream;
 
 struct FunctionContents {
     mutable RefCount ref_count;
@@ -637,5 +639,79 @@ bool Function::frozen() const {
     return contents.ptr->frozen;
 }
 
+ostream &operator <<(ostream &stream, const Function &function) {
+    stream << " func " << function.name() << " (";
+    for (size_t i = 0; i < function.args().size(); i++) {
+        stream << function.args()[i];
+        if (i + 1 < function.args().size()) {
+            stream << ", ";
+        }
+    }
+    stream << ") = {";
+    for (size_t i = 0; i < function.values().size(); i++) {
+        stream << function.values()[i];
+        if (i + 1 < function.values().size()) {
+            stream << ", ";
+        }
+    }
+    stream << "}";
+    return stream;
+}
+
+void Function::insert_buffer(Function &buffered) {
+    // TODO this implementation needs to be reviewed regarding the reference counting
+    // TODO check assumptions
+
+    // before insert:   pre -> cur -> next
+    // after insert:    pre -> buffered -> cur -> next
+    debug(3) << "before insertion\n"
+             << *this << "\n" << buffered << "\n\n";
+
+    // buffered will repliaced the function contents of this function, but keeps
+    // its original name and reference count.
+    string buffered_name = buffered.name();
+    RefCount buffered_refcount = buffered.contents.ptr->ref_count;
+
+    *buffered.contents.ptr = *contents.ptr;
+    buffered.contents.ptr->name = buffered_name;
+    buffered.contents.ptr->ref_count = buffered_refcount;
+
+    // reset and initialize the schedule of buffered function
+    buffered.contents.ptr->schedule = Schedule();
+    for (size_t i = 0; i < buffered.args().size(); i++) {
+        Dim d = {buffered.args()[i], ForType::Serial, DeviceAPI::Parent, true};
+        buffered.contents.ptr->schedule.dims().push_back(d);
+        buffered.contents.ptr->schedule.storage_dims().push_back(buffered.args()[i]);
+    }
+    Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::Parent, true};
+    buffered.contents.ptr->schedule.dims().push_back(d);
+
+    // make a copy of the current schedule
+    Schedule cur_schedule = this->schedule();
+
+    // clear the function contents
+    contents.ptr->args.clear();
+    contents.ptr->values.clear();
+    contents.ptr->updates.clear();
+    contents.ptr->output_types.clear();
+    contents.ptr->schedule = Schedule();
+    contents.ptr->frozen = false;
+    contents.ptr->output_buffers.clear();
+
+    // Refer this function value to the buffered function,
+    // i.e. cur_func = buffered_func.
+    Func cur_func(*this);
+    Func buffered_func(buffered);
+    vector<Var> args(buffered.args().size());
+    for (size_t i = 0; i < buffered.args().size(); i++)
+        args[i] = Var(buffered.args()[i]);
+    cur_func(args) = buffered_func(args);
+
+    // restore the schedule
+    this->schedule() = cur_schedule;
+
+    debug(3) << "after insertion\n"
+             << *this << "\n" << buffered << "\n\n";
+}
 }
 }

@@ -13,6 +13,7 @@
 namespace Halide {
 namespace Internal {
 
+using std::map;
 using std::string;
 using std::vector;
 using std::pair;
@@ -601,7 +602,35 @@ private:
 };
 
 class PartitionLoops : public IRMutator {
+    const map<string, Function> &env;
+
     using IRMutator::visit;
+
+    // Do not partition loops that contains hardware pipelines
+    void visit(const ProducerConsumer *op) {
+        // Find the args for this function
+        map<string, Function>::const_iterator iter = env.find(op->name);
+
+        if (iter == env.end()) {
+            IRMutator::visit(op);
+            return;
+        }
+
+        // if the function is scheduled on hardward, skip traversal down into
+        // the produce child node
+        const Schedule &sched = iter->second.schedule();
+        if (sched.is_accelerated()) {
+            internal_assert(!op->update.defined());
+            Stmt consume = mutate(op->consume);
+            if(consume.same_as(op->consume)) {
+                stmt = op;
+            } else {
+                stmt = ProducerConsumer::make(op->name, op->produce, Stmt(), consume);
+            }
+        } else {
+            IRMutator::visit(op);
+        }
+    }
 
     void visit(const For *op) {
 
@@ -745,6 +774,9 @@ class PartitionLoops : public IRMutator {
                              op->for_type, op->device_api, body);
         }
     }
+
+public:
+    PartitionLoops(const map<string, Function> &e) : env(e) {}
 };
 
 // Remove any remaining 'likely' intrinsics. There may be some left
@@ -764,8 +796,8 @@ class RemoveLikelyTags : public IRMutator {
 
 }
 
-Stmt partition_loops(Stmt s) {
-    s = PartitionLoops().mutate(s);
+Stmt partition_loops(Stmt s, const map<string, Function> &env) {
+    s = PartitionLoops(env).mutate(s);
     s = RemoveLikelyTags().mutate(s);
     return s;
 }

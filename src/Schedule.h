@@ -198,6 +198,19 @@ public:
     bool &is_stream();
     // @}
 
+    /** Is accelerated using hardware? */
+    // @{
+    bool is_accelerated() const;
+    bool &is_accelerated();
+    // @}
+
+    /** The input function of the hardware accelerator pipeline. */
+    // @{
+    std::string accelerator_input() const;
+    std::string &accelerator_input();
+    // @}
+
+
     /** Are race conditions permitted? */
     // @{
     bool allow_race_conditions() const;

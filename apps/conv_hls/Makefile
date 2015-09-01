@@ -22,14 +22,11 @@ all: test
 pipeline: pipeline.cpp
 	$(CXX) $(CXXFLAGS) -Wall pipeline.cpp $(LDFLAGS) $(LIB_HALIDE) -o pipeline -lpthread -ldl -lz -ltinfo -g
 
-pipeline_hls.cpp: pipeline
-	./pipeline 1
-
-pipeline_native.o: pipeline
-	./pipeline 0
+pipeline_hls.cpp pipeline_native.o: pipeline
+	HL_DEBUG_CODEGEN=0 ./pipeline
 
 run: run.cpp pipeline_hls.cpp pipeline_native.o stencil.h
-	$(CXX) $(CXXFLAGS) -Wall  -Wno-unknown-pragmas  run.cpp pipeline_hls.cpp pipeline_native.o  -g -lpthread -ldl -o run
+	$(CXX) $(CXXFLAGS) -Wall  -Wno-unknown-pragmas  run.cpp pipeline_hls.cpp hls_target.cpp pipeline_native.o  -g -lpthread -ldl -o run
 
 test: run
 	./run
@@ -39,4 +36,4 @@ stencil_test: stencil_test.cpp stencil.h
 	$(CXX) $(CXXFLAGS) -Wall -Wno-unknown-pragmas stencil_test.cpp  -o stencil_test
 
 clean:
-	rm -f pipeline pipeline_native.{h,o} run stencil_test 
+	rm -f pipeline pipeline_native.{h,o} run stencil_test

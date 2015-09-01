@@ -1,7 +1,7 @@
 #include <iostream>
 #include <limits>
 
-#include "CodeGen_HLS.h"
+#include "CodeGen_HLS_Base.h"
 #include "CodeGen_Internal.h"
 #include "Substitute.h"
 #include "IROperator.h"
@@ -19,23 +19,25 @@ using std::string;
 using std::vector;
 using std::ostringstream;
 
+string CodeGen_HLS_Base::print_stencil_type(Stencil_Type stencil_type) {
+    ostringstream oss;
+    // C: Stencil<uint16_t, 1, 1, 1> stencil_var;
+    // C: hls::stream<Stencil<uint16_t, 1, 1, 1> > stencil_stream_var;
+    if(stencil_type.is_stream)
+        oss << "hls::stream<";
 
-namespace {
-const string hls_headers =
-    "#include <hls_stream.h>\n"
-    "#include \"stencil.h\"\n";
+    oss << "Stencil<" << print_type(stencil_type.type);
+    for(const auto &range : stencil_type.bounds)
+        oss << ", " << range.extent;
+    oss << ">";
+
+    if(stencil_type.is_stream)
+        oss << " >";
+
+    return oss.str();
 }
 
-CodeGen_HLS::CodeGen_HLS(ostream &s, bool is_header, const std::string &guard)
-    : CodeGen_C(s, is_header, guard, hls_headers) { }
-
-
-CodeGen_HLS::~CodeGen_HLS() {
-
-}
-
-
-void CodeGen_HLS::visit(const Call *op) {
+void CodeGen_HLS_Base::visit(const Call *op) {
     if (op->name == "linebuffer") {
         //IR: linebuffer(buffered.stencil_update.stream, buffered.stencil.stream, extent_0[, extent_1, ...])
         //C: linebuffer<extent_0[, extent_1, ...]>(buffered.stencil_update.stream, buffered.stencil.stream)
@@ -90,25 +92,24 @@ void CodeGen_HLS::visit(const Call *op) {
     }
 }
 
-void CodeGen_HLS::visit(const Realize *op) {
+void CodeGen_HLS_Base::visit(const Realize *op) {
     if (ends_with(op->name, ".stream")) {
         // create a stream type
         open_scope();
         internal_assert(op->types.size() == 1);
         allocations.push(op->name, {op->types[0], "null"});
+        Stencil_Type stype({true, op->types[0], op->bounds});
+        stencils.push(op->name, stype);
 
         do_indent();
         // C: hls::stream<Stencil<uint16_t, 1, 1, 1> > conv1_stencil_update_stream;
-        stream << "hls::stream<Stencil<" << print_type(op->types[0]);
-        for(const auto & range : op->bounds) {
-            stream << ", " << range.extent;
-        }
-        stream << "> > " << print_name(op->name) << ";\n";
+        stream << print_stencil_type(stype) << ' ' << print_name(op->name) << ";\n";
 
         op->body.accept(this);
 
         // We didn't generate free stmt inside for stream type
         allocations.pop(op->name);
+        stencils.pop(op->name);
 
         close_scope("realize " + print_name(op->name));
     } else if (ends_with(op->name, ".stencil") ||
@@ -117,19 +118,18 @@ void CodeGen_HLS::visit(const Realize *op) {
         open_scope();
         internal_assert(op->types.size() == 1);
         allocations.push(op->name, {op->types[0], "null"});
+        Stencil_Type stype({false, op->types[0], op->bounds});
+        stencils.push(op->name, stype);
 
         do_indent();
         // Stencil<uint16_t, 1, 1, 1> conv1_stencil_update;
-        stream << "Stencil<" << print_type(op->types[0]);
-        for(const auto & range : op->bounds) {
-            stream << ", " << range.extent;
-        }
-        stream << "> " << print_name(op->name) << ";\n";
+        stream << print_stencil_type(stype) << ' ' << print_name(op->name) << ";\n";
 
         op->body.accept(this);
 
         // We didn't generate free stmt inside for stream type
         allocations.pop(op->name);
+        stencils.pop(op->name);
 
         close_scope("realize " + print_name(op->name));
     } else {
@@ -137,7 +137,7 @@ void CodeGen_HLS::visit(const Realize *op) {
     }
 }
 
-void CodeGen_HLS::visit(const Provide *op) {
+void CodeGen_HLS_Base::visit(const Provide *op) {
     if (ends_with(op->name, ".stencil") ||
         ends_with(op->name, ".stencil_update")) {
         // IR: buffered.stencil_update(1, 2, 3) =

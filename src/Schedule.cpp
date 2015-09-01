@@ -22,9 +22,12 @@ struct ScheduleContents {
     bool touched;
     bool allow_race_conditions;
     bool is_stream;
+    bool is_accelerated;
+    std::string accelerator_input;
 
     ScheduleContents()
-        : memoized(false), touched(false), allow_race_conditions(false), is_stream(false) {};
+        : memoized(false), touched(false), allow_race_conditions(false),
+          is_stream(false), is_accelerated(false) {};
 };
 
 
@@ -135,6 +138,22 @@ bool &Schedule::is_stream() {
 
 bool Schedule::is_stream() const {
     return contents.ptr->is_stream;
+}
+
+bool Schedule::is_accelerated() const {
+    return contents.ptr->is_accelerated;
+}
+
+bool &Schedule::is_accelerated() {
+    return contents.ptr->is_accelerated;
+}
+
+std::string Schedule::accelerator_input() const{
+    return contents.ptr->accelerator_input;
+}
+
+std::string &Schedule::accelerator_input() {
+    return contents.ptr->accelerator_input;
 }
 
 bool &Schedule::allow_race_conditions() {

@@ -220,7 +220,9 @@ SOURCE_FILES = \
   CodeGen_C.cpp \
   CodeGen_GPU_Dev.cpp \
   CodeGen_GPU_Host.cpp \
-  CodeGen_HLS.cpp \
+  CodeGen_HLS_Base.cpp \
+  CodeGen_HLS_Target.cpp \
+  CodeGen_HLS_Testbench.cpp \
   CodeGen_Internal.cpp \
   CodeGen_LLVM.cpp \
   CodeGen_MIPS.cpp \

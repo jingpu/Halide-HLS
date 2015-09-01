@@ -200,7 +200,17 @@ public:
     /** Check if a function has been frozen. If so, it is an error to
      * add new definitions. */
     EXPORT bool frozen() const;
+
+    /** Insert buffered function before this function.
+     * Buffered function will have the same values, and a clean
+     * schedule. This function will then call buffered function,
+     * i.e. this_func = buffered_func. The schedule of this
+     * function remains unchanged. Other functions will not be
+     * affected either. */
+    EXPORT void insert_buffer(Function &buffered);
 };
+
+std::ostream &operator <<(std::ostream &stream, const Function &function);
 
 }}
 

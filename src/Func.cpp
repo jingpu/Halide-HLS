@@ -1141,6 +1141,19 @@ Func &Func::stream() {
     return *this;
 }
 
+Func &Func::accelerate_from(Func f) {
+    invalidate_cache();
+    func.schedule().is_accelerated() = true;
+    func.schedule().accelerator_input() = f.name();
+    return *this;
+}
+
+Func &Func::insert_buffer(Func &buffered) {
+    invalidate_cache();
+    func.insert_buffer(buffered.func);
+    return *this;
+}
+
 Func &Func::compute_inline() {
     invalidate_cache();
     func.schedule().compute_level() = LoopLevel();

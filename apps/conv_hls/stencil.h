@@ -188,7 +188,6 @@ void linebuffer_2D(stream< Stencil<T, IN_EXTENT_0, IN_EXTENT_1, EXTENT_2, EXTENT
     //#pragma HLS DATA_PACK variable=in_stream
     //#pragma HLS DATA_PACK variable=out_stream
 
-
     stream< Stencil<T, IN_EXTENT_0, OUT_EXTENT_1, EXTENT_2, EXTENT_3> > col_buf_stream;
 
     // use a 2D storage to buffer lines of image,
@@ -200,6 +199,21 @@ void linebuffer_2D(stream< Stencil<T, IN_EXTENT_0, IN_EXTENT_1, EXTENT_2, EXTENT
     for (size_t n1 = 0; n1 < NUM_OF_OUTPUT_1; n1++)
 	linebuffer_1D<IMG_EXTENT_0>(col_buf_stream, out_stream);
 }
+
+// A trivial 2D line buffer where input and output are the same size
+template <size_t IMG_EXTENT_0, size_t IMG_EXTENT_1,
+          size_t EXTENT_0, size_t EXTENT_1, size_t EXTENT_2, size_t EXTENT_3, typename T>
+void linebuffer_2D(stream< Stencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &in_stream,
+                   stream< Stencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream) {
+#pragma HLS INLINE
+    for(size_t idx_0 = 0; idx_0 < IMG_EXTENT_0; idx_0 += EXTENT_0)
+        for(size_t idx_1 = 0; idx_1 < IMG_EXTENT_1; idx_1 += EXTENT_1) {
+#pragma HLS PIPELINE
+          Stencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> s = in_stream.read();
+          out_stream.write(s);
+    }
+}
+
 
 /** A line buffer that buffers a image size [IMG_EXTENT_0, IMG_EXTENT_1, IMG_EXTENT_2].
  * The input is a stencil size [IN_EXTENT_0, IN_EXTENT_1, IN_EXTENT_2], and it traversal

@@ -224,7 +224,7 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     debug(2) << "Lowering after rewriting vector interleavings:\n" << s << "\n\n";
 
     debug(1) << "Partitioning loops to simplify boundary conditions...\n";
-    s = partition_loops(s);
+    s = partition_loops(s, env);
     s = simplify(s);
     debug(2) << "Lowering after partitioning loops:\n" << s << "\n\n";
 
