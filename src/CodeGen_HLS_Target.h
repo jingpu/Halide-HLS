@@ -17,6 +17,10 @@ namespace Internal {
 struct HLS_Argument {
     std::string name;
 
+    bool is_stencil;
+
+    Type scalar_type;
+
     CodeGen_HLS_Base::Stencil_Type stencil_type;
 };
 

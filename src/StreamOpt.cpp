@@ -375,8 +375,7 @@ class CreateStencilForFunction : public IRMutator {
                 // inside the producer
                 new_args[i] = new_arg;
             }
-            expr = Call::make(op->type, stencil_name, new_args, Call::Halide,
-                              op->func, op->value_index, Buffer(), Parameter());
+            expr = Call::make(op->type, stencil_name, new_args, Call::Intrinsic);
         }
     }
 
@@ -1128,17 +1127,17 @@ class GroupHWPipelineForFunction : public IRMutator {
         //         realize produce stage2.stencil.stream {
         //           produce stage2.stencil.stream {...}
         //           /* the rest stages */
-        //           realize func_buf.stencil.stream {
-        //             produce func_buf.stencil.stream {...}
-        //             func(...) = func_buf.stencil
+        //           realize func_stream.stencil.stream {
+        //             produce func_stream.stencil.stream {...}
+        //             func(...) = func_stream.stencil
         // } } } } } }
         //
         // After the transforamtion, we want to group the computation in the hardware
-        // pipeline (i.e. input, stage1, stage2, and func_buf) into a sub-tree
+        // pipeline (i.e. input, stage1, stage2, and func_stream) into a sub-tree
         // of IR.
         // Here we decide to group those into the produce node of ProducerConsumer(PC)
-        // func_buf.stencil.stream.
-        // In practice, we need to pull the realize and PC node of func_buf.stencil.stream
+        // func_stream.stencil.stream.
+        // In practice, we need to pull the realize and PC node of func_stream.stencil.stream
         // up to the current realize input.stencil.stream level.
         //
         // The result looks like:
@@ -1146,8 +1145,8 @@ class GroupHWPipelineForFunction : public IRMutator {
         //   /* some loop tiles */
         //   realize input_stream.stencil.stream {
         //     produce input_stream.stencil.stream {...}
-        //     realize func_buf.stencil.stream {
-        //       produce func_buf.stencil.stream {
+        //     realize func_stream.stencil.stream {
+        //       produce func_stream.stencil.stream {
         //         realize input.stencil.stream {
         //           produce input.stencil.stream {...}
         //           realize stage1.stencil.stream {
@@ -1155,14 +1154,24 @@ class GroupHWPipelineForFunction : public IRMutator {
         //             realize produce stage2.stencil.stream {
         //               produce stage2.stencil.stream {...}
         //               /* the rest stages */
-        //               /* original produce of func_buf.stencil.steam */
+        //               /* original produce of func_stream.stencil.steam */
         //       } } } }
-        //       func(...) = func_buf.stencil
+        //       func(...) = func_stream.stencil
         // } } }
 
         if (op->name == input_stream) {
             PullUpTargetNode reorder(output_stream);
-            stmt = reorder.mutate(op);
+            Stmt new_stmt = reorder.mutate(op);
+
+            // add a preffix to the new produce node of func_stream.stencil.stream,
+            // in order to inform code-generator that this sub-tree will be a hls function
+            const Realize *realize = new_stmt.as<Realize>();
+            internal_assert(realize && realize->name == output_stream);
+            const ProducerConsumer *pc = realize->body.as<ProducerConsumer>();
+            internal_assert(pc && pc->name == output_stream);
+
+            Stmt renamed_pc = ProducerConsumer::make( "_hls_target." + output_stream, pc->produce, pc->update, pc->consume);
+            stmt = Realize::make(output_stream, realize->types, realize->bounds, realize->condition, renamed_pc);
         } else {
             IRMutator::visit(op);
         }
@@ -1188,14 +1197,11 @@ class GroupHWPipeline : public IRMutator {
     using IRMutator::visit;
 
     void visit(const ProducerConsumer *op) {
-        debug(3) << "visit PC " << op->name << ":";
-        // Find the args for this function
         map<string, Function>::const_iterator iter = env.find(op->name);
 
         // If it's not in the environment it's some anonymous
         // realization that we should skip (e.g. an inlined reduction)
         if (iter == env.end()) {
-            debug(3) << "not found in env\n";
             IRMutator::visit(op);
             return;
         }
@@ -1203,12 +1209,11 @@ class GroupHWPipeline : public IRMutator {
         const Schedule &sched = iter->second.schedule();
         // If the Function is not scheduled to be accelerated on hardware, skip it
         if (!sched.is_accelerated()) {
-            debug(3) << "not accelerated\n";
             IRMutator::visit(op);
             return;
         }
 
-        debug(3) << "find a target function " << iter->second.name() << '\n';
+        debug(2) << "find a hls target function " << iter->second.name() << '\n';
 
         // TODO check if the accelerator schedule is valid.
         // for example if the pipeline input specified in the schedule are valid,
@@ -1228,9 +1233,113 @@ public:
 
 };
 
+class ReplaceImageParamForFunction : public IRMutator {
+    Function func;
+
+    using IRMutator::visit;
+
+    // Replace calls to ImageParam with calls to Stencil
+    void visit(const Call *op) {
+        if( op->call_type != Call::Image ||
+            !op->param.defined()) {
+            IRMutator::visit(op);
+        } else {
+            debug(3) << "replacing " << op->name << '\n';
+            internal_assert(op->param.is_buffer());
+            internal_assert((size_t)op->param.dimensions() == op->args.size());
+            internal_assert(op->name == op->param.name());
+
+            if(params.count(op->name) == 0)
+                params[op->name] = op->param;
+
+            // Replace the call node of func with call node of func.stencil
+            string stencil_name = op->name + ".stencil";
+            vector<Expr> new_args(op->args.size());
+
+            // Mutate the arguments.
+            // The value of the new argment is the old_value - param.min_constraint()
+            // b/c stencil indices always start from zero
+            for (size_t i = 0; i < op->args.size(); i++) {
+                Expr old_arg = op->args[i];
+                Expr new_arg = old_arg - op->param.min_constraint(i);
+                new_args[i] = new_arg;
+            }
+            expr = Call::make(op->type, stencil_name, new_args, Call::Intrinsic);
+        }
+    }
+
+public:
+    map<string, Parameter> params;
+    ReplaceImageParamForFunction(Function f) : func(f) {}
+};
+
+class ReplaceImageParam : public IRMutator {
+    const map<string, Function> &env;
+
+    using IRMutator::visit;
+
+    void visit(const ProducerConsumer *op) {
+        map<string, Function>::const_iterator iter = env.find(op->name);
+
+        // If it's not in the environment it's some anonymous
+        // realization that we should skip (e.g. an inlined reduction)
+        if (iter == env.end()) {
+            IRMutator::visit(op);
+            return;
+        }
+
+        const Schedule &sched = iter->second.schedule();
+        // If the Function is not scheduled to be accelerated on hardware, skip it
+        if (!sched.is_accelerated()) {
+            IRMutator::visit(op);
+            return;
+        }
+
+        debug(2) << "find a target function " << iter->second.name() << '\n';
+        // TODO check if the accelerator schedule is valid.
+        // for example if the pipeline input specified in the schedule are valid,
+        // or if the storage of the input, output, and intermediates are valid.
+
+        internal_assert(!op->update.defined());
+        ReplaceImageParamForFunction replacer(iter->second);
+        Stmt new_produce = replacer.mutate(op->produce);
+
+        // create the realizations of stencil type of replaced imageparams
+        for(const auto &pair : replacer.params) {
+            const Parameter param = pair.second;
+            const string stencil_name = param.name() + ".stencil";
+
+            Expr buffer_var = Variable::make(Handle(), param.name());
+            Expr stencil_var = Variable::make(Handle(), stencil_name);
+            vector<Expr> args({buffer_var, stencil_var});
+            Stmt convert_call = Evaluate::make(Call::make(Handle(), "buffer_to_stencil", args, Call::Intrinsic));
+            Stmt pc = ProducerConsumer::make(stencil_name, convert_call, Stmt(), new_produce);
+
+            // create a realizeation of the stencil image
+            Region bounds;
+            for (int i = 0; i < param.dimensions(); i++) {
+                Expr extent = param.extent_constraint(i);
+                user_assert(is_const(extent)) << "ImageParam used by hardware pipeline must set constant extents.";
+                bounds.push_back(Range(0, extent));
+            }
+            new_produce = Realize::make(stencil_name, {param.type()}, bounds, const_true(), pc);
+        }
+
+        if (new_produce.same_as(op->produce)) {
+            stmt = op;
+        } else {
+            stmt = ProducerConsumer::make(op->name, new_produce, Stmt(), op->consume);
+        }
+
+    }
+public:
+    ReplaceImageParam(const map<string, Function> &e) : env(e) {}
+};
+
 Stmt stream_opt(Stmt s, const map<string, Function> &env) {
     Stmt new_stmt = StreamOpt(env).mutate(s);
     new_stmt = GroupHWPipeline(env).mutate(new_stmt);
+    new_stmt = ReplaceImageParam(env).mutate(new_stmt);
     return new_stmt;
 }
 

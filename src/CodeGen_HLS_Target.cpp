@@ -90,15 +90,19 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::add_kernel(Stmt stmt,
                                                    const string &name,
                                                    const vector<HLS_Argument> &args) {
     // Emit the function prototype
-    stream << "void hls_target" << print_name(name) << "(\n";
+    stream << "void " << print_name(name) << "(\n";
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].stencil_type.is_stream) {
-            stream << print_stencil_type(args[i].stencil_type) << " &"
-                   << print_name(args[i].name);
+        if (args[i].is_stencil) {
+            CodeGen_HLS_Base::Stencil_Type stype = args[i].stencil_type;
+            stream << print_stencil_type(args[i].stencil_type) << " ";
+            if (stype.is_stream) {
+                stream << "&";  // hls_stream needs to be passed by reference
+            }
+            stream << print_name(args[i].name);
             allocations.push(args[i].name, {args[i].stencil_type.type, "null"});
             stencils.push(args[i].name, args[i].stencil_type);
         } else {
-            internal_assert(false) << "we cannot handle non-stream arguments yet.\n";
+            stream << print_type(args[i].scalar_type) << " " << print_name(args[i].name);
         }
 
         if (i < args.size()-1) stream << ",\n";

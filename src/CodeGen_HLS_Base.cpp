@@ -27,8 +27,10 @@ string CodeGen_HLS_Base::print_stencil_type(Stencil_Type stencil_type) {
         oss << "hls::stream<";
 
     oss << "Stencil<" << print_type(stencil_type.type);
-    for(const auto &range : stencil_type.bounds)
+    for(const auto &range : stencil_type.bounds) {
+        internal_assert(is_one(simplify(range.min == 0)));
         oss << ", " << range.extent;
+    }
     oss << ">";
 
     if(stencil_type.is_stream)
@@ -52,6 +54,14 @@ void CodeGen_HLS_Base::visit(const Call *op) {
                 stream << ", ";
         }
         stream << ">(" << a0 << ", " << a1 << ");\n";
+        id = "0"; // skip evaluation
+    }  else if (op->name == "buffer_to_stencil") {
+        internal_assert(op->args.size() == 2);
+        // add a suffix to buffer var, in order to be compatible with CodeGen_C
+        string a0 = print_expr(op->args[0]) + "_buffer";
+        string a1 = print_expr(op->args[1]);
+        do_indent();
+        stream << "buffer_to_stencil(" << a0 << ", " << a1 << ");\n";
         id = "0"; // skip evaluation
     } else if (op->name == "write_stream") {
         // IR: write_stream(buffered.stencil_update.stream, buffered.stencil_update)

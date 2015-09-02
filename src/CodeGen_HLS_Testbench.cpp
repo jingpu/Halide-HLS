@@ -31,6 +31,7 @@ public:
 protected:
     using Closure::visit;
     void visit(const Realize *op);
+    void visit(const Call *op);
 
 };
 
@@ -46,10 +47,14 @@ vector<HLS_Argument> HLS_Closure::arguments(const Scope<CodeGen_HLS_Base::Stenci
     internal_assert(buffers.empty()) << "we expect no references to buffers in a hw pipeline.\n";
     for (const pair<string, Type> &i : vars) {
         debug(3) << "var: " << i.first << "\n";
-        if(ends_with(i.first, ".stream")) {
-            res.push_back({i.first, streams_scope.get(i.first)});
+        if(ends_with(i.first, ".stream") ||
+           ends_with(i.first, ".stencil") ) {
+            res.push_back({i.first, true, Type(), streams_scope.get(i.first)});
+        } else if (ends_with(i.first, ".stencil_update")) {
+            internal_error << "we don't expect to see a stencil_update type in HLS_Closure.\n";
         } else {
-            internal_assert(false) << "we cannot handle non-stream arguments yet.\n";
+            // it is a scalar variable
+            res.push_back({i.first, false, i.second, CodeGen_HLS_Base::Stencil_Type()});
         }
     }
     return res;
@@ -64,6 +69,22 @@ void HLS_Closure::visit(const Realize *op) {
     ignore.push(op->name, 0);
     op->body.accept(this);
     ignore.pop(op->name);
+}
+
+
+void HLS_Closure::visit(const Call *op) {
+    // consider call to stencil and stencil_update
+    if (op->call_type == Call::Intrinsic &&
+        (ends_with(op->name, ".stencil") || ends_with(op->name, ".stencil_update"))) {
+        debug(3) << "visit call " << op->name << ": ";
+        if(!ignore.contains(op->name)) {
+            debug(3) << "adding to closure.\n";
+            vars[op->name] = Type();
+        } else {
+            debug(3) << "not adding to closure.\n";
+        }
+    }
+    Closure::visit(op);
 }
 
 
@@ -84,31 +105,27 @@ CodeGen_HLS_Testbench::~CodeGen_HLS_Testbench() {
 }
 
 void CodeGen_HLS_Testbench::visit(const ProducerConsumer *op) {
-    if (ends_with(op->name, ".stencil.stream")) {
+    if (starts_with(op->name, "_hls_target.")) {
+        debug(1) << "compute the closure for " << op->name << '\n';
         HLS_Closure c(op->produce);
-        // TODO support other closure
-        if(c.buffers.empty()) {
-            vector<HLS_Argument> args = c.arguments(stencils);
+        vector<HLS_Argument> args = c.arguments(stencils);
 
-            // generate HLS target code using the child code generator
-            cg_target.add_kernel(op->produce, op->name, args);
+        // generate HLS target code using the child code generator
+        cg_target.add_kernel(op->produce, op->name, args);
 
+        do_indent();
+        stream << "// produce " << op->name << '\n';
             do_indent();
-            stream << "// produce " << op->name << '\n';
-            do_indent();
-            stream << "hls_target" << print_name(op->name) << "(";
-            for(size_t i = 0; i < args.size(); i++) {
-                stream << print_name(args[i].name);
-                if(i != args.size() - 1)
-                    stream << ", ";
-            }
-            stream <<");\n";
-            do_indent();
-            stream << "// consume " << op->name << '\n';
-            print_stmt(op->consume);
-        } else {
-            CodeGen_HLS_Base::visit(op);
+        stream << print_name(op->name) << "(";
+        for(size_t i = 0; i < args.size(); i++) {
+            stream << print_name(args[i].name);
+            if(i != args.size() - 1)
+                stream << ", ";
         }
+        stream <<");\n";
+        do_indent();
+        stream << "// consume " << op->name << '\n';
+        print_stmt(op->consume);
     } else {
         CodeGen_HLS_Base::visit(op);
     }

@@ -341,11 +341,8 @@ private:
     }
 
     void visit(const Call *call) {
-        if (ends_with(call->name, ".stencil") ||
-            ends_with(call->name, ".stencil_update")) {
-            // don't flatten stencil type
-            expr = call;
-        } else if (call->call_type == Call::Extern || call->call_type == Call::Intrinsic) {
+
+        if (call->call_type == Call::Extern || call->call_type == Call::Intrinsic) {
             vector<Expr> args(call->args.size());
             bool changed = false;
             for (size_t i = 0; i < args.size(); i++) {

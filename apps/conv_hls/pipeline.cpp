@@ -18,36 +18,49 @@ Var xo("xo"), xi("xi"), yi("yi"), yo("yo");
 class MyPipeline {
 public:
     ImageParam input;
+    ImageParam weight;
+    Param<uint8_t> bias;
     Func clamped;
     Func conv1;
     Func output;
+    std::vector<Argument> args;
 
-    MyPipeline() : input(UInt(8), 3, "input"), conv1("conv1"), output("output") {
+    MyPipeline() : input(UInt(8), 3, "input"), weight(UInt(8), 2, "weight"),
+                   conv1("conv1"), output("output") {
         // define the algorithm
         clamped = BoundaryConditions::repeat_edge(input);
-        conv1 = convolve55(clamped);
-        output = convolve55(conv1);
+        conv1 = convolve55_rd(clamped);
+        output = convolve55_rd(conv1);
 
         // define common schedule: tile output, and linebuffer the intermediate
         output.tile(x, y, xo, yo, xi, yi, 256, 256);
         conv1.store_at(output, xo).compute_at(output, xi);
         clamped.compute_root();
+
+        // restrict arguments
+        weight.set_bounds(0, 0, 5);
+        weight.set_bounds(1, 0, 5);
+        weight.set_stride(0, 1);
+        weight.set_stride(1, 5);
+
+        args.push_back(input);
+        args.push_back(weight);
+        args.push_back(bias);
     }
 
     void compile_cpu() {
-        //output.print_loop_nest();
-        std::cout << "compiling cpu code..." << std::endl;
-        std::vector<Argument> args;
-        args.push_back(input);
+        std::cout << "\ncompiling cpu code..." << std::endl;
+        output.print_loop_nest();
 
         output.compile_to_c("pipeline_native.c", args, "pipeline_native");
         output.compile_to_lowered_stmt("pipeline_native.ir", args);
+        //output.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
         output.compile_to_header("pipeline_native.h", args, "pipeline_native");
         output.compile_to_object("pipeline_native.o", args, "pipeline_native");
     }
 
     void compile_hls() {
-        std::cout << "compiling HLS code..." << std::endl;
+        std::cout << "\ncompiling HLS code..." << std::endl;
 
         // Define the scope of the hardware pipeline
         // Here we offload the computation of 'output' to hardware, taking the
@@ -77,9 +90,7 @@ public:
         clamped.stream();
         clamped_stream.stream();
 
-        //output.print_loop_nest();
-        std::vector<Argument> args;
-        args.push_back(input);
+        output.print_loop_nest();
 
         output.compile_to_lowered_stmt("pipeline_hls.ir", args);
         //output.compile_to_lowered_stmt("pipeline_c.ir.html", args, HTML);
@@ -116,6 +127,16 @@ private:
                                       + in_16(x  , y+2, c) * gaussian2d[4][2]
                                       + in_16(x+1, y+2, c) * gaussian2d[4][3]
                                       + in_16(x+2, y+2, c) * gaussian2d[4][4]) >> 8);
+        return res;
+    }
+
+    Func convolve55_rd(Func in) {
+        Func local_sum, res;
+        RDom r(-2, 5, -2, 5);
+
+        local_sum(x, y, c) = cast<uint16_t>(bias);
+        local_sum(x, y, c) += cast<uint16_t>(in(x+r.x, y+r.y, c)) * weight(r.x+2, r.y+2);
+        res(x, y, c) = cast<uint8_t>(local_sum(x, y, c) >> 8);
         return res;
     }
 };
