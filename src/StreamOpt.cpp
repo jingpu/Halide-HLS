@@ -18,40 +18,10 @@ namespace Internal {
 using std::string;
 using std::map;
 using std::vector;
+using std::pair;
+using std::make_pair;
 
 namespace {
-
-// Does an expression depend on a particular variable?
-class ExprDependsOnVar : public IRVisitor {
-    using IRVisitor::visit;
-
-    void visit(const Variable *op) {
-        if (op->name == var) result = true;
-    }
-
-    void visit(const Let *op) {
-        op->value.accept(this);
-        // The name might be hidden within the body of the let, in
-        // which case there's no point descending.
-        if (op->name != var) {
-            op->body.accept(this);
-        }
-    }
-public:
-
-    bool result;
-    string var;
-
-    ExprDependsOnVar(string v) : result(false), var(v) {
-    }
-};
-
-bool expr_depends_on_var(Expr e, string v) {
-    ExprDependsOnVar depends(v);
-    e.accept(&depends);
-    return depends.result;
-}
-
 
 class ExpandExpr : public IRMutator {
     using IRMutator::visit;
@@ -79,248 +49,80 @@ Expr expand_expr(Expr e, const Scope<Expr> &scope) {
     return result;
 }
 
+
 }
-
-struct StencilDimSpecs {
-    int size;  // stencil window size
-    int step;     // stencil window shifting step
-    Expr min_pos; // stencil origin position w.r.t. the original image buffer
-    string loop_var;  // outer loop var that shifts this dimensions
-};
-
-
-struct StencilSpecs {
-    Function func;
-    bool is_valid;
-    vector<StencilDimSpecs> dims;
-};
-
-ostream &operator<<(ostream &out, const StencilDimSpecs dim) {
-    out << "[" << dim.min_pos << ", "
-        << dim.size << ", looping over "<< dim.loop_var << " step " << dim.step << "]";
-    return out;
-}
-
-ostream &operator<<(ostream &out, const StencilSpecs st) {
-    if (!st.is_valid)
-        out << "Realization of function " << st.func.name() << " is not a valid stencil.\n";
-    else {
-        out << "Realization of function " << st.func.name() << " is a valid stencil.\n";
-        for(size_t i = 0; i < st.dims.size(); i++)
-            out << "dim " << st.func.args()[i] << ": " << st.dims[i] << '\n';
-    }
-    return out;
-}
-
-
-/** Check whether the function is a stencil function,
- *  and return the stencil specs.
- */
-class AnalysisStencilFunction : public IRVisitor {
-    Function func;
-    StencilSpecs specs;
-    Scope<Expr> scope;
-    vector<string> loop_vars;
-
-    using IRVisitor::visit;
-
-    /** return the index of the loop_var in LOOP_VARS each STENCIL dimension depends on.
-     * return a index of -1 if the dimension doesn't depend on any loop_var
-     * return a index of -2 if the dimension is not valid
-     */
-    vector<int> get_loop_var_for_stencil(Box stencil) {
-        vector<int> ret(stencil.size(), -1);
-
-        // a valid stencil dimension can only depend on one or zero loop_var in loop_vars.
-        // any two dimensions can not depend on the same var
-        std::set<size_t> used_var;
-        for(size_t i = 0; i < stencil.size(); i++) {
-            bool find_one_var = false;
-            Expr min = simplify(expand_expr(stencil[i].min, scope));
-
-            for(size_t j = 0; j < loop_vars.size(); j++){
-                if(expr_depends_on_var(min, loop_vars[j])) {
-                    if(find_one_var) {
-                        // now find two, invalid dimension
-                        ret[i] = -2;
-                        break;
-                    } else {
-                        // find the first var
-                        if(used_var.count(j) != 0) {
-                            ret[i] = -2;
-                            break;
-                        } else {
-                            ret[i] = j;
-                            find_one_var = true;
-                            used_var.insert(j);
-                        }
-                    }
-                }
-            }
-        }
-        return ret;
-    }
-
-    /** On a ProducerConsumer node, retrieve the required box region of the comsumer,
-     * and check wether it is a constant stencil window.
-     */
-    void visit(const ProducerConsumer *op) {
-        if (op->name != func.name()) {
-            IRVisitor::visit(op);
-        } else {
-            if (op->update.defined()) {
-                debug(3) << "Warning: Function " << func.name() << " has update definitions" << '\n';
-                internal_assert(false);
-            }
-            debug(3) << "\nAnalyze the consumers of function " << func.name() << '\n';
-            Box stencil = box_required(op->consume, func.name());
-            internal_assert(stencil.size() == func.args().size());
-            vector<int> loop_var_idx = get_loop_var_for_stencil(stencil);
-
-            bool is_valid_stencil = true;
-            for (size_t i = 0; i < stencil.size(); i++) {
-                StencilDimSpecs dim;
-
-                Expr min = simplify(expand_expr(stencil[i].min, scope));
-                Expr max = simplify(expand_expr(stencil[i].max, scope));
-                Expr extent = simplify(max - min + 1);
-                dim.min_pos = min;
-
-                // check if the size of the window is a constant
-                const IntImm *extent_int = extent.as<IntImm>();
-                if(extent_int)
-                    dim.size = extent_int->value;
-                else
-                    is_valid_stencil = false;
-
-                // check if the windows is sliding along one and only one dimension,
-                // i.e. the depending loop_var is one of the func.args
-                debug(3) << "dim " << i << "(" << func.args()[i] << ") ";
-                if(loop_var_idx[i] == -2) {
-                    debug(3) << "is not valid\n";
-                    is_valid_stencil = false;
-                } else if(loop_var_idx[i] == -1) {
-                    debug(3) << "does not depend on any loop vars\n";
-                    dim.loop_var = "undef";
-                    dim.step = dim.size;
-                } else {
-                    debug(3) <<" depending on Loop "<< loop_vars[loop_var_idx[i]] <<" \n";
-                    dim.loop_var = loop_vars[loop_var_idx[i]];
-                }
-                debug(3) << "\tmin: " << min << "\tmax: " << max << '\n'
-                         << "\textent: " << extent;
-
-                // check if the step of the windows is a constant
-                if (loop_var_idx[i] >= 0) {
-                    Expr step = simplify(finite_difference(min, loop_vars[loop_var_idx[i]]));
-                    debug(3) << "\tstep: " << step << '\n';
-                    const IntImm *step_int = step.as<IntImm>();
-                    if(step_int)
-                        dim.step = step_int->value;
-                    else
-                        is_valid_stencil = false;
-                } else {
-                    debug(3) << '\n';
-                }
-                specs.dims.push_back(dim);
-            }
-            specs.is_valid = is_valid_stencil;
-        }
-    }
-
-    void visit(const LetStmt *op) {
-        scope.push(op->name, simplify(expand_expr(op->value, scope)));
-        op->body.accept(this);
-        scope.pop(op->name);
-    }
-
-    void visit(const For *op) {
-        loop_vars.push_back(op->name);
-        op->body.accept(this);
-        loop_vars.pop_back();
-    }
-
-public:
-    AnalysisStencilFunction(Function f) : func(f) {
-        specs.func = f;
-        specs.is_valid = false;
-    }
-
-    StencilSpecs getSpecs(Stmt s) {
-        s.accept(this);
-        return specs;
-    }
-};
 
 
 // create a stencil object for a function, which holds the required
 // values for its consumers. And replace the references to the function
 // image buffer (Provide and Call nodes) with references to the stencil object
 class CreateStencilForFunction : public IRMutator {
-    Function func;
-    StencilSpecs specs;
+    const HWKernel &kernel;
+    const Scope<Expr> &outer_scope;  // FIXME do we need this?
     Scope<Expr> scope;
 
     using IRMutator::visit;
 
     void visit(const ProducerConsumer *op) {
-        if (op->name != func.name()) {
+        if (op->name != kernel.name) {
             IRMutator::visit(op);
         } else {
             // traverse into produce and consume node of the func,
             // replace the PC node name with the stencil name, and
             // create a realize node for the stencil object
+            string stencil_name = kernel.name + ".stencil";
+
             Stmt produce = mutate(op->produce);
-            Stmt update = op->update;
-            if(op->update.defined()) {
-                // We cannot handle it yet
-                internal_assert(false);
-            }
+            Stmt update = mutate(op->update);
             Stmt consume = mutate(op->consume);
 
-            Stmt pc = ProducerConsumer::make(op->name+".stencil", produce, update, consume);
+            Stmt pc = ProducerConsumer::make(stencil_name, produce, update, consume);
 
             // create a realizeation of the stencil image
             Region bounds;
-            for (StencilDimSpecs dim: specs.dims) {
-                Expr extent = make_const(Int(32), dim.size);
-                bounds.push_back(Range(0, extent));
+            for (StencilDimSpecs dim: kernel.dims) {
+                bounds.push_back(Range(0, dim.size));
             }
-            stmt = Realize::make(func.name()+".stencil", func.output_types(), bounds, const_true(), pc);
+            stmt = Realize::make(stencil_name, kernel.func.output_types(), bounds, const_true(), pc);
         }
     }
 
 
     void visit(const For *op) {
-        string stage_name = func.name() + ".s0.";
-        if (!starts_with(op->name, stage_name)) {
+        if (!starts_with(op->name, kernel.name)) {
             IRMutator::visit(op);
         } else {
             // replace the loop var over the dimensions of the original function
             // realization with the loop var over the stencil dimension.
-            // e.g. funcA.s0.x -> funcA.stencil.x
+            // e.g. funcA.s0.x -> funcA.stencil.s0.x
+            //      funcA.s1.x -> funcA.stencil.s1.x
             string old_var_name = op->name;
-            string dim_name = op->name.substr(stage_name.size(), old_var_name.size() - stage_name.size());
-            string new_var_name = func.name() + ".stencil." + dim_name;
+            string stage_dim_name = op->name.substr(kernel.name.size()+1, old_var_name.size() - kernel.name.size());
+            string new_var_name = kernel.name + ".stencil." + stage_dim_name;
             Expr new_var = Variable::make(Int(32), new_var_name);
 
             // find the stencil dimension given dim_name
             int dim_idx = -1;
-            for(size_t i = 0; i < func.args().size(); i++)
-                if(dim_name == func.args()[i]) {
+            for(size_t i = 0; i < kernel.func.args().size(); i++)
+                if(ends_with(stage_dim_name, kernel.func.args()[i])) {
                     dim_idx = i;
                     break;
                 }
-            internal_assert(dim_idx != -1);
-            Expr new_min = make_const(Int(32), 0);
-            Expr new_extent = make_const(Int(32), specs.dims[dim_idx].size);
+            if (dim_idx == -1) {
+                // it is a loop over reduction domain, and we keep it
+                // TODO add an assertion
+                IRMutator::visit(op);
+                return;
+            }
+            Expr new_min = 0;
+            Expr new_extent = kernel.dims[dim_idx].size;
 
             // create a let statement for the old_loop_var
             Expr old_min = op->min;
             Expr old_var_value = new_var + old_min;
 
             // traversal down into the body
-            scope.push(old_var_name, old_var_value);
+            scope.push(old_var_name, simplify(expand_expr(old_var_value, scope)));
             Stmt new_body = mutate(op->body);
             scope.pop(old_var_name);
 
@@ -330,62 +132,88 @@ class CreateStencilForFunction : public IRMutator {
     }
 
     void visit(const Provide *op) {
-        if(op->name != func.name()) {
+        if(op->name != kernel.name) {
             IRMutator::visit(op);
         } else {
             // Replace the provide node of func with provide node of func.stencil
-            string stencil_name = func.name() + ".stencil";
+            string stencil_name = kernel.name + ".stencil";
             vector<Expr> new_args(op->args.size());
 
             // Replace the arguments. e.g.
             //   func.s0.x -> func.stencil.x
-            for (size_t i = 0; i < func.args().size(); i++) {
-                string old_arg_name = func.name() + ".s0." + func.args()[i];
-                string new_arg_name = func.name() + ".stencil." + func.args()[i];
-                internal_assert(is_one(simplify(op->args[i] == Variable::make(Int(32), old_arg_name))));
-                Expr new_arg = Variable::make(Int(32), new_arg_name);
-                new_args[i] = new_arg;
+            for (size_t i = 0; i < kernel.func.args().size(); i++) {
+                new_args[i] = simplify(expand_expr(op->args[i] - kernel.dims[i].min_pos, scope));
             }
-            stmt = Provide::make(stencil_name, op->values, new_args);
+
+            vector<Expr> new_values(op->values.size());
+            for (size_t i = 0; i < op->values.size(); i++) {
+                new_values[i] = mutate(op->values[i]);
+            }
+
+            stmt = Provide::make(stencil_name, new_values, new_args);
         }
     }
 
     void visit(const Call *op) {
-        if(op->name != func.name()) {
-            IRMutator::visit(op);
-        } else {
+        if(op->name == kernel.name) {
             // check assumptions
-            internal_assert(op->func.same_as(func));
+            internal_assert(op->func.same_as(kernel.func));
             internal_assert(op->call_type == Call::Halide);
-            internal_assert(op->args.size() == func.args().size());
+            internal_assert(op->args.size() == kernel.func.args().size());
 
             // Replace the call node of func with call node of func.stencil
-            string stencil_name = func.name() + ".stencil";
+            string stencil_name = kernel.name + ".stencil";
             vector<Expr> new_args(op->args.size());
 
             // Mutate the arguments.
             // The value of the new argment is the old_value - stencil.min_pos.
             // The new value shouldn't refer to old loop vars any more
             for (size_t i = 0; i < op->args.size(); i++) {
-                Expr old_arg = op->args[i];
-                Expr new_arg = old_arg - specs.dims[i].min_pos;
+                Expr old_arg = mutate(op->args[i]);
+                Expr new_arg = old_arg - kernel.dims[i].min_pos;
                 new_arg = simplify(expand_expr(new_arg, scope));
-
                 // TODO check if the new_arg only depends on the loop vars
                 // inside the producer
                 new_args[i] = new_arg;
             }
+            debug(3) << "replacing call " << Expr(op) << " with\n";
             expr = Call::make(op->type, stencil_name, new_args, Call::Intrinsic);
+            debug(3) << "  " << expr << "\n";
+        } else if (ends_with(op->name, ".stencil")) {
+            // if it is a call to a stencil, we try to simplify the args again
+            vector<Expr > new_args(op->args.size());
+            bool changed = false;
+
+            // simplify the args
+            for (size_t i = 0; i < op->args.size(); i++) {
+                Expr old_arg = mutate(op->args[i]);
+                Expr new_arg = simplify(expand_expr(old_arg, scope));
+                if (!new_arg.same_as(op->args[i])) changed = true;
+                new_args[i] = new_arg;
+            }
+
+            if (!changed) {
+                expr = op;
+            } else {
+                debug(3) << "simplify call " << Expr(op) << " to\n";
+                expr = Call::make(op->type, op->name, new_args, op->call_type,
+                                  op->func, op->value_index, op->image, op->param);
+                debug(3) << "  " << expr << "\n";
+            }
+        } else {
+            IRMutator::visit(op);
         }
     }
 
     void visit(const Let *op) {
-        scope.push(op->name, simplify(expand_expr(op->value, scope)));
+        Expr new_value = simplify(expand_expr(mutate(op->value), scope));
+        scope.push(op->name, new_value);
         Expr new_body = mutate(op->body);
-        if (new_body.same_as(op->body)) {
+        if (new_value.same_as(op->value) &&
+            new_body.same_as(op->body)) {
             expr = op;
         } else {
-            expr = Let::make(op->name, op->value, new_body);
+            expr = Let::make(op->name, new_value, new_body);
         }
         scope.pop(op->name);
     }
@@ -402,22 +230,62 @@ class CreateStencilForFunction : public IRMutator {
     }
 
 public:
-    CreateStencilForFunction(Function f, StencilSpecs s) : func(f), specs(s) { internal_assert(s.is_valid); }
+    CreateStencilForFunction(const HWKernel &k, const Scope<Expr> &s)
+        : kernel(k), outer_scope(s) {}
 };
 
 
 // Replace the stencil PC node with stencil.stream PC node
 // add calls to read/write the stencil.stream.
-// We also remove the original realize node of func.stencil because
-// we push it down into produce and consume of the stencil.stream
 class AddStreamOperationForFunction : public IRMutator {
-    Function func;
-    StencilSpecs specs;
+    const HWKernel &kernel;
+    const HWKernelDAG &dag;
 
     using IRMutator::visit;
 
+    // Returned a set of producer (input) kernels, which
+    // are set buffered (i.e. optimized as stream in this pass).
+    // We recursively search the producer kernels until we find
+    // an buffered kernels
+    vector<string> get_buffered_producers(const HWKernel &k) {
+        vector<string> res;
+        for (const string &s : k.producers) {
+            const auto it = dag.kernels.find(s);
+            internal_assert(it != dag.kernels.end());
+            const HWKernel &producer = it->second;
+            if (producer.is_buffered) {
+                res.push_back(s);
+            } else {
+                // recurse
+                vector<string> buffered_producers = get_buffered_producers(producer);
+                res.insert(res.end(), buffered_producers.begin(), buffered_producers.end());
+            }
+        }
+        return res;
+    }
+
+    // Add realize and read_stream calls arround IR s
+    Stmt add_input_stencil(Stmt s, const HWKernel &input) {
+        string stencil_name = input.name + ".stencil";
+        Expr stream_var = Variable::make(Handle(), stencil_name + ".stream");
+        Expr stencil_var = Variable::make(Handle(), stencil_name);
+        vector<Expr> args({stream_var, stencil_var});
+        Stmt read_call = Evaluate::make(Call::make(Handle(), "read_stream", args, Call::Intrinsic));
+        Stmt pc = ProducerConsumer::make(stencil_name, read_call, Stmt(), s);
+
+        // create a realizeation of the stencil image
+        Region bounds;
+        for (StencilDimSpecs dim: input.dims) {
+            bounds.push_back(Range(0, dim.size));
+        }
+        s = Realize::make(stencil_name, input.func.output_types(), bounds, const_true(), pc);
+        return s;
+    }
+
+    // At the realize node of kernel stencil, we create a realize of the kernel stencil stream,
+    // add the write_stream call for it, and add read_stream call for all its inputs
     void visit(const Realize * op) {
-        string stencil_name = func.name() + ".stencil";
+        string stencil_name = kernel.name + ".stencil";
         if (op->name != stencil_name) {
             IRMutator::visit(op);
         } else {
@@ -429,54 +297,62 @@ class AddStreamOperationForFunction : public IRMutator {
             // After mutation:
             //     realize func.stencil.stream {
             //       produce func.stencil.stream {
-            //         realize func.stencil {
-            //           produce func.stencil {...}
-            //           write_stream(func.stencil.stream, func.stencil)
-            //         }
-            //       realize func.stencil {
-            //         produce func.stencil {
-            //           read_stream(func.stencil.stream, func.stencil)
-            //         }
-            //         consume func.stencil
-            //       }
+            //         realize input1.stencil {
+            //           produce input1.stencil {
+            //             read_stream(input1.stencil.stream, input1.stencil)
+            //           }
+            //           ...
+            //           realize func.stencil {
+            //             produce func.stencil {...}
+            //             write_stream(func.stencil.stream, func.stencil)
+            //       } } }
+            //       consume func.stencil
             //     }
 
             // check if the body of Realize node is a PC node
             const ProducerConsumer *pc = op->body.as<ProducerConsumer>();
             internal_assert(pc && pc->name == stencil_name);
-            internal_assert(!pc->update.defined());
 
-            // create stream operations
-            string stream_name = func.name()+".stencil.stream";
+            // create the write stream call
+            string stream_name = kernel.name + ".stencil.stream";
             Expr stream_var = Variable::make(Handle(), stream_name);
             Expr stencil_var = Variable::make(Handle(), stencil_name);
             vector<Expr> args({stream_var, stencil_var});
-            Stmt read_call = Evaluate::make(Call::make(Handle(), "read_stream", args, Call::Intrinsic));
             Stmt write_call = Evaluate::make(Call::make(Handle(), "write_stream", args, Call::Intrinsic));
 
-            // wrap the old produce and consume into new PC nodes
-            Stmt stencil_pc_produce = ProducerConsumer::make(stencil_name, pc->produce, Stmt(), write_call);
-            Stmt stencil_pc_consume = ProducerConsumer::make(stencil_name, read_call, Stmt(), pc->consume);
+            // realize and PC node for func.stencil
+            Stmt stencil_pc = ProducerConsumer::make(stencil_name, pc->produce, pc->update, write_call);
+            Stmt stencil_realize = Realize::make(stencil_name, op->types, op->bounds, op->condition, stencil_pc);
 
-            // re-create Realize nodes for both new PC nodes
-            Stmt realize_produce = Realize::make(op->name, op->types, op->bounds, op->condition, stencil_pc_produce);
-            Stmt realize_consume = Realize::make(op->name, op->types, op->bounds, op->condition, stencil_pc_consume);
+            // add read_stream for each input stencil (producers fed to func)
+            for (const string& s : get_buffered_producers(kernel)) {
+                const auto it = dag.kernels.find(s);
+                internal_assert(it != dag.kernels.end());
+                stencil_realize = add_input_stencil(stencil_realize, it->second);
+            }
+
+            Stmt stream_consume = pc->consume;
+            if (kernel.name == dag.name) {
+                // Adhoc for the dag output kernel
+                // we need to insert read_stream for the dag here
+                // because it doesn't have any consumer
+                stream_consume = add_input_stencil(stream_consume, kernel);
+            }
 
             // create the PC node for stream
-            Stmt stencil_pc = ProducerConsumer::make(stream_name, realize_produce, Stmt(), realize_consume);
+            Stmt stream_pc = ProducerConsumer::make(stream_name, stencil_realize, Stmt(), stream_consume);
 
             // create a realizeation of the stencil stream
             Region bounds;
-            for (StencilDimSpecs dim: specs.dims) {
-                Expr extent = make_const(Int(32), dim.size);
-                bounds.push_back(Range(0, extent));
+            for (StencilDimSpecs dim: kernel.dims) {
+                bounds.push_back(Range(0, dim.size));
             }
-            stmt = Realize::make(stream_name, func.output_types(), bounds, const_true(), stencil_pc);
+            stmt = Realize::make(stream_name, kernel.func.output_types(), bounds, const_true(), stream_pc);
         }
     }
 
 public:
-    AddStreamOperationForFunction(Function f, StencilSpecs s) : func(f), specs(s) {}
+    AddStreamOperationForFunction(const HWKernel &k, const HWKernelDAG &d) : kernel(k), dag(d) {}
 };
 
 
@@ -538,7 +414,7 @@ class PullUpTargetNode : public IRMutator {
             internal_assert(is_target(op));
             stmt = op;
         } else {
-            internal_assert(ends_with(op->name, ".stream"))
+            internal_assert(ends_with(op->name, ".stream") || ends_with(op->name, ".stencil"))
                 << "we don't expect to visit non-stream realize node.\n";
             const ProducerConsumer *body_pc = op->body.as<ProducerConsumer>();
             internal_assert(body_pc && body_pc->name == op->name)
@@ -749,6 +625,45 @@ public:
     }
 };
 
+// Push the scan loops into the produce and consume of a kernel stream,
+// so we get a pipeline of produce loop nest and consume loop nest,
+// which can run concurrently with a FIFO interface of the kernel stream
+class PushLoopsIntoStreamForFunction : public IRMutator {
+    const HWKernel &kernel;
+    SearchIRNode<ProducerConsumer> searcher;
+
+    using IRMutator::visit;
+
+    void visit(const For *op) {
+        // Before transformation:
+        // for scan_loop_var {
+        //   realize kernel.stencil.stream {
+        //     produce kernel.stencil.stream {...}
+        //     consume {...}
+        // } }
+        //
+        // After transformation:
+        // realize kernel.stencil.stream {
+        //   produce kernel.stencil.stream {
+        //     for scan_loop_var {...}
+        //   }
+        //   consume kernel.stencil.stream {
+        //     for scan_loop_var {...}
+        // } }
+        string stream_name = kernel.name + ".stencil.stream";
+        // find a loop that produce the kernel
+        if(searcher.search(op, stream_name)) {
+            PullUpTargetNode reorder(stream_name);
+            stmt = reorder.mutate(op);
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+public:
+    PushLoopsIntoStreamForFunction(const HWKernel &k) : kernel(k) {}
+};
+
 // Implements line buffers
 // It replace the produce of func.stencil and func.stencil.stream with
 // func.stencil_update and func.stencil_update.stream. The latters are
@@ -757,73 +672,97 @@ public:
 // A line buffer is instantiated to buffer the stencil_update.stream and
 // to generate the stencil.stream
 class LinebufferForFunction : public IRMutator {
-    Function func;
-    StencilSpecs specs;
-    Scope<Expr> scope;
-    const Scope<Expr> &outer_scope;
+    const HWKernel& kernel;
     const Region& buffer_bounds;
+    Scope<Expr> scope;
 
     using IRMutator::visit;
 
-    void visit(const ProducerConsumer *op) {
-        if(op->name != func.name() + ".stencil" &&
-           op->name != func.name() + ".stencil.stream") {
+    void visit(const Realize *op) {
+        if(op->name != kernel.name + ".stencil" &&
+           op->name != kernel.name + ".stencil.stream") {
             IRMutator::visit(op);
-        } else if (op->name == func.name() + ".stencil.stream") {
-            // If it is the PC node for func.stencil.stream,
+        } else if (op->name == kernel.name + ".stencil.stream") {
+            // If it is the realize(+PC) node for func.stencil.stream,
             // we traverse and mutate the produce node while keep the consume node.
-            // Then, we create a PC node of func.stencil_update.stream and a line buffer
-            Stmt new_produce = mutate(op->produce);
+            // Then, we create realize+PC nodes of func.stencil_update.stream and a line buffer
+            // e.g. before:
+            //        realize func.stencil.stream {
+            //          produce func.stencil.stream {...}
+            //          consume {...}
+            //        }
+            //
+            //      after:
+            //        realize func.stencil_update.stream {
+            //          produce func.stencil_update.stream {...}
+            //            realize func.stencil.stream {
+            //              produce func.stencil.stream {linebuffer(...)}
+            //              consume {...}
+            //        }   }
+            const ProducerConsumer *stencil_pc = op->body.as<ProducerConsumer>();
+            internal_assert(stencil_pc && stencil_pc->name == kernel.name + ".stencil.stream");
+            Stmt produce_stencil_update = mutate(stencil_pc->produce);
 
             // create call to instatiate the line buffer
-            Expr stream_var = Variable::make(Handle(), func.name() + ".stencil_update.stream");
-            Expr stencil_var = Variable::make(Handle(), func.name() + ".stencil.stream");
+            Expr stream_var = Variable::make(Handle(), kernel.name + ".stencil_update.stream");
+            Expr stencil_var = Variable::make(Handle(), kernel.name + ".stencil.stream");
             vector<Expr> args({stream_var, stencil_var});
             // extract the buffer size, and put it into args
             for(const Range &r : buffer_bounds)
                 args.push_back(r.extent);
             Stmt linebuffer_call = Evaluate::make(Call::make(Handle(), "linebuffer", args, Call::Intrinsic));
 
-            // create a new PC node for func.stencil_update.stream
-            internal_assert(!op->update.defined());
-            Stmt new_pc = ProducerConsumer::make(func.name() + ".stencil_update.stream",
-                                                 new_produce, Stmt(), linebuffer_call);
+            // create realize+PC nodes for func.stencil.stream
+            internal_assert(!stencil_pc->update.defined());
+            Stmt new_stencil_pc = ProducerConsumer::make(kernel.name + ".stencil.stream",
+                                                         linebuffer_call, Stmt(), stencil_pc->consume);
+            Stmt new_stencil_realize = Realize::make(kernel.name + ".stencil.stream", op->types,
+                                                     op->bounds, const_true(), new_stencil_pc);
+
+
+            // create realize+PC nodes for func.stencil_update.stream
+            Stmt new_pc = ProducerConsumer::make(kernel.name + ".stencil_update.stream",
+                                                 produce_stencil_update, Stmt(), new_stencil_realize);
 
             // create a realizeation of the stencil_update stream
             Region bounds;
-            for (StencilDimSpecs dim: specs.dims) {
-                Expr extent = make_const(Int(32), dim.step);
-                bounds.push_back(Range(0, extent));
+            for (StencilDimSpecs dim: kernel.dims) {
+                bounds.push_back(Range(0, dim.step));
             }
-            stmt = Realize::make(func.name()+".stencil_update.stream", func.output_types(), bounds, const_true(), new_pc);
-            stmt = ProducerConsumer::make(op->name, stmt, Stmt(), op->consume);
+            stmt = Realize::make(kernel.name + ".stencil_update.stream", op->types, bounds, const_true(), new_pc);
         } else {
-            // If it is the PC node for func.stencil, then
-            // replace it with a new PC node for func.stencil_update
+            // If it is the Realize(+PC) node for func.stencil, then
+            // replace it with a new Realize+PC node for smaller func.stencil
+            const ProducerConsumer *stencil_pc = op->body.as<ProducerConsumer>();
+            internal_assert(stencil_pc && stencil_pc->name == kernel.name + ".stencil");
 
-            Stmt produce = mutate(op->produce);  // further mutate produce node
-            Stmt update = op->update;
-            if(op->update.defined()) {
-                // We cannot handle it yet
-                internal_assert(false);
-                //Stmt update = mutate(op->update);
-            }
+            Stmt produce = mutate(stencil_pc->produce);
+            Stmt update = mutate(stencil_pc->update);
+
             // replace the old consumer (which writes to a func.stencil.stream)
             // with a new consumer which writes to func.stencil_update.stream
-            const Evaluate *old_consume = op->consume.as<Evaluate>();
+            const Evaluate *old_consume = stencil_pc->consume.as<Evaluate>();
             internal_assert(old_consume);
             const Call *old_write_call = old_consume->value.as<Call>();
             internal_assert(old_write_call && old_write_call->name == "write_stream");
 
-            Expr stream_var = Variable::make(Handle(), func.name() + ".stencil_update.stream");
-            Expr stencil_var = Variable::make(Handle(), func.name() + ".stencil_update");
-            vector<Expr> args({stream_var, stencil_var});
-            Stmt consume = Evaluate::make(Call::make(Handle(), "write_stream", args, Call::Intrinsic));
+            Expr stream_var = Variable::make(Handle(), kernel.name + ".stencil_update.stream");
+            Expr stencil_var = Variable::make(Handle(), kernel.name + ".stencil");
+            Stmt consume = Evaluate::make(Call::make(Handle(), "write_stream", {stream_var, stencil_var}, Call::Intrinsic));
 
-            stmt = ProducerConsumer::make(func.name() + ".stencil_update", produce, update, consume);
+            Stmt new_pc = ProducerConsumer::make(kernel.name + ".stencil", produce, update, consume);
+
+            Region new_bounds(op->bounds.size());
+            internal_assert(op->bounds.size() == kernel.dims.size());
+            // Mutate the bounds
+            for (size_t i = 0; i < op->bounds.size(); i++) {
+                new_bounds[i] = Range(0, kernel.dims[i].step);
+            }
+
+            stmt = Realize::make(kernel.name + ".stencil", op->types, new_bounds,
+                                 const_true(), new_pc);
         }
     }
-
 
     void visit(const For *op) {
         // We intend to mutate two kinds of loops.
@@ -840,44 +779,34 @@ class LinebufferForFunction : public IRMutator {
         //     compute stencil[stencil.loop_var]
         //
         // =========
-        // let store.extent = stencil.min_pos(scan.max) + stencil.size - stencil.min_pos(scan.min)
-        // let scan_update.extent = store.extent / stencil.step
-        // for scan_update.loop_var, 0, scan_update.extent
-        //   let scan.loop_var = scan.min + scan_update.loop_var * stencil.step
+        // let scan_update.extent = store_bounds.extent / stencil.step
+        // for scan_update.loop_var, scan.min, scan_update.extent
+        //   let scan.loop_var = scan_update.loop_var
         //   realize update_stencil[0, stencil.step]
         //   for stencil_update.loop_var, 0, stencil.step
         //     let stencil.loop_var = stencil_update.loop_var
         //     compute stencil_update[stencil.loop_var]
 
 
-        string stencil_name = func.name() + ".stencil.";
+        string stencil_name = kernel.name + ".stencil.";
         // check if the for loop is a outer loops (scan.loop_var) that slide
         size_t dim_idx = 0;
-        while (dim_idx < specs.dims.size()) {
-            if(op->name == specs.dims[dim_idx].loop_var)
+        while (dim_idx < kernel.dims.size()) {
+            if(op->name == kernel.dims[dim_idx].loop_var)
                 break;
             dim_idx++;
         }
 
-        if(dim_idx < specs.dims.size()) {
+        if(dim_idx < kernel.dims.size()) {
             // found a proper outer scan.loop_var
             debug(3) << "find outer loop " << op->name << " to mutate.\n";
 
-            StencilDimSpecs dimspecs = specs.dims[dim_idx];
+            StencilDimSpecs dimspecs = kernel.dims[dim_idx];
             internal_assert(dimspecs.loop_var == op->name);
-            string new_loop_var_name = func.name() + ".scan_update." + func.args()[dim_idx];
+            string new_loop_var_name = kernel.name + ".scan_update." + kernel.func.args()[dim_idx];
             Expr new_loop_var = Variable::make(Int(32), new_loop_var_name);
 
-
-            Expr old_max = op->min + op->extent - 1;
-            Expr stencil_min_at_old_max = substitute(op->name, old_max, dimspecs.min_pos);
-            Expr stencil_min_at_old_min = substitute(op->name, op->min, dimspecs.min_pos);
-            Expr store_extent = stencil_min_at_old_max - stencil_min_at_old_min + dimspecs.size;
-            store_extent = simplify(expand_expr(store_extent, scope));
-            // we need to refer out_scope because the old_extent may be a contant declared outside
-            // TODO maybe we can eliminat this by doing one pass of constant substitution, which
-            // currently implemented in StorageFolding.cpp
-            store_extent = simplify(expand_expr(store_extent, outer_scope));
+            Expr store_extent = buffer_bounds[dim_idx].extent;
             debug(3) << "store_extent = " << store_extent << '\n';
 
             // check the condition for the new loop for sliding the update stencil
@@ -885,22 +814,14 @@ class LinebufferForFunction : public IRMutator {
             internal_assert(store_extent_int);
             if (store_extent_int->value % dimspecs.step != 0) {
                 // we cannot handle this scenario yet
-                debug(3) << "Line buffer extent (" << store_extent_int->value
-                         << ") is not divisible by the stencil step " << dimspecs.step << '\n';
-                internal_assert(false);
+                internal_error
+                    << "Line buffer extent (" << store_extent_int->value
+                    << ") is not divisible by the stencil step " << dimspecs.step << '\n';
             }
-            int new_extent_int = store_extent_int->value / dimspecs.step;
+            int new_extent = store_extent_int->value / dimspecs.step;
 
-            // create a let statement for the old_loop_var
-            {
-                // TODO fix the bug in this transformation
-                // I think the tranformation doesn't works when the following conditions
-                // are not satisfied.
-                internal_assert(is_one(simplify(expand_expr(op->min, outer_scope) == 0)));
-                internal_assert(is_one(simplify(dimspecs.step == 1)));
-            }
             string old_var_name = op->name;
-            Expr old_var_value = op->min + new_loop_var * dimspecs.step;
+            Expr old_var_value = new_loop_var;
 
             // traversal down into the body
             scope.push(old_var_name, old_var_value);
@@ -908,99 +829,35 @@ class LinebufferForFunction : public IRMutator {
             scope.pop(old_var_name);
 
             new_body = LetStmt::make(old_var_name, old_var_value, new_body);
-            stmt = For::make(new_loop_var_name, 0, new_extent_int, op->for_type, op->device_api, new_body);
+            stmt = For::make(new_loop_var_name, op->min, new_extent, op->for_type, op->device_api, new_body);
+
         } else if (starts_with(op->name, stencil_name)) {
             // found a inner loop
             debug(3) << "find stencil loop " << op->name << " to mutate.\n";
             string old_var_name = op->name;
-            string dim_name = op->name.substr(stencil_name.size(), old_var_name.size() - stencil_name.size());
-            string new_var_name = func.name() + ".stencil_update." + dim_name;
-            Expr new_var = Variable::make(Int(32), new_var_name);
+            string stage_dim_name = op->name.substr(stencil_name.size(), old_var_name.size() - stencil_name.size());
 
             // look for dim_name in stencil specs
             size_t i = 0;
-            while(i < func.args().size()) {
-                if(dim_name == func.args()[i])
+            while(i < kernel.func.args().size()) {
+                if(ends_with(stage_dim_name, kernel.func.args()[i]))
                     break;
                 i++;
             }
-            internal_assert(i < specs.dims.size());
-            int new_extent_int = specs.dims[i].step;
-
-            // create a let statement for the old_loop_var
-            Expr old_var_value = new_var;
+            internal_assert(i < kernel.dims.size());
+            int new_extent = kernel.dims[i].step;
 
             // traversal down into the body
-            scope.push(old_var_name, old_var_value);
             Stmt new_body = mutate(op->body);
-            scope.pop(old_var_name);
 
-            new_body = LetStmt::make(old_var_name, old_var_value, new_body);
-            stmt = For::make(new_var_name, 0, new_extent_int, op->for_type, op->device_api, new_body);
+            //new_body = LetStmt::make(old_var_name, old_var_value, new_body);
+            stmt = For::make(op->name, 0, new_extent, op->for_type, op->device_api, new_body);
         } else {
             // otherwise, keep traversal down
             IRMutator::visit(op);
         }
     }
 
-    void visit(const Realize *op) {
-        if (op->name != func.name() + ".stencil") {
-            IRMutator::visit(op);
-        } else {
-            // If it is the Realize node for func.stencil, then
-            // replace it with a new Realize node for func.stencil_update
-
-            Region new_bounds(op->bounds.size());
-            internal_assert(op->bounds.size() == specs.dims.size());
-
-            // Mutate the bounds
-            for (size_t i = 0; i < op->bounds.size(); i++) {
-                internal_assert(is_const(op->bounds[i].min, 0));
-                Expr new_extent = make_const(Int(32), specs.dims[i].step);
-                new_bounds[i] = Range(0, new_extent);
-            }
-
-            Stmt new_body = mutate(op->body);
-            stmt = Realize::make(func.name() + ".stencil_update", op->types, new_bounds,
-                                 const_true(), new_body);
-        }
-    }
-
-    void visit(const Provide *op) {
-        if(op->name != func.name() + ".stencil") {
-            IRMutator::visit(op);
-        } else {
-            // If it is the provide node for func.stencil, then
-            // replace it with a new provide node for func.stencil_update
-
-            // Replace the provide node of func with provide node of func.stencil
-            string new_name = func.name() + ".stencil_update";
-            vector<Expr> new_args(op->args.size());
-
-            // Replace the arguments. e.g.
-            //   func.s0.x -> func.stencil.x
-            for (size_t i = 0; i < func.args().size(); i++) {
-                string old_arg_name = func.name() + ".stencil." + func.args()[i];
-                string new_arg_name = func.name() + ".stencil_update." + func.args()[i];
-                internal_assert(is_one(simplify(op->args[i] == Variable::make(Int(32), old_arg_name))));
-                Expr new_arg = Variable::make(Int(32), new_arg_name);
-                new_args[i] = new_arg;
-            }
-            stmt = Provide::make(new_name, op->values, new_args);
-        }
-    }
-
-    void visit(const Let *op) {
-        scope.push(op->name, simplify(expand_expr(op->value, scope)));
-        Expr new_body = mutate(op->body);
-        if (new_body.same_as(op->body)) {
-            expr = op;
-        } else {
-            expr = Let::make(op->name, op->value, new_body);
-        }
-        scope.pop(op->name);
-    }
-
     void visit(const LetStmt *op) {
         scope.push(op->name, simplify(expand_expr(op->value, scope)));
         Stmt new_body = mutate(op->body);
@@ -1012,82 +869,76 @@ class LinebufferForFunction : public IRMutator {
         scope.pop(op->name);
     }
 
-
 public:
-    LinebufferForFunction(Function f, StencilSpecs s, const Scope<Expr> &sc, const Region &b)
-        : func(f), specs(s), outer_scope(sc), buffer_bounds(b) { internal_assert(s.is_valid); }
+    LinebufferForFunction(const HWKernel &k, const Region &b)
+        : kernel(k), buffer_bounds(b) { }
 };
 
 
 // Perform streaming optimization for all functions
 class StreamOpt : public IRMutator {
-    const map<string, Function> &env;
+    const HWKernelDAG &dag;
     Scope<Expr> scope;
 
     using IRMutator::visit;
 
     void visit(const Realize *op) {
-        // Find the args for this function
-        map<string, Function>::const_iterator iter = env.find(op->name);
-
-        // If it's not in the environment it's some anonymous
-        // realization that we should skip (e.g. an inlined reduction)
-        if (iter == env.end()) {
+        const auto it = dag.kernels.find(op->name);
+        if (it == dag.kernels.end()) {
             IRMutator::visit(op);
             return;
         }
 
-        // If the Function in question has the same compute_at level
-        // as its store_at level, skip it.
-        const Schedule &sched = iter->second.schedule();
-        if (sched.compute_level() == sched.store_level()) {
-            IRMutator::visit(op);
-            return;
+        const HWKernel &kernel = it->second;
+        internal_assert(kernel.name == op->name);
+        internal_assert(kernel.func.name() == kernel.name);
+        debug(3) << "Find " << kernel << "\n";
+
+        Stmt new_body = op->body;
+
+        new_body = CreateStencilForFunction(kernel, scope).mutate(new_body);
+        debug(3) << "IR after CreateStencilForFunction pass on Function " << kernel.name
+                 << ":\n" << new_body << '\n';
+
+        if (kernel.is_buffered) {
+            // if the HW kernel is buffered, we try to implement line buffers
+            new_body = AddStreamOperationForFunction(kernel, dag).mutate(new_body);
+            debug(3) << "IR after AddStreamOperationForFunction pass on Function " << kernel.name
+                     << ":\n" << new_body << '\n';
+
+            new_body = PushLoopsIntoStreamForFunction(kernel).mutate(new_body);
+
+            debug(3) << "IR after PullUpTargetNode pass on Function " << kernel.name
+                     << ":\n" << new_body << '\n';
+
+            // check if we need a line buffer
+            // if stencil step is equal to stencil size, we skip inserting the line buffer
+            bool insert_linebuffer = false;
+            for (const StencilDimSpecs &dimspecs : kernel.dims) {
+                internal_assert(dimspecs.step <= dimspecs.size);
+                if (dimspecs.step < dimspecs.size) {
+                    insert_linebuffer = true;
+                    break;
+                }
+            }
+
+            // we always add a line buffer at the inputs to help grouping the pipeline
+            if (dag.input_kernels.count(kernel.name))
+                insert_linebuffer = true;
+
+            if (insert_linebuffer) {
+                new_body = LinebufferForFunction(kernel, op->bounds).mutate(new_body);
+                debug(3) << "IR after LinebufferForFunction pass on Function " << kernel.name
+                         << ":\n" << new_body << '\n';
+            } else {
+                debug(3) << "Skip inserting linebuffer for Function " << kernel.name << '\n';
+            }
         }
 
-        // If the Function is not scheduled as a stream, skip it
-        if (!sched.is_stream()) {
-            IRMutator::visit(op);
-            return;
-        }
+        new_body = mutate(new_body);
 
-        // Here we want to do post-order traversal, as opposed to pre-order in class SlidingWindow
-        // because we want to transform each Func from the output of the pipeline backward
-        Stmt new_body = mutate(op->body);
-
-
-        debug(3) << "Doing stencil window analysis on realization of " << op->name << "\n";
-        Function func = iter->second;
-        AnalysisStencilFunction checker(func);
-        StencilSpecs specs = checker.getSpecs(new_body);
-        debug(3) <<  specs << '\n';
-
-        if(specs.is_valid) {
-            new_body = CreateStencilForFunction(func, specs).mutate(new_body);
-            debug(3) << "IR after CreateStencilForFunction pass on Function " << func.name()
-                     << ":\n" << new_body << '\n';
-
-            new_body = AddStreamOperationForFunction(func, specs).mutate(new_body);
-            debug(3) << "IR after AddStreamOperationForFunction pass on Function " << func.name()
-                     << ":\n" << new_body << '\n';
-
-            PullUpTargetNode reorder(op->name+".stencil.stream");
-            new_body = reorder.mutate(new_body);
-
-            debug(3) << "IR after PullUpTargetNode pass on Function " << func.name()
-                     << ":\n" << new_body << '\n';
-
-
-            new_body = LinebufferForFunction(func, specs, scope, op->bounds).mutate(new_body);
-            debug(3) << "IR after LinebufferForFunction pass on Function " << func.name()
-                     << ":\n" << new_body << '\n';
-
-            // we don't need the old realization node, since the storage is implicitly in the line buffer
-            stmt = new_body;
-
-        } else {
-            stmt = op;
-        }
+        // we don't need the old realization node, since the storage is implicitly in the line buffer
+        stmt = new_body;
     }
 
     void visit(const LetStmt *op) {
@@ -1102,140 +953,152 @@ class StreamOpt : public IRMutator {
     }
 
 public:
-    StreamOpt(const map<string, Function> &e) : env(e) {}
+    StreamOpt(const HWKernelDAG &d)
+        : dag(d) {}
 
 };
 
-// This class groups the hardware pipeline for a Halide function
-// into a sub-tree
-class GroupHWPipelineForFunction : public IRMutator {
-    Function func;
-    const string input_stream;
-    const string output_stream;
+// Carve out the kernels of the HW dag.
+class CarveHWPipeline : public IRMutator {
+    const HWKernelDAG &dag;
+    Stmt pipeline_body;
 
     using IRMutator::visit;
     void visit(const Realize *op) {
-        // Before this pass of transformation, the IR for producing func looks like:
-        // produce func {
-        //   /* some loop tiles */
-        //   realize input_stream.stencil.stream {
-        //     produce input_stream.stencil.stream {...}
-        //     realize input.stencil.stream {
-        //       produce input.stencil.stream {...}
-        //       realize stage1.stencil.stream {
-        //         produce stage1.stencil.stream {...}
-        //         realize produce stage2.stencil.stream {
-        //           produce stage2.stencil.stream {...}
-        //           /* the rest stages */
-        //           realize func_stream.stencil.stream {
-        //             produce func_stream.stencil.stream {...}
-        //             func(...) = func_stream.stencil
-        // } } } } } }
-        //
-        // After the transforamtion, we want to group the computation in the hardware
-        // pipeline (i.e. input, stage1, stage2, and func_stream) into a sub-tree
-        // of IR.
-        // Here we decide to group those into the produce node of ProducerConsumer(PC)
-        // func_stream.stencil.stream.
-        // In practice, we need to pull the realize and PC node of func_stream.stencil.stream
-        // up to the current realize input.stencil.stream level.
-        //
-        // The result looks like:
-        // produce func {
-        //   /* some loop tiles */
-        //   realize input_stream.stencil.stream {
-        //     produce input_stream.stencil.stream {...}
-        //     realize func_stream.stencil.stream {
-        //       produce func_stream.stencil.stream {
-        //         realize input.stencil.stream {
-        //           produce input.stencil.stream {...}
-        //           realize stage1.stencil.stream {
-        //             produce stage1.stencil.stream {...}
-        //             realize produce stage2.stencil.stream {
-        //               produce stage2.stencil.stream {...}
-        //               /* the rest stages */
-        //               /* original produce of func_stream.stencil.steam */
-        //       } } } }
-        //       func(...) = func_stream.stencil
-        // } } }
+        if (ends_with(op->name, ".stream")) {
+            // extract the kernel from the stream name
+            string kernel_name;
+            if (ends_with(op->name, ".stencil.stream")) {
+                kernel_name = op->name.substr(0, op->name.size() - string(".stencil.stream").size());
+            } else if (ends_with(op->name, ".stencil_update.stream")) {
+                kernel_name = op->name.substr(0, op->name.size() - string(".stencil_update.stream").size());
+            } else {
+                internal_error << "unexpected name format of stream.\n";
+            }
 
-        if (op->name == input_stream) {
-            PullUpTargetNode reorder(output_stream);
-            Stmt new_stmt = reorder.mutate(op);
+            if (dag.name == kernel_name) {
+                // it is a output kernel
+                internal_assert(op->name == kernel_name + ".stencil.stream")
+                    << "unexpected output kernel stream name: " << op->name << "\n";
+                const ProducerConsumer *pc = op->body.as<ProducerConsumer>();
+                internal_assert(pc && pc->name == op->name);
 
-            // add a preffix to the new produce node of func_stream.stencil.stream,
-            // in order to inform code-generator that this sub-tree will be a hls function
-            const Realize *realize = new_stmt.as<Realize>();
-            internal_assert(realize && realize->name == output_stream);
-            const ProducerConsumer *pc = realize->body.as<ProducerConsumer>();
-            internal_assert(pc && pc->name == output_stream);
+                // put pc->produce into pipeline_body.
+                // NOTE the realize node is not part of the pipeline
+                internal_assert(!pipeline_body.defined());
+                internal_assert(!pc->update.defined());
+                pipeline_body = pc->produce;
+                stmt = op;
+            } else if ((dag.kernels.count(kernel_name) &&
+                        !dag.input_kernels.count(kernel_name)) ||
+                       (dag.input_kernels.count(kernel_name) &&
+                        op->name == kernel_name + ".stencil.stream")) {
+                // it is a non-input (or linebuffered input) kernel of dag,
+                // carve it out and put it in pipeline_body
+                const ProducerConsumer *pc = op->body.as<ProducerConsumer>();
+                internal_assert(pc && pc->name == op->name);
 
-            Stmt renamed_pc = ProducerConsumer::make( "_hls_target." + output_stream, pc->produce, pc->update, pc->consume);
-            stmt = Realize::make(output_stream, realize->types, realize->bounds, realize->condition, renamed_pc);
+                // recurse. carve out realize and pc->produce,
+                // leave only the comsumer in the IR
+                stmt = mutate(pc->consume);
+
+                // put realize and pc->produce into pipeline_body
+                internal_assert(!pc->update.defined());
+                pipeline_body = ProducerConsumer::make(pc->name, pc->produce, Stmt(), pipeline_body);
+                pipeline_body = Realize::make(op->name, op->types, op->bounds, op->condition, pipeline_body);
+            } else {
+                // it is a input kernel of dag, then keep it unchanged
+                IRMutator::visit(op);
+            }
         } else {
             IRMutator::visit(op);
         }
     }
 
 public:
-    // we have made assumptions on the naming convention of input/output stream names
-    // of the hardware pipeline
-    GroupHWPipelineForFunction(Function f) :
-        func(f),
-        input_stream(func.schedule().accelerator_input() + ".stencil.stream"),
-        output_stream(func.name() + "_stream.stencil.stream")  {
-        debug(3) << "input_stream " << input_stream << '\n'
-                 << "output_stream " << output_stream << '\n';
+    CarveHWPipeline(const HWKernelDAG &d) : dag(d) {}
+
+    pair<Stmt, Stmt> extract(Stmt s) {
+        s = mutate(s);
+        return make_pair(s, pipeline_body);
     }
 };
 
-// This class groups the hardware pipeline for each accelerated Halide function
-// into a sub-tree, which helps the code generator find the closure of the pipeline
-class GroupHWPipeline : public IRMutator {
-    const map<string, Function> &env;
+// Insert pipeline_body into the produce node of dag_name.stencil.stream
+class InsertHWPipeline : public IRMutator {
+    const string &dag_name;
+    Stmt pipeline_body;
 
     using IRMutator::visit;
-
     void visit(const ProducerConsumer *op) {
-        map<string, Function>::const_iterator iter = env.find(op->name);
+        if (starts_with(op->name, dag_name)) {
+            internal_assert(op->name == dag_name + ".stencil.stream")
+                << "unexpected output kernel stream name: " << op->name << "\n";
 
-        // If it's not in the environment it's some anonymous
-        // realization that we should skip (e.g. an inlined reduction)
-        if (iter == env.end()) {
-            IRMutator::visit(op);
-            return;
-        }
-
-        const Schedule &sched = iter->second.schedule();
-        // If the Function is not scheduled to be accelerated on hardware, skip it
-        if (!sched.is_accelerated()) {
-            IRMutator::visit(op);
-            return;
-        }
-
-        debug(2) << "find a hls target function " << iter->second.name() << '\n';
-
-        // TODO check if the accelerator schedule is valid.
-        // for example if the pipeline input specified in the schedule are valid,
-        // or if the storage of the input, output, and intermediates are valid.
-
-        internal_assert(!op->update.defined());
-        Stmt new_produce = GroupHWPipelineForFunction(iter->second).mutate(op->produce);
-        if (new_produce.same_as(op->produce)) {
-            stmt = op;
+            internal_assert(!op->update.defined());
+            stmt = ProducerConsumer::make( "_hls_target." + op->name, pipeline_body, Stmt(), op->consume);
         } else {
-            stmt = ProducerConsumer::make(op->name, new_produce, Stmt(), op->consume);
+            IRMutator::visit(op);
         }
     }
 
 public:
-    GroupHWPipeline(const map<string, Function> &e) : env(e) {}
-
+    InsertHWPipeline(const string &name, Stmt s): dag_name(name), pipeline_body(s) {}
 };
 
-class ReplaceImageParamForFunction : public IRMutator {
-    Function func;
+Stmt group_hw_pipeline(Stmt s, const HWKernelDAG &dag) {
+    // Before this pass of transformation, the IR for pipeline dag_name looks like:
+    // produce func {
+    //   /* some loop tiles */
+    //   realize input.stencil_update.stream {
+    //     produce input.stencil_update.stream {...}
+    //     realize input.stencil.stream {
+    //       produce input.stencil.stream {
+    //         linebuffer(input.stencil_update.stream, input.stencil.stream)
+    //       }
+    //       realize stage1.stencil.stream {
+    //         produce stage1.stencil.stream {...}
+    //         realize produce stage2.stencil.stream {
+    //           produce stage2.stencil.stream {...}
+    //           /* the rest stages */
+    //           realize dag_name.stencil.stream {
+    //             produce dag_name.stencil.stream {...}
+    //             func(...) = func_stream.stencil(...)
+    // } } } } } }
+    //
+    // After the transforamtion, we want to group the computation in the hardware
+    // pipeline (i.e. input.stencil.stream, stage1, stage2, and dag_name) into a sub-tree
+    // of IR. input.stencil_update.stream and func are parts of SW pipeline.
+    // Here we decide to group those into the produce node of ProducerConsumer(PC)
+    // dag_name.stencil.stream.
+    // In practice, we do it in two passes. First, we carve out the pipeline. Then, we
+    // insert the pipeline into the produce node of dag_name.stencil.stream.
+    //
+    // The result looks like:
+    // produce func {
+    //   /* some loop tiles */
+    //   realize input.stencil_update.stream {
+    //     produce input.stencil_update.stream {...}
+    //     realize dag_name.stencil.stream {
+    //       produce dag_name.stencil.stream {
+    //         realize input.stencil.stream {
+    //           produce input.stencil.stream {...}
+    //           realize stage1.stencil.stream {
+    //             produce stage1.stencil.stream {...}
+    //             realize produce stage2.stencil.stream {
+    //               produce stage2.stencil.stream {...}
+    //               /* the rest stages */
+    //               /* original produce of dag_name.stencil.steam */
+    //       } } } }
+    //       func(...) = dag_name.stencil(...)
+    // } } }
 
+    pair<Stmt, Stmt> p = CarveHWPipeline(dag).extract(s);
+    s = InsertHWPipeline(dag.name, p.second).mutate(p.first);
+    return s;
+}
+
+class ReplaceImageParamForFunction : public IRMutator {
     using IRMutator::visit;
 
     // Replace calls to ImageParam with calls to Stencil
@@ -1270,77 +1133,69 @@ class ReplaceImageParamForFunction : public IRMutator {
 
 public:
     map<string, Parameter> params;
-    ReplaceImageParamForFunction(Function f) : func(f) {}
+    ReplaceImageParamForFunction() {}
 };
 
 class ReplaceImageParam : public IRMutator {
-    const map<string, Function> &env;
+    const HWKernelDAG &dag;
 
     using IRMutator::visit;
 
     void visit(const ProducerConsumer *op) {
-        map<string, Function>::const_iterator iter = env.find(op->name);
-
-        // If it's not in the environment it's some anonymous
-        // realization that we should skip (e.g. an inlined reduction)
-        if (iter == env.end()) {
+        if (!starts_with(op->name, "_hls_target." + dag.name)) {
             IRMutator::visit(op);
             return;
         }
 
-        const Schedule &sched = iter->second.schedule();
-        // If the Function is not scheduled to be accelerated on hardware, skip it
-        if (!sched.is_accelerated()) {
-            IRMutator::visit(op);
-            return;
-        }
-
-        debug(2) << "find a target function " << iter->second.name() << '\n';
+        debug(2) << "find a target function " << dag.name << '\n';
         // TODO check if the accelerator schedule is valid.
         // for example if the pipeline input specified in the schedule are valid,
         // or if the storage of the input, output, and intermediates are valid.
 
         internal_assert(!op->update.defined());
-        ReplaceImageParamForFunction replacer(iter->second);
+        ReplaceImageParamForFunction replacer;
         Stmt new_produce = replacer.mutate(op->produce);
 
-        // create the realizations of stencil type of replaced imageparams
-        for(const auto &pair : replacer.params) {
-            const Parameter param = pair.second;
-            const string stencil_name = param.name() + ".stencil";
-
-            Expr buffer_var = Variable::make(Handle(), param.name());
-            Expr stencil_var = Variable::make(Handle(), stencil_name);
-            vector<Expr> args({buffer_var, stencil_var});
-            Stmt convert_call = Evaluate::make(Call::make(Handle(), "buffer_to_stencil", args, Call::Intrinsic));
-            Stmt pc = ProducerConsumer::make(stencil_name, convert_call, Stmt(), new_produce);
-
-            // create a realizeation of the stencil image
-            Region bounds;
-            for (int i = 0; i < param.dimensions(); i++) {
-                Expr extent = param.extent_constraint(i);
-                user_assert(is_const(extent)) << "ImageParam used by hardware pipeline must set constant extents.";
-                bounds.push_back(Range(0, extent));
-            }
-            new_produce = Realize::make(stencil_name, {param.type()}, bounds, const_true(), pc);
-        }
-
         if (new_produce.same_as(op->produce)) {
+            internal_assert(replacer.params.empty());
             stmt = op;
         } else {
             stmt = ProducerConsumer::make(op->name, new_produce, Stmt(), op->consume);
+
+            // create the realizations of stencil type of replaced imageparams
+            for(const auto &pair : replacer.params) {
+                const Parameter param = pair.second;
+                const string stencil_name = param.name() + ".stencil";
+
+                Expr buffer_var = Variable::make(Handle(), param.name());
+                Expr stencil_var = Variable::make(Handle(), stencil_name);
+                vector<Expr> args({buffer_var, stencil_var});
+                Stmt convert_call = Evaluate::make(Call::make(Handle(), "buffer_to_stencil", args, Call::Intrinsic));
+                stmt = ProducerConsumer::make(stencil_name, convert_call, Stmt(), stmt);
+
+                // create a realizeation of the stencil image
+                Region bounds;
+                for (int i = 0; i < param.dimensions(); i++) {
+                    Expr extent = param.extent_constraint(i);
+                    user_assert(is_const(extent)) << "ImageParam used by hardware pipeline must set constant extents.";
+                    bounds.push_back(Range(0, extent));
+                }
+                stmt = Realize::make(stencil_name, {param.type()}, bounds, const_true(), stmt);
+            }
         }
 
     }
 public:
-    ReplaceImageParam(const map<string, Function> &e) : env(e) {}
+    ReplaceImageParam(const HWKernelDAG &d) : dag(d) {}
 };
 
-Stmt stream_opt(Stmt s, const map<string, Function> &env) {
-    Stmt new_stmt = StreamOpt(env).mutate(s);
-    new_stmt = GroupHWPipeline(env).mutate(new_stmt);
-    new_stmt = ReplaceImageParam(env).mutate(new_stmt);
-    return new_stmt;
+Stmt stream_opt(Stmt s, const vector<HWKernelDAG> &dags) {
+    for(const HWKernelDAG &dag : dags) {
+        s = StreamOpt(dag).mutate(s);
+        s = group_hw_pipeline(s, dag);
+        s = ReplaceImageParam(dag).mutate(s);
+    }
+    return s;
 }
 
 }

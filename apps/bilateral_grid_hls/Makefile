@@ -1,4 +1,3 @@
-#### Halide flags
 include ../support/Makefile.inc
 
 #### HLS flags
@@ -16,10 +15,11 @@ IFLAG += -I "../hls_support"
 
 include ../hls_support/Makefile.autopilot
 
-
 #### end of HLS flags
 
-all: test
+
+
+all: out.png
 
 pipeline: pipeline.cpp
 	$(CXX) $(CXXFLAGS) -Wall pipeline.cpp $(LDFLAGS) $(LIB_HALIDE) -o pipeline -lpthread -ldl -lz -ltinfo -g
@@ -27,11 +27,11 @@ pipeline: pipeline.cpp
 pipeline_hls.cpp pipeline_native.o: pipeline
 	HL_DEBUG_CODEGEN=0 ./pipeline
 
-run: run.cpp pipeline_hls.cpp pipeline_native.o
-	$(CXX) $(CXXFLAGS) -Wall  -Wno-unknown-pragmas  run.cpp pipeline_hls.cpp hls_target.cpp pipeline_native.o  -g -lpthread -ldl -o run
+filter: filter.cpp pipeline_native.o pipeline_hls.cpp
+	$(CXX) $(CXXFLAGS) -g -Wall -Wno-unknown-pragmas -Werror filter.cpp  hls_target.cpp pipeline_native.o pipeline_hls.cpp  -lpthread -ldl -o filter  $(PNGFLAGS)
 
-test: run
-	./run
+out.png: filter
+	./filter ../images/gray.png out.png
 
 clean:
-	rm -f pipeline pipeline_native.{h,o} pipeline_hls.{h,cpp} hls_target.{h,cpp} run
+	rm -f pipeline pipeline_hls.{h,cpp} pipeline_native.{h,o} filter

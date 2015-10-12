@@ -4,6 +4,7 @@
 #include "Bounds.h"
 #include "IROperator.h"
 #include "Inline.h"
+#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
@@ -626,12 +627,15 @@ public:
         for (size_t i = 0; i < stages.size(); i++) {
             debug(0) << "Region required of " << stages[i].name
                      << " stage " << stages[i].stage << ":\n";
-            for (size_t j = 0; j < stages[i].bounds.size(); j++) {
-                debug(0) << "  [" << simplify(stages[i].bounds[j].min) << ", " << simplify(stages[i].bounds[j].max) << "]\n";
-            }
-            debug(0) << " consumed by: ";
             for (size_t j = 0; j < stages[i].consumers.size(); j++) {
-                debug(0) << stages[stages[i].consumers[j]].name << " ";
+                const Stage &consumer = stages[stages[i].consumers[j]];
+                debug(0) << " for consumer " << consumer.name
+                         << "  stage " << consumer.stage << ":\n";
+
+                const Box &bounds = stages[i].bounds[make_pair(consumer.name, consumer.stage)];
+                for (size_t k = 0; k < bounds.size(); k++) {
+                    debug(0) << "  [" << simplify(bounds[k].min) << ", " << simplify(bounds[k].max) << "] when " << bounds.used << "\n";
+                }
             }
             debug(0) << "\n";
         }
@@ -791,13 +795,20 @@ public:
 
 };
 
-
+void copy_stages(const vector<BoundsInference::Stage> &src,
+                 vector<BoundsInference_Stage> &des) {
+    for (size_t i = 0; i < src.size(); i++) {
+        const BoundsInference::Stage &stage = src[i];
+        des.push_back({stage.name, stage.stage, stage.consumers, stage.bounds});
+    }
+}
 
 Stmt bounds_inference(Stmt s,
                       const vector<Function> &outputs,
                       const vector<string> &order,
                       const map<string, Function> &env,
-                      const FuncValueBounds &func_bounds) {
+                      const FuncValueBounds &func_bounds,
+                      vector<BoundsInference_Stage> &inlined_stages) {
 
     vector<Function> funcs(order.size());
     for (size_t i = 0; i < order.size(); i++) {
@@ -806,7 +817,11 @@ Stmt bounds_inference(Stmt s,
 
     // Add an outermost bounds inference marker
     s = For::make("<outermost>", 0, 1, ForType::Serial, DeviceAPI::Parent, s);
-    s = BoundsInference(funcs, outputs, func_bounds).mutate(s);
+    BoundsInference mutator(funcs, outputs, func_bounds);
+    s = mutator.mutate(s);
+
+    // make a copy of computed stage relationship, which is useful for later passes
+    copy_stages(mutator.stages, inlined_stages);
     return s.as<For>()->body;
 }
 

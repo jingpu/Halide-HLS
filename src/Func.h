@@ -1465,8 +1465,9 @@ public:
     EXPORT Func &stream();
 
     /** Schedule a function onto the hardware accelerator.
-     * The accelerator takes f as the input function. */
-    EXPORT Func &accelerate_from(Func f);
+     * Extract the pipeline from inputs to this function at
+     * f.var loop level.*/
+    EXPORT Func &accelerate_at(Func f, Var var, const std::vector<Func> &inputs);
 
     /** Insert a buffer before this function.
      * The buffered function will be stored as buffered.

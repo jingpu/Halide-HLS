@@ -23,19 +23,21 @@ public:
     Func clamped;
     Func conv1;
     Func output;
+    Func hw_output;
     std::vector<Argument> args;
 
     MyPipeline() : input(UInt(8), 3, "input"), weight(UInt(8), 2, "weight"),
-                   conv1("conv1"), output("output") {
+                   conv1("conv1"), output("output"), hw_output("hw_output") {
         // define the algorithm
         clamped = BoundaryConditions::repeat_edge(input);
         conv1 = convolve55_rd(clamped);
-        output = convolve55_rd(conv1);
+        hw_output = convolve55_rd(conv1);
+        output(x, y, c) = hw_output(x, y, c);
 
         // define common schedule: tile output, and linebuffer the intermediate
         output.tile(x, y, xo, yo, xi, yi, 256, 256);
         conv1.store_at(output, xo).compute_at(output, xi);
-        clamped.compute_root();
+        clamped.store_at(output, xo).compute_at(output, xi);
 
         // restrict arguments
         weight.set_bounds(0, 0, 5);
@@ -52,8 +54,8 @@ public:
         std::cout << "\ncompiling cpu code..." << std::endl;
         output.print_loop_nest();
 
-        output.compile_to_c("pipeline_native.c", args, "pipeline_native");
-        output.compile_to_lowered_stmt("pipeline_native.ir", args);
+        //output.compile_to_c("pipeline_native.c", args, "pipeline_native");
+        //output.compile_to_lowered_stmt("pipeline_native.ir", args);
         //output.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
         output.compile_to_header("pipeline_native.h", args, "pipeline_native");
         output.compile_to_object("pipeline_native.o", args, "pipeline_native");
@@ -62,38 +64,16 @@ public:
     void compile_hls() {
         std::cout << "\ncompiling HLS code..." << std::endl;
 
-        // Define the scope of the hardware pipeline
-        // Here we offload the computation of 'output' to hardware, taking the
-        // the input of 'clamped'. As a result, the pipeline from 'clamped' to
-        // 'output' will be instantiated in hardware.
-        output.accelerate_from(clamped);
+        clamped.store_at(output, xo).compute_at(output, xi).stream();
+        conv1.store_at(output, xo).compute_at(output, xi).stream();
+        hw_output.store_at(output, xo).compute_at(output, xi).stream();
 
-        // the following schedules should be inferred automatically from accelerate_from()
-        // 1. create output buffer
-        Func output_stream(output.name() + "_stream");  // the output buffer must use this name
-        output.insert_buffer(output_stream);
-
-        // 2. create input buffers
-        Func clamped_buf,  clamped_stream;
-        clamped.insert_buffer(clamped_stream);
-        clamped_stream.insert_buffer(clamped_buf);
-
-        // 3. schedule the newly created buffers
-        output_stream.store_at(output, xo).compute_at(output, xi);
-        clamped.store_at(output, xo).compute_at(output, xi);
-        clamped_stream.store_at(output, xo).compute_at(output, xi);
-        clamped_buf.compute_root();
-
-        // 4. mark all functions in the hls pipeline as streams
-        output_stream.stream();
-        conv1.stream();
-        clamped.stream();
-        clamped_stream.stream();
+        hw_output.accelerate_at(output, xo, {clamped});
 
         output.print_loop_nest();
 
         output.compile_to_lowered_stmt("pipeline_hls.ir", args);
-        //output.compile_to_lowered_stmt("pipeline_c.ir.html", args, HTML);
+        output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
         output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
         output.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
     }

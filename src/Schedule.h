@@ -206,8 +206,8 @@ public:
 
     /** The input function of the hardware accelerator pipeline. */
     // @{
-    std::string accelerator_input() const;
-    std::string &accelerator_input();
+    std::vector<std::string> accelerate_inputs() const;
+    std::vector<std::string> &accelerate_inputs();
     // @}
 
 

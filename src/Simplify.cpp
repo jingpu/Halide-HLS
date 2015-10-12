@@ -694,14 +694,43 @@ private:
         const Ramp *ramp_a = a.as<Ramp>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
 
+        const Add *add_a_a = NULL;
+        const Sub *sub_a_a = NULL;
+        const Mul *mul_a_a_a = NULL;
+
+        const Add *add_a_b = NULL;
+        const Sub *sub_a_b = NULL;
+        const Mul *mul_a_b_a = NULL;
+
         if (add_a) {
             div_a_a = add_a->a.as<Div>();
             mul_a_a = add_a->a.as<Mul>();
             mul_a_b = add_a->b.as<Mul>();
+            add_a_a = add_a->a.as<Add>();
+            sub_a_a = add_a->a.as<Sub>();
+            add_a_b = add_a->b.as<Add>();
+            sub_a_b = add_a->b.as<Sub>();
         } else if (sub_a) {
             mul_a_a = sub_a->a.as<Mul>();
             mul_a_b = sub_a->b.as<Mul>();
+            add_a_a = sub_a->a.as<Add>();
+            sub_a_a = sub_a->a.as<Sub>();
+            add_a_b = sub_a->b.as<Add>();
+            sub_a_b = sub_a->b.as<Sub>();
         }
+
+        if(add_a_a) {
+            mul_a_a_a = add_a_a->a.as<Mul>();
+        } else if(sub_a_a) {
+            mul_a_a_a = sub_a_a->a.as<Mul>();
+        }
+
+        if(add_a_b) {
+            mul_a_b_a = add_a_b->a.as<Mul>();
+        } else if(sub_a_b) {
+            mul_a_b_a = sub_a_b->a.as<Mul>();
+        }
+
 
         if (ramp_a) {
             mul_a_a = ramp_a->base.as<Mul>();
@@ -798,6 +827,42 @@ private:
                    ib > 0 && (ia % ib == 0)) {
             // (y - x*4) / 2 -> y/2 - x*2
             expr = mutate((sub_a->a / b) - (mul_a_b->a * div_imp(ia, ib)));
+        } else if (add_a && add_a_a &&
+                   mul_a_a_a && const_int(mul_a_a_a->b, &ia) && const_int(b, &ib) &&
+                   ib > 0 && (ia % ib == 0)) {
+            // Pull terms that are a multiple of the divisor out
+            // ((x*4 + y) + z) / 2 -> x*2 + y/2 + z/2
+            expr = mutate((mul_a_a_a->a * div_imp(ia, ib)) + (add_a_a->b / b) + (add_a->b / b));
+        } else if (add_a && sub_a_a &&
+                   mul_a_a_a && const_int(mul_a_a_a->b, &ia) && const_int(b, &ib) &&
+                   ib > 0 && (ia % ib == 0)) {
+            // ((x*4 - y) + z) / 2 -> x*2 - y/2 + z/2
+            expr = mutate((mul_a_a_a->a * div_imp(ia, ib)) - (sub_a_a->b / b) + (add_a->b / b));
+        } else if (sub_a && add_a_a &&
+                   mul_a_a_a && const_int(mul_a_a_a->b, &ia) && const_int(b, &ib) &&
+                   ib > 0 && (ia % ib == 0)) {
+            // ((x*4 + y) - z) / 2 -> x*2 + y/2 - z/2
+            expr = mutate((mul_a_a_a->a * div_imp(ia, ib)) + (add_a_a->b / b) - (sub_a->b / b));
+        } else if (sub_a && sub_a_a &&
+                   mul_a_a_a && const_int(mul_a_a_a->b, &ia) && const_int(b, &ib) &&
+                   ib > 0 && (ia % ib == 0)) {
+            // ((x*4 - y) - z) / 2 -> x*2 - y/2 - z/2
+            expr = mutate((mul_a_a_a->a * div_imp(ia, ib)) - (sub_a_a->b / b) - (sub_a->b / b));
+        } else if (add_a && add_a_b &&
+                   mul_a_b_a && const_int(mul_a_b_a->b, &ia) && const_int(b, &ib) &&
+                   ib > 0 && (ia % ib == 0)) {
+            // (x + (y*4 + z)) / 2 -> y*2 + (x/2 + z/2)
+            expr = mutate((mul_a_b_a->a * div_imp(ia, ib)) + ((add_a->a / b) + (add_a_b->b / b)));
+        } else if (add_a && sub_a_b &&
+                   mul_a_b_a && const_int(mul_a_b_a->b, &ia) && const_int(b, &ib) &&
+                   ib > 0 && (ia % ib == 0)) {
+            // (x + (y*4 - z)) / 2 -> y*2 + (x/2 - z/2)
+            expr = mutate((mul_a_b_a->a * div_imp(ia, ib)) + ((add_a->a / b) - (sub_a_b->b / b)));
+        } else if (sub_a && add_a_b &&
+                   mul_a_b_a && const_int(mul_a_b_a->b, &ia) && const_int(b, &ib) &&
+                   ib > 0 && (ia % ib == 0)) {
+            // (x - (y*4 + z)) / 2 -> (x/2 - z/2) - y*2
+            expr = mutate(((sub_a->a / b) - (add_a_b->b / b)) - (mul_a_b_a->a * div_imp(ia, ib)));
         } else if (b.type().is_float() && is_simple_const(b)) {
             // Convert const float division to multiplication
             // x / 2 -> x * 0.5
@@ -822,6 +887,9 @@ private:
         const Mul *mul_a_a = add_a ? add_a->a.as<Mul>() : NULL;
         const Mul *mul_a_b = add_a ? add_a->b.as<Mul>() : NULL;
         const Ramp *ramp_a = a.as<Ramp>();
+
+        const Add *add_a_b = add_a ? add_a->b.as<Add>() : NULL;
+        const Mul *mul_a_b_a = add_a_b ? add_a_b->a.as<Mul>() : NULL;
 
         // If the RHS is a constant, do modulus remainder analysis on the LHS
         ModulusRemainder mod_rem(0, 1);
@@ -874,6 +942,10 @@ private:
         } else if (const_int(b, &ib) && ib && a.type() == Int(32) && mod_rem.modulus % ib == 0) {
             // ((a*b)*x + c) % a -> c % a
             expr = mod_imp(mod_rem.remainder, ib);
+        } else if (add_a && add_a_b && mul_a_b_a && const_int(mul_a_b_a->b, &ia) &&
+                   const_int(b, &ib) && ib && (ia % ib == 0)) {
+            // (x + (y*(a*b) + z)) % b -> (x + z) % b)
+            expr = mutate((add_a->a + add_a_b->b) % ib);
         } else if (ramp_a && const_int(ramp_a->stride, &ia) &&
                    broadcast_b && const_int(broadcast_b->value, &ib) && ib &&
                    ia % ib == 0) {
@@ -2842,6 +2914,15 @@ void simplify_test() {
     check((y + x*4)/2, y/2 + x*2);
     check((x*4 - y)/2, x*2 - y/2);
     check((y - x*4)/2, y/2 - x*2);
+    check(((x*4 + y) + z) / 2, x*2 + y/2 + z/2);
+    check(((x*4 - y) + z) / 2, x*2 - y/2 + z/2);
+    check(((x*4 + y) - z) / 2, x*2 + y/2 - z/2);
+    check(((x*4 - y) - z) / 2, x*2 - y/2 - z/2);
+    check((x + (y*4 + z)) / 2, y*2 + (x/2 + z/2));
+    check((x + (y*4 - z)) / 2, y*2 + (x/2 - z/2));
+    check((x - (y*4 + z)) / 2, (x/2 - z/2) - y*2);
+    //check((x - (y*4 - z)) / 2, (x/2 + z/2) - y*2);
+
     check((x + 3)/2 + 7, (x + 17)/2);
     check((x/2 + 3)/5, (x + 6)/10);
     check((x - y)*-2, (y - x)*2);
@@ -2880,6 +2961,7 @@ void simplify_test() {
     check((y + 8) % 4, y % 4);
     check((y + x*8) % 4, y % 4);
     check((y*16 + 13) % 2, 1);
+    check((x + (y*8 + z)) % 4, (x + z) % 4);
     check(Expr(ramp(x, 2, 4)) % (broadcast(2, 4)),
           broadcast(x % 2, 4));
     check(Expr(ramp(2*x+1, 4, 4)) % (broadcast(2, 4)),

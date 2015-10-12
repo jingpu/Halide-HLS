@@ -603,38 +603,32 @@ private:
 
 class PartitionLoops : public IRMutator {
     const map<string, Function> &env;
+    vector<string> inner_productions;
 
     using IRMutator::visit;
 
-    // Do not partition loops that contains hardware pipelines
-    void visit(const ProducerConsumer *op) {
-        // Find the args for this function
-        map<string, Function>::const_iterator iter = env.find(op->name);
-
-        if (iter == env.end()) {
-            IRMutator::visit(op);
-            return;
-        }
-
-        // if the function is scheduled on hardward, skip traversal down into
-        // the produce child node
-        const Schedule &sched = iter->second.schedule();
-        if (sched.is_accelerated()) {
-            internal_assert(!op->update.defined());
-            Stmt consume = mutate(op->consume);
-            if(consume.same_as(op->consume)) {
-                stmt = op;
-            } else {
-                stmt = ProducerConsumer::make(op->name, op->produce, Stmt(), consume);
-            }
-        } else {
-            IRMutator::visit(op);
-        }
-    }
-
     void visit(const For *op) {
+        vector<string> old_inner_productions;
+        inner_productions.swap(old_inner_productions);
 
         Stmt body = mutate(op->body);
+
+        // We dont partition loops that contain accelerated functions
+        bool contains_hw_functions = false;
+        for(size_t i = 0; i < inner_productions.size(); i++) {
+            if (starts_with(inner_productions[i], "_hls_target.")) {
+                contains_hw_functions = true;
+                break;
+            }
+        }
+        inner_productions.insert(inner_productions.end(),
+                                 old_inner_productions.begin(),
+                                 old_inner_productions.end());
+        if (contains_hw_functions) {
+            stmt = For::make(op->name, op->min, op->extent,
+                             op->for_type, op->device_api, body);
+            return;
+        }
 
         // We conservatively only apply this optimization at one loop
         // level, which limits the expansion in code size to a factor
@@ -773,6 +767,11 @@ class PartitionLoops : public IRMutator {
             stmt = For::make(op->name, op->min, op->extent,
                              op->for_type, op->device_api, body);
         }
+    }
+
+    void visit(const ProducerConsumer *op) {
+        IRMutator::visit(op);
+        inner_productions.push_back(op->name);
     }
 
 public:

@@ -243,6 +243,7 @@ SOURCE_FILES = \
   EarlyFree.cpp \
   Error.cpp \
   ExprUsesVar.cpp \
+  ExtractHWKernelDAG.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
   Float16.cpp \

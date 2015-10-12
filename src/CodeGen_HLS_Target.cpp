@@ -48,7 +48,21 @@ const string hls_header_includes =
     "#include <stdio.h>\n"
     "#include <stdlib.h>\n"
     "#include <hls_stream.h>\n"
-    "#include \"stencil.h\"\n";
+    "#include \"Stencil.h\"\n";
+
+
+const string globals =
+    // TODO: this next chunk is copy-pasted from posix_math.cpp. A
+    // better solution for the C runtime would be nice.
+    "inline int8_t abs_i8(int8_t a) {return a >= 0 ? a : -a;}\n"
+    "inline int16_t abs_i16(int16_t a) {return a >= 0 ? a : -a;}\n"
+    "inline int32_t abs_i32(int32_t a) {return a >= 0 ? a : -a;}\n"
+    "inline int64_t abs_i64(int64_t a) {return a >= 0 ? a : -a;}\n"
+    "\n"
+    "template<typename T> T max(T a, T b) {if (a > b) return a; return b;}\n"
+    "template<typename T> T min(T a, T b) {if (a < b) return a; return b;}\n"
+    "template<typename T> T smod(T a, T b) {T result = a % b; if (result < 0) result += b < 0 ? -b : b; return result;}\n"
+    "template<typename T> T sdiv(T a, T b) {T q = a / b; T r = a - q*b; int bs = b >> (8*sizeof(T) - 1); int rs = r >> (8*sizeof(T) - 1); return q - (rs & bs) + (rs & ~bs);}\n";
 }
 
 void CodeGen_HLS_Target::init_module() {
@@ -69,6 +83,8 @@ void CodeGen_HLS_Target::init_module() {
 
     // initialize the source file
     src_stream << "#include \"" << target_name << ".h\"\n\n";
+    src_stream << "#include \"Linebuffer.h\"\n\n";
+    src_stream << globals << "\n";
 
 }
 

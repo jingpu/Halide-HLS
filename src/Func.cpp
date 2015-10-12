@@ -1141,10 +1141,16 @@ Func &Func::stream() {
     return *this;
 }
 
-Func &Func::accelerate_from(Func f) {
+Func &Func::accelerate_at(Func f, Var var, const vector<Func> &inputs) {
     invalidate_cache();
+    store_at(f, var);
     func.schedule().is_accelerated() = true;
-    func.schedule().accelerator_input() = f.name();
+
+    vector<string> input_names(inputs.size());
+    for (size_t i = 0; i < inputs.size(); i++)
+        input_names[i] = inputs[i].name();
+
+    func.schedule().accelerate_inputs() = input_names;
     return *this;
 }
 

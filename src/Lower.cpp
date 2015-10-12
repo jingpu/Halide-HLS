@@ -15,6 +15,7 @@
 #include "DebugToFile.h"
 #include "Deinterleave.h"
 #include "EarlyFree.h"
+#include "ExtractHWKernelDAG.h"
 #include "FindCalls.h"
 #include "Function.h"
 #include "FuseGPUThreadLoops.h"
@@ -114,8 +115,9 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     // This pass injects nested definitions of variable names, so we
     // can't simplify statements from here until we fix them up. (We
     // can still simplify Exprs).
+    vector<BoundsInference_Stage> inlined_stages;
     debug(1) << "Performing computation bounds inference...\n";
-    s = bounds_inference(s, outputs, order, env, func_bounds);
+    s = bounds_inference(s, outputs, order, env, func_bounds, inlined_stages);
     debug(2) << "Lowering after computation bounds inference:\n" << s << '\n';
 
     debug(1) << "Performing sliding window optimization...\n";
@@ -137,9 +139,15 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     s = uniquify_variable_names(s);
     debug(2) << "Lowering after uniquifying variable names:\n" << s << "\n\n";
 
-    debug(1) << "Performing streaming optimization..\n";
-    s = stream_opt(s, env);
-    debug(2) << "Lowering after streaming optimization:\n" << s << '\n';
+    {
+        // passes specific to HLS backend
+        vector<HWKernelDAG> dags;
+        s = extract_hw_kernel_dag(s, env, inlined_stages, dags);
+
+        debug(1) << "Performing streaming optimization..\n";
+        s = stream_opt(s, dags);
+        debug(2) << "Lowering after streaming optimization:\n" << s << '\n';
+    }
 
     debug(1) << "Performing storage folding optimization...\n";
     s = storage_folding(s);

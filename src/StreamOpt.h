@@ -9,13 +9,14 @@
 #include <map>
 
 #include "IR.h"
+#include "ExtractHWKernelDAG.h"
 
 namespace Halide {
 namespace Internal {
 
 /** Perform streaming optimization
  */
-Stmt stream_opt(Stmt s, const std::map<std::string, Function> &env);
+    Stmt stream_opt(Stmt s, const std::vector<HWKernelDAG> &dags);
 
 }
 }

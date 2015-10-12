@@ -91,7 +91,7 @@ void HLS_Closure::visit(const Call *op) {
 namespace {
 const string hls_headers =
     "#include <hls_stream.h>\n"
-    "#include \"stencil.h\"\n"
+    "#include \"Stencil.h\"\n"
     "#include \"hls_target.h\"\n";
 }
 
