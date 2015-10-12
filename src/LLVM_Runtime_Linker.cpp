@@ -46,7 +46,7 @@ llvm::Module *parse_bitcode_file(llvm::StringRef buf, llvm::LLVMContext *context
     }
 
 #define DECLARE_NO_INITMOD(mod)                                         \
-    llvm::Module *get_initmod_##mod(llvm::LLVMContext *, bool) {             \
+    llvm::Module *get_initmod_##mod(llvm::LLVMContext *, bool, bool) { \
         user_error << "Halide was compiled without support for this target\n"; \
         return NULL;                                                    \
     }                                                                   \
@@ -82,6 +82,7 @@ DECLARE_CPP_INITMOD(cuda)
 DECLARE_CPP_INITMOD(destructors)
 DECLARE_CPP_INITMOD(windows_cuda)
 DECLARE_CPP_INITMOD(fake_thread_pool)
+DECLARE_CPP_INITMOD(float16_t)
 DECLARE_CPP_INITMOD(gcd_thread_pool)
 DECLARE_CPP_INITMOD(linux_clock)
 DECLARE_CPP_INITMOD(linux_host_cpu_count)
@@ -100,7 +101,6 @@ DECLARE_CPP_INITMOD(posix_error_handler)
 DECLARE_CPP_INITMOD(posix_io)
 DECLARE_CPP_INITMOD(ssp)
 DECLARE_CPP_INITMOD(windows_io)
-DECLARE_CPP_INITMOD(posix_math)
 DECLARE_CPP_INITMOD(posix_thread_pool)
 DECLARE_CPP_INITMOD(windows_thread_pool)
 DECLARE_CPP_INITMOD(tracing)
@@ -122,6 +122,23 @@ DECLARE_CPP_INITMOD(renderscript)
 DECLARE_CPP_INITMOD(profiler)
 DECLARE_CPP_INITMOD(profiler_inlined)
 DECLARE_CPP_INITMOD(runtime_api)
+#ifdef WITH_METAL
+DECLARE_CPP_INITMOD(metal)
+#ifdef WITH_ARM
+DECLARE_CPP_INITMOD(metal_objc_arm)
+#else
+DECLARE_NO_INITMOD(metal_objc_arm)
+#endif
+#ifdef WITH_X86
+DECLARE_CPP_INITMOD(metal_objc_x86)
+#else
+DECLARE_NO_INITMOD(metal_objc_x86)
+#endif
+#else
+DECLARE_NO_INITMOD(metal)
+DECLARE_NO_INITMOD(metal_objc_arm)
+DECLARE_NO_INITMOD(metal_objc_x86)
+#endif
 
 #ifdef WITH_ARM
 DECLARE_LL_INITMOD(arm)
@@ -603,7 +620,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
         if (module_type != ModuleJITShared) {
             // The first module for inline only case has to be C/C++ compiled otherwise the
             // datalayout is not properly setup.
-            modules.push_back(get_initmod_posix_math(c, bits_64, debug));
+            modules.push_back(get_initmod_destructors(c, bits_64, debug));
 
             // Math intrinsics vary slightly across platforms
             if (t.os == Target::Windows && t.bits == 32) {
@@ -613,7 +630,6 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
             } else {
                 modules.push_back(get_initmod_posix_math_ll(c));
             }
-            modules.push_back(get_initmod_destructors(c, bits_64, debug));
         }
 
         if (module_type != ModuleJITInlined && module_type != ModuleAOTNoRuntime) {
@@ -629,6 +645,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
             modules.push_back(get_initmod_device_interface(c, bits_64, debug));
             modules.push_back(get_initmod_metadata(c, bits_64, debug));
             modules.push_back(get_initmod_profiler(c, bits_64, debug));
+            modules.push_back(get_initmod_float16_t(c, bits_64, debug));
         }
 
         if (module_type != ModuleJITShared) {
@@ -707,6 +724,15 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
 
         } else if (t.has_feature(Target::Renderscript)) {
             modules.push_back(get_initmod_renderscript(c, bits_64, debug));
+        } else if (t.has_feature(Target::Metal)) {
+            modules.push_back(get_initmod_metal(c, bits_64, debug));
+            if (t.arch == Target::ARM) {
+                modules.push_back(get_initmod_metal_objc_arm(c, bits_64, debug));
+            } else if (t.arch == Target::X86) {
+                modules.push_back(get_initmod_metal_objc_x86(c, bits_64, debug));
+            } else {
+                user_error << "Metal can only be used on ARM or X86 architectures.\n";
+            }
         }
     }
 

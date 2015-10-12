@@ -257,7 +257,8 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
                                 Target::OpenCL,
                                 Target::OpenGL,
                                 Target::OpenGLCompute,
-                                Target::Renderscript})) {
+                                Target::Renderscript,
+                                Target::Metal})) {
 #ifdef WITH_X86
         if (target.arch == Target::X86) {
             return make_codegen<CodeGen_GPU_Host<CodeGen_X86>>(target, context);
@@ -710,17 +711,6 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
     sym_push(buf.name() + ".buffer", global_ptr);
 }
 
-namespace {
-
-template<typename T>
-llvm::Constant *get_constant(llvm::Type *ty, Expr e) {
-    T v = 0;
-    internal_assert(scalar_from_constant_expr<T>(e, &v)) << "scalar_from_constant_expr fails for Expr " << e << "\n";
-    return std::numeric_limits<T>::is_integer ? ConstantInt::get(ty, v) : ConstantFP::get(ty, v);
-}
-
-}  // namespace
-
 Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
     if (!e.defined() || e.type() == Handle()) {
         // Handle is always emitted into metadata "undefined", regardless of
@@ -728,32 +718,9 @@ Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
         return Constant::getNullValue(scalar_value_t_type->getPointerTo());
     }
 
-    llvm::Constant *constant = NULL;
-    if (e.type() == Bool()) {
-        constant = get_constant<bool>(i1, e);
-    } else if (e.type() == UInt(8)) {
-        constant = get_constant<uint8_t>(i8, e);
-    } else if (e.type() == UInt(16)) {
-        constant = get_constant<uint16_t>(i16, e);
-    } else if (e.type() == UInt(32)) {
-        constant = get_constant<uint32_t>(i32, e);
-    } else if (e.type() == UInt(64)) {
-        constant = get_constant<uint64_t>(i64, e);
-    } else if (e.type() == Int(8)) {
-        constant = get_constant<int8_t>(i8, e);
-    } else if (e.type() == Int(16)) {
-        constant = get_constant<int16_t>(i16, e);
-    } else if (e.type() == Int(32)) {
-        constant = get_constant<int32_t>(i32, e);
-    } else if (e.type() == Int(64)) {
-        constant = get_constant<int64_t>(i64, e);
-    } else if (e.type() == Float(32)) {
-        constant = get_constant<float>(f32, e);
-    } else if (e.type() == Float(64)) {
-        constant = get_constant<double>(f64, e);
-    } else {
-        internal_assert(0) << "Unhandled Constant Expr Type " << e.type() << "\n";
-    }
+    llvm::Value *val = codegen(e);
+    llvm::Constant *constant = dyn_cast<llvm::Constant>(val);
+    internal_assert(constant);
 
     GlobalVariable *storage = new GlobalVariable(
             *module,
@@ -864,6 +831,10 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) {
 void CodeGen_LLVM::optimize_module() {
     debug(3) << "Optimizing module\n";
 
+    if (debug::debug_level >= 3) {
+        module->dump();
+    }
+
     #if LLVM_VERSION < 37
     FunctionPassManager function_pass_manager(module);
     PassManager module_pass_manager;
@@ -893,6 +864,7 @@ void CodeGen_LLVM::optimize_module() {
     }
     function_pass_manager.doFinalization();
 
+    debug(3) << "After LLVM optimizations:\n";
     if (debug::debug_level >= 2) {
         module->dump();
     }
@@ -1156,11 +1128,15 @@ void CodeGen_LLVM::codegen(Stmt s) {
 }
 
 void CodeGen_LLVM::visit(const IntImm *op) {
-    value = ConstantInt::getSigned(i32, op->value);
+    value = ConstantInt::getSigned(llvm_type_of(op->type), op->value);
+}
+
+void CodeGen_LLVM::visit(const UIntImm *op) {
+    value = ConstantInt::get(llvm_type_of(op->type), op->value);
 }
 
 void CodeGen_LLVM::visit(const FloatImm *op) {
-    value = ConstantFP::get(*context, APFloat(op->value));
+    value = ConstantFP::get(llvm_type_of(op->type), op->value);
 }
 
 void CodeGen_LLVM::visit(const StringImm *op) {
@@ -1511,7 +1487,7 @@ Expr promote_64(Expr e) {
 Value *CodeGen_LLVM::codegen_buffer_pointer(string buffer, Halide::Type type, Expr index) {
     // Promote index to 64-bit on targets that use 64-bit pointers.
     llvm::DataLayout d(module);
-    if (d.getPointerSize() == 8) {
+    if (promote_indices() && d.getPointerSize() == 8) {
         index = promote_64(index);
     }
 
@@ -1562,17 +1538,17 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Exp
     // If the index is constant, we generate some TBAA info that helps
     // LLVM understand our loads/stores aren't aliased.
     bool constant_index = false;
-    int base = 0;
-    int width = 1;
+    int64_t base = 0;
+    int64_t width = 1;
 
     if (index.defined()) {
         if (const Ramp *ramp = index.as<Ramp>()) {
-            const int *pstride = as_const_int(ramp->stride);
-            const int *pbase = as_const_int(ramp->base);
+            const int64_t *pstride = as_const_int(ramp->stride);
+            const int64_t *pbase = as_const_int(ramp->base);
             if (pstride && pbase) {
                 // We want to find the smallest aligned width and offset
                 // that contains this ramp.
-                int stride = *pstride;
+                int64_t stride = *pstride;
                 base = *pbase;
                 assert(base >= 0);
                 width = next_power_of_two(ramp->width * stride);
@@ -1584,7 +1560,7 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Exp
                 constant_index = true;
             }
         } else {
-            const int *pbase = as_const_int(index);
+            const int64_t *pbase = as_const_int(index);
             if (pbase) {
                 base = *pbase;
                 constant_index = true;
@@ -1604,7 +1580,7 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Exp
     // stores to the same buffer to get reordered.
     if (constant_index) {
         for (int w = 1024; w >= width; w /= 2) {
-            int b = (base / w) * w;
+            int64_t b = (base / w) * w;
 
             std::stringstream level;
             level << buffer << ".width" << w << ".base" << b;
@@ -2191,15 +2167,18 @@ void CodeGen_LLVM::visit(const Call *op) {
             builder->CreateStore(host_ptr, buffer_host_ptr(buffer));
 
             // Type check integer arguments
-            for (size_t i = 1; i < op->args.size(); i++) {
+            for (size_t i = 2; i < op->args.size(); i++) {
                 internal_assert(op->args[i].type() == Int(32))
-                    << "All arguments to create_buffer_t beyond the first must have type Int(32)\n";
+                    << "All arguments to create_buffer_t beyond the second must have type Int(32)\n";
             }
 
-            Value *elem_size = codegen(op->args[1]);
+            // Second argument is used solely for its Type. Value is unimportant.
+            // Currenty, only the size matters, but ultimately we will encode
+            // complete type info in buffer_t.
+            Value *elem_size = codegen(op->args[1].type().bytes());
             builder->CreateStore(elem_size, buffer_elem_size_ptr(buffer));
 
-            int dims = op->args.size()/3;
+            int dims = (op->args.size() - 2) / 3;
             user_assert(dims <= 4)
                 << "Halide currently has a limit of four dimensions on "
                 << "Funcs used on the GPU or passed to extern stages.\n";
@@ -2609,16 +2588,17 @@ void CodeGen_LLVM::visit(const Call *op) {
             args[i] = codegen(op->args[i]);
         }
 
-        // Add a user context arg as needed. It's never a vector.
-        bool takes_user_context = function_takes_user_context(op->name);
-        if (takes_user_context) {
-            debug(4) << "Adding user_context to " << op->name << " args\n";
-            args.insert(args.begin(), get_user_context());
-        }
-
         llvm::Function *fn = module->getFunction(op->name);
 
         llvm::Type *result_type = llvm_type_of(op->type);
+
+        // Add a user context arg as needed. It's never a vector.
+        bool takes_user_context = function_takes_user_context(op->name);
+        if (takes_user_context) {
+            internal_assert(fn) << "External function " << op->name << "is marked as taking user_context, but is not in the runtime module. Check if runtime_api.cpp needs to be rebuilt.\n";
+            debug(4) << "Adding user_context to " << op->name << " args\n";
+            args.insert(args.begin(), get_user_context());
+        }
 
         // If we can't find it, declare it extern "C"
         if (!fn) {
@@ -2629,10 +2609,6 @@ void CodeGen_LLVM::visit(const Call *op) {
                     VectorType *vt = dyn_cast<VectorType>(arg_types[i]);
                     arg_types[i] = vt->getElementType();
                 }
-            }
-
-            if (function_takes_user_context(op->name)) {
-                arg_types.insert(arg_types.begin(), i8->getPointerTo());
             }
 
             llvm::Type *scalar_result_type = result_type;

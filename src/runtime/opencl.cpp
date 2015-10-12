@@ -2,6 +2,7 @@
 #include "scoped_spin_lock.h"
 #include "device_interface.h"
 #include "HalideRuntimeOpenCL.h"
+#include "printer.h"
 
 #include "mini_cl.h"
 
@@ -980,15 +981,21 @@ WEAK int halide_opencl_run(void *user_context,
                             << " [" << (*((void **)args[i])) << " ...] "
                             << arg_is_buffer[i] << "\n";
         void *this_arg = args[i];
-        uint64_t opencl_handle;
+        cl_int err;
+
         if (arg_is_buffer[i]) {
             halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
-            opencl_handle = halide_get_device_handle(*(uint64_t *)this_arg);
+            uint64_t opencl_handle = halide_get_device_handle(*(uint64_t *)this_arg);
             debug(user_context) << "Mapped dev handle is: " << (void *)opencl_handle << "\n";
-            this_arg = &opencl_handle;
+            // In 32-bit mode, opencl only wants the bottom 32 bits of
+            // the handle, so use sizeof(void *) instead of
+            // arg_sizes[i] below.
+            err = clSetKernelArg(f, i, sizeof(void *), &opencl_handle);
+        } else {
+            err = clSetKernelArg(f, i, arg_sizes[i], this_arg);
         }
 
-        cl_int err = clSetKernelArg(f, i, arg_sizes[i], this_arg);
+
         if (err != CL_SUCCESS) {
             error(user_context) << "CL: clSetKernelArg failed: "
                                 << get_opencl_error_name(err);

@@ -3,6 +3,7 @@
 #include "CodeGen_GPU_Host.h"
 #include "CodeGen_PTX_Dev.h"
 #include "CodeGen_OpenCL_Dev.h"
+#include "CodeGen_Metal_Dev.h"
 #include "CodeGen_OpenGL_Dev.h"
 #include "CodeGen_OpenGLCompute_Dev.h"
 #include "CodeGen_Renderscript_Dev.h"
@@ -201,6 +202,10 @@ void GPU_Host_Closure::visit(const For *loop) {
 
 template<typename CodeGen_CPU>
 CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target) : CodeGen_CPU(target) {
+    // For the default GPU, the order of preferences is: Metal,
+    // OpenCL, CUDA, OpenGLCompute, Renderscript, and OpenGL last.
+    // The code is in reverse order to allow later tests to override
+    // earlier ones.
     if (target.has_feature(Target::OpenGL)) {
         debug(1) << "Constructing OpenGL device codegen\n";
         cgdev[DeviceAPI::GLSL] = new CodeGen_OpenGL_Dev(target);
@@ -220,6 +225,10 @@ CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target) : CodeGen_CPU(tar
     if (target.has_feature(Target::OpenCL)) {
         debug(1) << "Constructing OpenCL device codegen\n";
         cgdev[DeviceAPI::OpenCL] = new CodeGen_OpenCL_Dev(target);
+    }
+    if (target.has_feature(Target::Metal)) {
+        debug(1) << "Constructing Metal device codegen\n";
+        cgdev[DeviceAPI::Metal] = new CodeGen_Metal_Dev(target);
     }
 
     if (cgdev.empty()) {
@@ -492,7 +501,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             // allocate stack space to mirror the closure element. It
             // might be in a register and we need a pointer to it for
             // the gpu args array.
-            Value *ptr = builder->CreateAlloca(val->getType(), NULL, name+".stack");
+            Value *ptr = create_alloca_at_entry(val->getType(), 1, false, name+".stack");
             // store the closure value into the stack space
             builder->CreateStore(val, ptr);
 
@@ -507,8 +516,9 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                                     0,
                                     i));
 
-            // store the size of the argument
-            int size_bits = (closure_args[i].is_buffer) ? target.bits : closure_args[i].type.bits;
+            // store the size of the argument. Buffer arguments get
+            // the dev field, which is 64-bits.
+            int size_bits = (closure_args[i].is_buffer) ? 64 : closure_args[i].type.bits;
             builder->CreateStore(ConstantInt::get(target_size_t_type, size_bits/8),
                                  builder->CreateConstGEP2_32(
 #if LLVM_VERSION >= 37

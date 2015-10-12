@@ -59,9 +59,6 @@ extern void halide_print(void *user_context, const char *);
  */
 extern void halide_error(void *user_context, const char *);
 
-/** A macro that calls halide_error if the supplied condition is false. */
-#define halide_assert(user_context, cond) if (!(cond)) halide_error(user_context, #cond);
-
 /** These are allocated statically inside the runtime, hence the fixed
  * size. They must be initialized with zero. The first time
  * halide_mutex_lock is called, the lock must be initialized in a
@@ -136,7 +133,9 @@ enum halide_trace_event_code {halide_trace_load = 0,
                               halide_trace_produce = 4,
                               halide_trace_update = 5,
                               halide_trace_consume = 6,
-                              halide_trace_end_consume = 7};
+                              halide_trace_end_consume = 7,
+                              halide_trace_begin_pipeline = 8,
+                              halide_trace_end_pipeline = 9};
 
 #pragma pack(push, 1)
 struct halide_trace_event {
@@ -744,6 +743,23 @@ extern void halide_profiler_reset();
 /** Print out timing statistics for everything run since the last
  * reset. Also happens at process exit. */
 extern void halide_profiler_report(void *user_context);
+
+/// \name "Float16" functions
+/// These functions operate of bits (``uint16_t``) representing a half
+/// precision floating point number (IEEE-754 2008 binary16).
+//{@
+
+/** Read bits representing a half precision floating point number and return
+ *  the float that represents the same value */
+extern float halide_float16_bits_to_float(uint16_t);
+
+/** Read bits representing a half precision floating point number and return
+ *  the double that represents the same value */
+extern double halide_float16_bits_to_double(uint16_t);
+
+// TODO: Conversion functions to half
+
+//@}
 
 #ifdef __cplusplus
 } // End extern "C"

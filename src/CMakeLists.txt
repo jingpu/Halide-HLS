@@ -28,6 +28,7 @@ set(RUNTIME_CPP
   destructors
   device_interface
   fake_thread_pool
+  float16_t
   gcd_thread_pool
   gpu_device_selection
   ios_io
@@ -40,6 +41,9 @@ set(RUNTIME_CPP
   module_jit_ref_count
   nacl_host_cpu_count
   opencl
+  metal
+  metal_objc_arm
+  metal_objc_x86
   opengl
   openglcompute
   osx_clock
@@ -51,7 +55,6 @@ set(RUNTIME_CPP
   posix_error_handler
   posix_get_symbol
   posix_io
-  posix_math
   posix_print
   posix_thread_pool
   profiler
@@ -108,13 +111,13 @@ set(INITIAL_MODULES )
 foreach (i ${RUNTIME_CPP} )
   foreach (j ${ARCHS} )
     IF (LLVM_VERSION LESS 36)
-      IF (ARCHS EQUAL 32)
+      IF (${j} EQUAL 32)
         set(TARGET "i386-unknown-unknown-unknown")
       ELSE()
         set(TARGET "x86_64-unknown-unknown-unknown")
       ENDIF()
     ELSE()
-      IF (ARCHS EQUAL 32)
+      IF (${j} EQUAL 32)
         IF (${i} MATCHES "windows_.*")
           # win32 uses the stdcall calling convention, which is x86-specific
           set(TARGET "i386-unknown-unknown-unknown")
@@ -206,6 +209,7 @@ set(HEADER_FILES
   CodeGen_LLVM.h
   CodeGen_MIPS.h
   CodeGen_OpenCL_Dev.h
+  CodeGen_Metal_Dev.h
   CodeGen_OpenGL_Dev.h
   CodeGen_OpenGLCompute_Dev.h
   CodeGen_PNaCl.h
@@ -306,12 +310,13 @@ add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/include/Halide.h"
   WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
   DEPENDS build_halide_h ${HEADER_FILES})
 
-file(COPY runtime/HalideRuntime.h DESTINATION "${CMAKE_BINARY_DIR}/include")
-file(COPY runtime/HalideRuntimeCuda.h DESTINATION "${CMAKE_BINARY_DIR}/include")
-file(COPY runtime/HalideRuntimeOpenCL.h DESTINATION "${CMAKE_BINARY_DIR}/include")
-file(COPY runtime/HalideRuntimeOpenGL.h DESTINATION "${CMAKE_BINARY_DIR}/include")
-file(COPY runtime/HalideRuntimeOpenGLCompute.h DESTINATION "${CMAKE_BINARY_DIR}/include")
-file(COPY runtime/HalideRuntimeRenderscript.h DESTINATION "${CMAKE_BINARY_DIR}/include")
+configure_file(runtime/HalideRuntime.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
+configure_file(runtime/HalideRuntimeCuda.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
+configure_file(runtime/HalideRuntimeOpenCL.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
+configure_file(runtime/HalideRuntimeMetal.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
+configure_file(runtime/HalideRuntimeOpenGL.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
+configure_file(runtime/HalideRuntimeOpenGLCompute.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
+configure_file(runtime/HalideRuntimeRenderscript.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 
 
 IF ((LLVM_VERSION LESS 36) OR (TARGET_NATIVE_CLIENT))
@@ -346,6 +351,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_LLVM.cpp
   CodeGen_MIPS.cpp
   CodeGen_OpenCL_Dev.cpp
+  CodeGen_Metal_Dev.cpp
   CodeGen_OpenGL_Dev.cpp
   CodeGen_OpenGLCompute_Dev.cpp
   CodeGen_PNaCl.cpp
@@ -493,6 +499,10 @@ endif()
 if (TARGET_MIPS)
   target_compile_definitions(Halide PRIVATE "-DWITH_MIPS")
   list(APPEND LLVM_COMPONENTS mips)
+endif()
+
+if (TARGET_METAL)
+  target_compile_definitions(Halide PRIVATE "-DWITH_METAL")
 endif()
 
 target_compile_definitions(Halide PRIVATE "-DLLVM_VERSION=${LLVM_VERSION}")

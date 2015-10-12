@@ -109,105 +109,104 @@ private:
                 stmt = Realize::make(realize->name, realize->types, realize->bounds,
                                      realize->condition, body);
             }
-        } else {
+            return;
+        }
 
-            realizations.push(realize->name, 1);
+        realizations.push(realize->name, 1);
 
-            Stmt body = mutate(realize->body);
+        Stmt body = mutate(realize->body);
 
-            // Compute the size
-            std::vector<Expr> extents;
-            for (size_t i = 0; i < realize->bounds.size(); i++) {
-                extents.push_back(realize->bounds[i].extent);
-                extents[i] = mutate(extents[i]);
-            }
-            Expr condition = mutate(realize->condition);
+        // Compute the size
+        std::vector<Expr> extents;
+        for (size_t i = 0; i < realize->bounds.size(); i++) {
+            extents.push_back(realize->bounds[i].extent);
+            extents[i] = mutate(extents[i]);
+        }
+        Expr condition = mutate(realize->condition);
 
-            realizations.pop(realize->name);
+        realizations.pop(realize->name);
 
-            vector<int> storage_permutation;
-            {
-                map<string, Function>::const_iterator iter = env.find(realize->name);
-                internal_assert(iter != env.end()) << "Realize node refers to function not in environment.\n";
-                const vector<string> &storage_dims = iter->second.schedule().storage_dims();
-                const vector<string> &args = iter->second.args();
-                for (size_t i = 0; i < storage_dims.size(); i++) {
-                    for (size_t j = 0; j < args.size(); j++) {
-                        if (args[j] == storage_dims[i]) {
-                            storage_permutation.push_back((int)j);
-                        }
+        vector<int> storage_permutation;
+        {
+            map<string, Function>::const_iterator iter = env.find(realize->name);
+            internal_assert(iter != env.end()) << "Realize node refers to function not in environment.\n";
+            const vector<string> &storage_dims = iter->second.schedule().storage_dims();
+            const vector<string> &args = iter->second.args();
+            for (size_t i = 0; i < storage_dims.size(); i++) {
+                for (size_t j = 0; j < args.size(); j++) {
+                    if (args[j] == storage_dims[i]) {
+                        storage_permutation.push_back((int)j);
                     }
-                    internal_assert(storage_permutation.size() == i+1);
                 }
+                internal_assert(storage_permutation.size() == i+1);
+            }
+        }
+
+        internal_assert(storage_permutation.size() == realize->bounds.size());
+
+        stmt = body;
+        for (size_t idx = 0; idx < realize->types.size(); idx++) {
+            string buffer_name = realize->name;
+            if (realize->types.size() > 1) {
+                buffer_name = buffer_name + '.' + std::to_string(idx);
             }
 
-            internal_assert(storage_permutation.size() == realize->bounds.size());
+            // Make the names for the mins, extents, and strides
+            int dims = realize->bounds.size();
+            vector<string> min_name(dims), extent_name(dims), stride_name(dims);
+            for (int i = 0; i < dims; i++) {
+                string d = std::to_string(i);
+                min_name[i] = buffer_name + ".min." + d;
+                stride_name[i] = buffer_name + ".stride." + d;
+                extent_name[i] = buffer_name + ".extent." + d;
+            }
+            vector<Expr> min_var(dims), extent_var(dims), stride_var(dims);
+            for (int i = 0; i < dims; i++) {
+                min_var[i] = Variable::make(Int(32), min_name[i]);
+                extent_var[i] = Variable::make(Int(32), extent_name[i]);
+                stride_var[i] = Variable::make(Int(32), stride_name[i]);
+            }
 
-            stmt = body;
-            for (size_t idx = 0; idx < realize->types.size(); idx++) {
-                string buffer_name = realize->name;
-                if (realize->types.size() > 1) {
-                    buffer_name = buffer_name + '.' + std::to_string(idx);
-                }
+            // Promote the type to be a multiple of 8 bits
+            Type t = realize->types[idx];
+            t.bits = t.bytes() * 8;
 
-                // Make the names for the mins, extents, and strides
-                int dims = realize->bounds.size();
-                vector<string> min_name(dims), extent_name(dims), stride_name(dims);
-                for (int i = 0; i < dims; i++) {
-                    string d = std::to_string(i);
-                    min_name[i] = buffer_name + ".min." + d;
-                    stride_name[i] = buffer_name + ".stride." + d;
-                    extent_name[i] = buffer_name + ".extent." + d;
-                }
-                vector<Expr> min_var(dims), extent_var(dims), stride_var(dims);
-                for (int i = 0; i < dims; i++) {
-                    min_var[i] = Variable::make(Int(32), min_name[i]);
-                    extent_var[i] = Variable::make(Int(32), extent_name[i]);
-                    stride_var[i] = Variable::make(Int(32), stride_name[i]);
-                }
+            // Create a buffer_t object for this allocation.
+            vector<Expr> args(dims*3 + 2);
+            //args[0] = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
+            Expr first_elem = Load::make(t, buffer_name, 0, Buffer(), Parameter());
+            args[0] = Call::make(Handle(), Call::address_of, {first_elem}, Call::Intrinsic);
+            args[1] = make_zero(realize->types[idx]);
+            for (int i = 0; i < dims; i++) {
+                args[3*i+2] = min_var[i];
+                args[3*i+3] = extent_var[i];
+                args[3*i+4] = stride_var[i];
+            }
+            Expr buf = Call::make(Handle(), Call::create_buffer_t,
+                                  args, Call::Intrinsic);
+            stmt = LetStmt::make(buffer_name + ".buffer",
+                                 buf,
+                                 stmt);
 
-                // Promote the type to be a multiple of 8 bits
-                Type t = realize->types[idx];
-                t.bits = t.bytes() * 8;
+            // Make the allocation node
+            stmt = Allocate::make(buffer_name, t, extents, condition, stmt);
 
-                // Create a buffer_t object for this allocation.
-                vector<Expr> args(dims*3 + 2);
-                //args[0] = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
-                Expr first_elem = Load::make(t, buffer_name, 0, Buffer(), Parameter());
-                args[0] = Call::make(Handle(), Call::address_of, {first_elem}, Call::Intrinsic);
-                args[1] = realize->types[idx].bytes();
-                for (int i = 0; i < dims; i++) {
-                    args[3*i+2] = min_var[i];
-                    args[3*i+3] = extent_var[i];
-                    args[3*i+4] = stride_var[i];
-                }
-                Expr buf = Call::make(Handle(), Call::create_buffer_t,
-                                      args, Call::Intrinsic);
-                stmt = LetStmt::make(buffer_name + ".buffer",
-                                     buf,
-                                     stmt);
-
-                // Make the allocation node
-                stmt = Allocate::make(buffer_name, t, extents, condition, stmt);
-
-                // Compute the strides
-                for (int i = (int)realize->bounds.size()-1; i > 0; i--) {
-                    int prev_j = storage_permutation[i-1];
-                    int j = storage_permutation[i];
-                    Expr stride = stride_var[prev_j] * extent_var[prev_j];
-                    stmt = LetStmt::make(stride_name[j], stride, stmt);
-                }
-                // Innermost stride is one
-                if (dims > 0) {
-                    int innermost = storage_permutation.empty() ? 0 : storage_permutation[0];
-                    stmt = LetStmt::make(stride_name[innermost], 1, stmt);
-                }
-
-                // Assign the mins and extents stored
-                for (size_t i = realize->bounds.size(); i > 0; i--) {
-                    stmt = LetStmt::make(min_name[i-1], realize->bounds[i-1].min, stmt);
-                    stmt = LetStmt::make(extent_name[i-1], realize->bounds[i-1].extent, stmt);
-                }
+            // Compute the strides
+            for (int i = (int)realize->bounds.size()-1; i > 0; i--) {
+                int prev_j = storage_permutation[i-1];
+                int j = storage_permutation[i];
+                Expr stride = stride_var[prev_j] * extent_var[prev_j];
+                stmt = LetStmt::make(stride_name[j], stride, stmt);
+            }
+            // Innermost stride is one
+            if (dims > 0) {
+                int innermost = storage_permutation.empty() ? 0 : storage_permutation[0];
+                stmt = LetStmt::make(stride_name[innermost], 1, stmt);
+            }
+            // Assign the mins and extents stored
+            for (size_t i = realize->bounds.size(); i > 0; i--) {
+                stmt = LetStmt::make(min_name[i-1], realize->bounds[i-1].min, stmt);
+                stmt = LetStmt::make(extent_name[i-1], realize->bounds[i-1].extent, stmt);
             }
         }
     }

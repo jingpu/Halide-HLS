@@ -117,27 +117,6 @@ const string globals =
     "inline double ceil_f64(double x) {return ceil(x);}\n"
     "inline double round_f64(double x) {return round(x);}\n"
     "\n"
-    "inline float maxval_f32() {return FLT_MAX;}\n"
-    "inline float minval_f32() {return -FLT_MAX;}\n"
-    "inline double maxval_f64() {return DBL_MAX;}\n"
-    "inline double minval_f64() {return -DBL_MAX;}\n"
-    "inline uint8_t maxval_u8() {return 0xff;}\n"
-    "inline uint8_t minval_u8() {return 0;}\n"
-    "inline uint16_t maxval_u16() {return 0xffff;}\n"
-    "inline uint16_t minval_u16() {return 0;}\n"
-    "inline uint32_t maxval_u32() {return 0xffffffff;}\n"
-    "inline uint32_t minval_u32() {return 0;}\n"
-    "inline uint64_t maxval_u64() {return 0xffffffffffffffff;}\n"
-    "inline uint64_t minval_u64() {return 0;}\n"
-    "inline int8_t maxval_s8() {return 0x7f;}\n"
-    "inline int8_t minval_s8() {return 0x80;}\n"
-    "inline int16_t maxval_s16() {return 0x7fff;}\n"
-    "inline int16_t minval_s16() {return 0x8000;}\n"
-    "inline int32_t maxval_s32() {return 0x7fffffff;}\n"
-    "inline int32_t minval_s32() {return 0x80000000;}\n"
-    "inline int64_t maxval_s64() {return 0x7fffffffffffffff;}\n"
-    "inline int64_t minval_s64() {return 0x8000000000000000;}\n"
-    "\n"
     "inline int8_t abs_i8(int8_t a) {return a >= 0 ? a : -a;}\n"
     "inline int16_t abs_i16(int16_t a) {return a >= 0 ? a : -a;}\n"
     "inline int32_t abs_i32(int32_t a) {return a >= 0 ? a : -a;}\n"
@@ -722,7 +701,15 @@ void CodeGen_C::visit(const Not *op) {
 }
 
 void CodeGen_C::visit(const IntImm *op) {
-    id = std::to_string(op->value);
+    if (op->type == Int(32)) {
+        id = std::to_string(op->value);
+    } else {
+        print_assignment(op->type, "(" + print_type(op->type) + ")(" + std::to_string(op->value) + ")");
+    }
+}
+
+void CodeGen_C::visit(const UIntImm *op) {
+    print_assignment(op->type, "(" + print_type(op->type) + ")(" + std::to_string(op->value) + ")");
 }
 
 void CodeGen_C::visit(const StringImm *op) {
@@ -867,7 +854,7 @@ void CodeGen_C::visit(const Call *op) {
             const Load *l = op->args[0].as<Load>();
             internal_assert(op->args.size() == 1 && l);
             rhs << "(("
-                << print_type(l->type)
+                << print_type(l->type.element_of()) // index is in elements, not vectors.
                 << " *)"
                 << print_name(l->name)
                 << " + "
@@ -914,7 +901,9 @@ void CodeGen_C::visit(const Call *op) {
         } else if (op->name == Call::create_buffer_t) {
             internal_assert(op->args.size() >= 2);
             vector<string> args;
-            for (size_t i = 0; i < op->args.size(); i++) {
+            args.push_back(print_expr(op->args[0]));
+            args.push_back(print_expr(op->args[1].type().bytes()));
+            for (size_t i = 2; i < op->args.size(); i++) {
                 args.push_back(print_expr(op->args[i]));
             }
             string buf_id = unique_name('B');

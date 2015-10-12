@@ -268,9 +268,9 @@ public:
         index += Handle().bytes();
 
         // Halide compilation is not threadsafe anyway...
-        static uint32_t memoize_instance = 0;
+        static int32_t memoize_instance = 0;
         writes.push_back(Store::make(key_name,
-                                     IntImm::make(memoize_instance++), // Use and increment counter
+                                     memoize_instance++, // Use and increment counter
                                      (index / Int(32).bytes())));
         alignment += 4;
         index += 4;
@@ -417,7 +417,7 @@ private:
             Stmt cache_miss_marker = LetStmt::make(cache_miss_name,
                                                    Cast::make(Bool(), Variable::make(Int(32), cache_result_name)),
                                                    mutated_pipeline);
-            Stmt cache_lookup_check = Block::make(AssertStmt::make(NE::make(Variable::make(Int(32), cache_result_name), IntImm::make(-1)),
+            Stmt cache_lookup_check = Block::make(AssertStmt::make(NE::make(Variable::make(Int(32), cache_result_name), -1),
                                                                    Call::make(Int(32), "halide_error_out_of_memory", { }, Call::Extern)),
                                                   cache_miss_marker);
             Stmt cache_lookup = LetStmt::make(cache_result_name,
@@ -427,7 +427,7 @@ private:
             std::vector<Expr> computed_bounds_args;
             Expr null_handle = Call::make(Handle(), Call::null_handle, std::vector<Expr>(), Call::Intrinsic);
             computed_bounds_args.push_back(null_handle);
-            computed_bounds_args.push_back(f.output_types()[0].bytes());
+            computed_bounds_args.push_back(make_zero(f.output_types()[0]));
             std::string max_stage_num = std::to_string(f.updates().size());
             for (int32_t i = 0; i < f.dimensions(); i++) {
                 Expr min = Variable::make(Int(32), op->name + ".s" + max_stage_num + "." + f.args()[i] + ".min");
