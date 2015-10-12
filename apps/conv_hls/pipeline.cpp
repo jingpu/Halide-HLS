@@ -52,7 +52,7 @@ public:
 
     void compile_cpu() {
         std::cout << "\ncompiling cpu code..." << std::endl;
-        output.print_loop_nest();
+        //output.print_loop_nest();
 
         //output.compile_to_c("pipeline_native.c", args, "pipeline_native");
         //output.compile_to_lowered_stmt("pipeline_native.ir", args);
@@ -70,7 +70,7 @@ public:
 
         hw_output.accelerate_at(output, xo, {clamped});
 
-        output.print_loop_nest();
+        //output.print_loop_nest();
 
         output.compile_to_lowered_stmt("pipeline_hls.ir", args);
         output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);

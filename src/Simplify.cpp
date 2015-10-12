@@ -1165,7 +1165,7 @@ private:
                    add_a && add_a_b && mul_a_b_a && const_int(mul_a_b_a->b, &ia) &&
                    const_int(b, &ib) && ib && (ia % ib == 0)) {
             // (x + (y*(a*b) + z)) % b -> (x + z) % b)
-            expr = mutate((add_a->a + add_a_b->b) % ib);
+            expr = mutate((add_a->a + add_a_b->b) % b);
         } else if (no_overflow(op->type) &&
                    ramp_a &&
                    const_int(ramp_a->stride, &ia) &&

@@ -43,30 +43,30 @@ Stencil<uint8_t, 5, 5> _weight_stencil)
        {
         Stencil<uint16_t, 1, 1, 1> _local_sum__3_stencil;
         // produce local_sum$3.stencil
-        uint16_t _353 = (uint16_t)(_p2___bias);
-        _local_sum__3_stencil(0, 0, 0) = _353;
+        uint16_t _331 = (uint16_t)(_p2___bias);
+        _local_sum__3_stencil(0, 0, 0) = _331;
         // update local_sum$3.stencil
         for (int _local_sum__3_s1_r__3_y__r = -2; _local_sum__3_s1_r__3_y__r < -2 + 5; _local_sum__3_s1_r__3_y__r++)
         {
          for (int _local_sum__3_s1_r__3_x__r = -2; _local_sum__3_s1_r__3_x__r < -2 + 5; _local_sum__3_s1_r__3_x__r++)
          {
-          uint16_t _354 = _local_sum__3_stencil(0, 0, 0);
-          int32_t _355 = _local_sum__3_s1_r__3_x__r + 2;
-          int32_t _356 = _local_sum__3_s1_r__3_y__r + 2;
-          uint8_t _357 = _repeat_edge__2_stencil(_355, _356, 0);
-          uint16_t _358 = (uint16_t)(_357);
-          uint8_t _359 = _weight_stencil(_355, _356);
-          uint16_t _360 = (uint16_t)(_359);
-          uint16_t _361 = _358 * _360;
-          uint16_t _362 = _354 + _361;
-          _local_sum__3_stencil(0, 0, 0) = _362;
+          uint16_t _332 = _local_sum__3_stencil(0, 0, 0);
+          int32_t _333 = _local_sum__3_s1_r__3_x__r + 2;
+          int32_t _334 = _local_sum__3_s1_r__3_y__r + 2;
+          uint8_t _335 = _repeat_edge__2_stencil(_333, _334, 0);
+          uint16_t _336 = (uint16_t)(_335);
+          uint8_t _337 = _weight_stencil(_333, _334);
+          uint16_t _338 = (uint16_t)(_337);
+          uint16_t _339 = _336 * _338;
+          uint16_t _340 = _332 + _339;
+          _local_sum__3_stencil(0, 0, 0) = _340;
          } // for _local_sum__3_s1_r__3_x__r
         } // for _local_sum__3_s1_r__3_y__r
         // consume local_sum$3.stencil
-        uint16_t _363 = _local_sum__3_stencil(0, 0, 0);
-        uint16_t _364 = _363 >> 8;
-        uint8_t _365 = (uint8_t)(_364);
-        _f2_stencil(0, 0, 0) = _365;
+        uint16_t _341 = _local_sum__3_stencil(0, 0, 0);
+        uint16_t _342 = _341 >> 8;
+        uint8_t _343 = (uint8_t)(_342);
+        _f2_stencil(0, 0, 0) = _343;
        } // realize _local_sum__3_stencil
        // consume f2.stencil
        _f2_stencil_update_stream.write(_f2_stencil);
@@ -98,30 +98,30 @@ Stencil<uint8_t, 5, 5> _weight_stencil)
         {
          Stencil<uint16_t, 1, 1, 1> _local_sum__4_stencil;
          // produce local_sum$4.stencil
-         uint16_t _366 = (uint16_t)(_p2___bias);
-         _local_sum__4_stencil(0, 0, 0) = _366;
+         uint16_t _344 = (uint16_t)(_p2___bias);
+         _local_sum__4_stencil(0, 0, 0) = _344;
          // update local_sum$4.stencil
          for (int _local_sum__4_s1_r__4_y__r = -2; _local_sum__4_s1_r__4_y__r < -2 + 5; _local_sum__4_s1_r__4_y__r++)
          {
           for (int _local_sum__4_s1_r__4_x__r = -2; _local_sum__4_s1_r__4_x__r < -2 + 5; _local_sum__4_s1_r__4_x__r++)
           {
-           uint16_t _367 = _local_sum__4_stencil(0, 0, 0);
-           int32_t _368 = _local_sum__4_s1_r__4_x__r + 2;
-           int32_t _369 = _local_sum__4_s1_r__4_y__r + 2;
-           uint8_t _370 = _f2_stencil(_368, _369, 0);
-           uint16_t _371 = (uint16_t)(_370);
-           uint8_t _372 = _weight_stencil(_368, _369);
-           uint16_t _373 = (uint16_t)(_372);
-           uint16_t _374 = _371 * _373;
-           uint16_t _375 = _367 + _374;
-           _local_sum__4_stencil(0, 0, 0) = _375;
+           uint16_t _345 = _local_sum__4_stencil(0, 0, 0);
+           int32_t _346 = _local_sum__4_s1_r__4_x__r + 2;
+           int32_t _347 = _local_sum__4_s1_r__4_y__r + 2;
+           uint8_t _348 = _f2_stencil(_346, _347, 0);
+           uint16_t _349 = (uint16_t)(_348);
+           uint8_t _350 = _weight_stencil(_346, _347);
+           uint16_t _351 = (uint16_t)(_350);
+           uint16_t _352 = _349 * _351;
+           uint16_t _353 = _345 + _352;
+           _local_sum__4_stencil(0, 0, 0) = _353;
           } // for _local_sum__4_s1_r__4_x__r
          } // for _local_sum__4_s1_r__4_y__r
          // consume local_sum$4.stencil
-         uint16_t _376 = _local_sum__4_stencil(0, 0, 0);
-         uint16_t _377 = _376 >> 8;
-         uint8_t _378 = (uint8_t)(_377);
-         _f3_stencil(0, 0, 0) = _378;
+         uint16_t _354 = _local_sum__4_stencil(0, 0, 0);
+         uint16_t _355 = _354 >> 8;
+         uint8_t _356 = (uint8_t)(_355);
+         _f3_stencil(0, 0, 0) = _356;
         } // realize _local_sum__4_stencil
         // consume f3.stencil
         _f3_stencil_stream.write(_f3_stencil);

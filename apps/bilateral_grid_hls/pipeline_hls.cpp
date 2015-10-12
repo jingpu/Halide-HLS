@@ -90,27 +90,6 @@ inline double floor_f64(double x) {return floor(x);}
 inline double ceil_f64(double x) {return ceil(x);}
 inline double round_f64(double x) {return round(x);}
 
-inline float maxval_f32() {return FLT_MAX;}
-inline float minval_f32() {return -FLT_MAX;}
-inline double maxval_f64() {return DBL_MAX;}
-inline double minval_f64() {return -DBL_MAX;}
-inline uint8_t maxval_u8() {return 0xff;}
-inline uint8_t minval_u8() {return 0;}
-inline uint16_t maxval_u16() {return 0xffff;}
-inline uint16_t minval_u16() {return 0;}
-inline uint32_t maxval_u32() {return 0xffffffff;}
-inline uint32_t minval_u32() {return 0;}
-inline uint64_t maxval_u64() {return 0xffffffffffffffff;}
-inline uint64_t minval_u64() {return 0;}
-inline int8_t maxval_s8() {return 0x7f;}
-inline int8_t minval_s8() {return 0x80;}
-inline int16_t maxval_s16() {return 0x7fff;}
-inline int16_t minval_s16() {return 0x8000;}
-inline int32_t maxval_s32() {return 0x7fffffff;}
-inline int32_t minval_s32() {return 0x80000000;}
-inline int64_t maxval_s64() {return 0x7fffffffffffffff;}
-inline int64_t minval_s64() {return 0x8000000000000000;}
-
 inline int8_t abs_i8(int8_t a) {return a >= 0 ? a : -a;}
 inline int16_t abs_i16(int16_t a) {return a >= 0 ? a : -a;}
 inline int32_t abs_i32(int32_t a) {return a >= 0 ? a : -a;}
@@ -592,21 +571,21 @@ static int __pipeline_hls(buffer_t *_p2___input_buffer, buffer_t *_output__2_buf
           {
            for (int _output__2_s0_x_x_in_x_in = 0; _output__2_s0_x_x_in_x_in < 0 + 8; _output__2_s0_x_x_in_x_in++)
            {
-            int32_t _476 = _output__2_s0_x_xo * 256;
-            int32_t _477 = _output__2_s0_x_x_in_x_grid * 8;
-            int32_t _478 = _477 + _output__2_s0_x_x_in_x_in;
-            int32_t _479 = _476 + _478;
-            int32_t _480 = _output__2_s0_y_yo * 256;
-            int32_t _481 = _output__2_s0_y_y_in_y_grid * 8;
-            int32_t _482 = _481 + _output__2_s0_y_y_in_y_in;
-            int32_t _483 = _480 + _482;
-            int32_t _484 = _483 * _output__2_stride_1;
-            int32_t _485 = _479 + _484;
-            int32_t _486 = _output__2_min_1 * _output__2_stride_1;
-            int32_t _487 = _output__2_min_0 + _486;
-            int32_t _488 = _485 - _487;
-            uint8_t _489 = _hw_output__2_stencil(_output__2_s0_x_x_in_x_in, _output__2_s0_y_y_in_y_in);
-            _output__2[_488] = _489;
+            int32_t _490 = _output__2_s0_x_xo * 256;
+            int32_t _491 = _output__2_s0_x_x_in_x_grid * 8;
+            int32_t _492 = _491 + _output__2_s0_x_x_in_x_in;
+            int32_t _493 = _490 + _492;
+            int32_t _494 = _output__2_s0_y_yo * 256;
+            int32_t _495 = _output__2_s0_y_y_in_y_grid * 8;
+            int32_t _496 = _495 + _output__2_s0_y_y_in_y_in;
+            int32_t _497 = _494 + _496;
+            int32_t _498 = _497 * _output__2_stride_1;
+            int32_t _499 = _493 + _498;
+            int32_t _500 = _output__2_min_1 * _output__2_stride_1;
+            int32_t _501 = _output__2_min_0 + _500;
+            int32_t _502 = _499 - _501;
+            uint8_t _503 = _hw_output__2_stencil(_output__2_s0_x_x_in_x_in, _output__2_s0_y_y_in_y_in);
+            _output__2[_502] = _503;
            } // for _output__2_s0_x_x_in_x_in
           } // for _output__2_s0_y_y_in_y_in
          } // realize _hw_output__2_stencil
@@ -684,10 +663,10 @@ int pipeline_hls(buffer_t *_p2___input_buffer, buffer_t *_output__2_buffer) HALI
  (void)_output__2_stride_3;
  const int32_t _output__2_elem_size = _output__2_buffer->elem_size;
  (void)_output__2_elem_size;
- int32_t _490 = __pipeline_hls(_p2___input_buffer, _output__2_buffer);
- bool _491 = _490 == 0;
- if (!_491)  {
-  return _490;
+ int32_t _504 = __pipeline_hls(_p2___input_buffer, _output__2_buffer);
+ bool _505 = _504 == 0;
+ if (!_505)  {
+  return _504;
  }
  return 0;
 }

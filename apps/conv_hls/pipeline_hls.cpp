@@ -90,27 +90,6 @@ inline double floor_f64(double x) {return floor(x);}
 inline double ceil_f64(double x) {return ceil(x);}
 inline double round_f64(double x) {return round(x);}
 
-inline float maxval_f32() {return FLT_MAX;}
-inline float minval_f32() {return -FLT_MAX;}
-inline double maxval_f64() {return DBL_MAX;}
-inline double minval_f64() {return -DBL_MAX;}
-inline uint8_t maxval_u8() {return 0xff;}
-inline uint8_t minval_u8() {return 0;}
-inline uint16_t maxval_u16() {return 0xffff;}
-inline uint16_t minval_u16() {return 0;}
-inline uint32_t maxval_u32() {return 0xffffffff;}
-inline uint32_t minval_u32() {return 0;}
-inline uint64_t maxval_u64() {return 0xffffffffffffffff;}
-inline uint64_t minval_u64() {return 0;}
-inline int8_t maxval_s8() {return 0x7f;}
-inline int8_t minval_s8() {return 0x80;}
-inline int16_t maxval_s16() {return 0x7fff;}
-inline int16_t minval_s16() {return 0x8000;}
-inline int32_t maxval_s32() {return 0x7fffffff;}
-inline int32_t minval_s32() {return 0x80000000;}
-inline int64_t maxval_s64() {return 0x7fffffffffffffff;}
-inline int64_t minval_s64() {return 0x8000000000000000;}
-
 inline int8_t abs_i8(int8_t a) {return a >= 0 ? a : -a;}
 inline int16_t abs_i16(int16_t a) {return a >= 0 ? a : -a;}
 inline int32_t abs_i32(int32_t a) {return a >= 0 ? a : -a;}
@@ -604,84 +583,86 @@ static int __pipeline_hls(buffer_t *_input_buffer, buffer_t *_weight_buffer, con
    int32_t _234 = halide_error_buffer_extents_too_large(NULL, "output$2", _232, _233);
    return _234;
   }
-  int64_t _235 = (int64_t)(5);
-  int64_t _236 = (int64_t)(2147483647);
-  bool _237 = _235 <= _236;
-  if (!_237)   {
-   int64_t _238 = (int64_t)(5);
-   int64_t _239 = (int64_t)(2147483647);
-   int32_t _240 = halide_error_buffer_allocation_too_large(NULL, "weight", _238, _239);
-   return _240;
-  }
-  int64_t _241 = (int64_t)(5);
-  int64_t _242 = _241 * _241;
-  int64_t _243 = (int64_t)(2147483647);
-  bool _244 = _242 <= _243;
-  if (!_244)   {
-   int64_t _245 = (int64_t)(5);
-   int64_t _246 = _245 * _245;
-   int64_t _247 = (int64_t)(2147483647);
-   int32_t _248 = halide_error_buffer_allocation_too_large(NULL, "weight", _246, _247);
-   return _248;
-  }
-  int64_t _249 = (int64_t)(5);
-  int64_t _250 = _249 * _249;
-  int64_t _251 = (int64_t)(2147483647);
-  bool _252 = _250 <= _251;
-  if (!_252)   {
-   int64_t _253 = (int64_t)(5);
-   int64_t _254 = _253 * _253;
-   int64_t _255 = (int64_t)(2147483647);
-   int32_t _256 = halide_error_buffer_extents_too_large(NULL, "weight", _254, _255);
-   return _256;
-  }
   // produce output$2
   for (int _output__2_s0_c = _output__2_min_2; _output__2_s0_c < _output__2_min_2 + _output__2_extent_2; _output__2_s0_c++)
   {
-   int32_t _257 = _output__2_extent_1 + 255;
-   int32_t _258 = _257 >> 8;
-   for (int _output__2_s0_y_yo = 0; _output__2_s0_y_yo < 0 + _258; _output__2_s0_y_yo++)
+   int32_t _235 = _output__2_extent_1 + 255;
+   int32_t _236 = _235 >> 8;
+   for (int _output__2_s0_y_yo = 0; _output__2_s0_y_yo < 0 + _236; _output__2_s0_y_yo++)
    {
-    int32_t _259 = _output__2_s0_y_yo * 256;
-    int32_t _260 = _259 + _output__2_min_1;
-    int32_t _261 = _output__2_min_1 + _output__2_extent_1;
-    int32_t _262 = _261 + -256;
-    int32_t _263 = min(_260, _262);
-    int32_t _264 = _output__2_extent_0 + 255;
-    int32_t _265 = _264 >> 8;
-    for (int _output__2_s0_x_xo = 0; _output__2_s0_x_xo < 0 + _265; _output__2_s0_x_xo++)
+    int32_t _237 = _output__2_s0_y_yo * 256;
+    int32_t _238 = _237 + _output__2_min_1;
+    int32_t _239 = _output__2_min_1 + _output__2_extent_1;
+    int32_t _240 = _239 + -256;
+    int32_t _241 = min(_238, _240);
+    int32_t _242 = _output__2_extent_0 + 255;
+    int32_t _243 = _242 >> 8;
+    for (int _output__2_s0_x_xo = 0; _output__2_s0_x_xo < 0 + _243; _output__2_s0_x_xo++)
     {
-     int32_t _266 = _output__2_s0_x_xo * 256;
-     int32_t _267 = _266 + _output__2_min_0;
-     int32_t _268 = _output__2_min_0 + _output__2_extent_0;
-     int32_t _269 = _268 + -256;
-     int32_t _270 = min(_267, _269);
+     int32_t _244 = _output__2_s0_x_xo * 256;
+     int32_t _245 = _244 + _output__2_min_0;
+     int32_t _246 = _output__2_min_0 + _output__2_extent_0;
+     int32_t _247 = _246 + -256;
+     int32_t _248 = min(_245, _247);
      {
       hls::stream<Stencil<uint8_t, 1, 1, 1> > _repeat_edge__2_stencil_update_stream;
       // produce repeat_edge$2.stencil_update.stream
       for (int _repeat_edge__2_scan_update__1 = 0; _repeat_edge__2_scan_update__1 < 0 + 264; _repeat_edge__2_scan_update__1++)
       {
-       int32_t _271 = _input_min_0 - _270;
-       int32_t _272 = _271 + 4;
-       int32_t _273 = min(_272, 264);
-       int32_t _274 = max(_273, 0);
-       int32_t _275 = _input_min_0 + _input_extent_0;
-       int32_t _276 = _275 - _270;
-       int32_t _277 = _276 + 4;
-       int32_t _278 = min(_277, 264);
-       int32_t _279 = max(_278, _274);
-       for (int _repeat_edge__2_scan_update__0 = 0; _repeat_edge__2_scan_update__0 < 0 + _274; _repeat_edge__2_scan_update__0++)
+       int32_t _249 = _input_min_0 - _248;
+       int32_t _250 = _249 + 4;
+       int32_t _251 = min(_250, 264);
+       int32_t _252 = max(_251, 0);
+       int32_t _253 = _input_min_0 + _input_extent_0;
+       int32_t _254 = _253 - _248;
+       int32_t _255 = _254 + 4;
+       int32_t _256 = min(_255, 264);
+       int32_t _257 = max(_256, _252);
+       for (int _repeat_edge__2_scan_update__0 = 0; _repeat_edge__2_scan_update__0 < 0 + _252; _repeat_edge__2_scan_update__0++)
        {
         {
          Stencil<uint8_t, 1, 1, 1> _repeat_edge__2_stencil;
          // produce repeat_edge$2.stencil
-         int32_t _280 = _270 + _repeat_edge__2_scan_update__0;
-         int32_t _281 = _280 + -4;
-         int32_t _282 = _input_min_0 + _input_extent_0;
-         int32_t _283 = _282 + -1;
-         int32_t _284 = min(_281, _283);
-         int32_t _285 = max(_284, _input_min_0);
-         int32_t _286 = _263 + _repeat_edge__2_scan_update__1;
+         int32_t _258 = _248 + _repeat_edge__2_scan_update__0;
+         int32_t _259 = _258 + -4;
+         int32_t _260 = _input_min_0 + _input_extent_0;
+         int32_t _261 = _260 + -1;
+         int32_t _262 = min(_259, _261);
+         int32_t _263 = max(_262, _input_min_0);
+         int32_t _264 = _241 + _repeat_edge__2_scan_update__1;
+         int32_t _265 = _264 + -4;
+         int32_t _266 = _input_min_1 + _input_extent_1;
+         int32_t _267 = _266 + -1;
+         int32_t _268 = min(_265, _267);
+         int32_t _269 = max(_268, _input_min_1);
+         int32_t _270 = _269 * _input_stride_1;
+         int32_t _271 = _263 + _270;
+         int32_t _272 = _input_min_2 + _input_extent_2;
+         int32_t _273 = _272 + -1;
+         int32_t _274 = min(_output__2_s0_c, _273);
+         int32_t _275 = max(_274, _input_min_2);
+         int32_t _276 = _275 * _input_stride_2;
+         int32_t _277 = _271 + _276;
+         int32_t _278 = _input_min_1 * _input_stride_1;
+         int32_t _279 = _input_min_0 + _278;
+         int32_t _280 = _input_min_2 * _input_stride_2;
+         int32_t _281 = _279 + _280;
+         int32_t _282 = _277 - _281;
+         uint8_t _283 = _input[_282];
+         _repeat_edge__2_stencil(0, 0, 0) = _283;
+         // consume repeat_edge$2.stencil
+         _repeat_edge__2_stencil_update_stream.write(_repeat_edge__2_stencil);
+         (void)0;
+        } // realize _repeat_edge__2_stencil
+       } // for _repeat_edge__2_scan_update__0
+       int32_t _284 = _257 - _252;
+       for (int _repeat_edge__2_scan_update__0 = _252; _repeat_edge__2_scan_update__0 < _252 + _284; _repeat_edge__2_scan_update__0++)
+       {
+        {
+         Stencil<uint8_t, 1, 1, 1> _repeat_edge__2_stencil;
+         // produce repeat_edge$2.stencil
+         int32_t _285 = _248 + _repeat_edge__2_scan_update__0;
+         int32_t _286 = _241 + _repeat_edge__2_scan_update__1;
          int32_t _287 = _286 + -4;
          int32_t _288 = _input_min_1 + _input_extent_1;
          int32_t _289 = _288 + -1;
@@ -700,77 +681,44 @@ static int __pipeline_hls(buffer_t *_input_buffer, buffer_t *_weight_buffer, con
          int32_t _302 = _input_min_2 * _input_stride_2;
          int32_t _303 = _301 + _302;
          int32_t _304 = _299 - _303;
-         uint8_t _305 = _input[_304];
-         _repeat_edge__2_stencil(0, 0, 0) = _305;
+         int32_t _305 = _304 + -4;
+         uint8_t _306 = _input[_305];
+         _repeat_edge__2_stencil(0, 0, 0) = _306;
          // consume repeat_edge$2.stencil
          _repeat_edge__2_stencil_update_stream.write(_repeat_edge__2_stencil);
          (void)0;
         } // realize _repeat_edge__2_stencil
        } // for _repeat_edge__2_scan_update__0
-       int32_t _306 = _279 - _274;
-       for (int _repeat_edge__2_scan_update__0 = _274; _repeat_edge__2_scan_update__0 < _274 + _306; _repeat_edge__2_scan_update__0++)
+       int32_t _307 = 264 - _257;
+       for (int _repeat_edge__2_scan_update__0 = _257; _repeat_edge__2_scan_update__0 < _257 + _307; _repeat_edge__2_scan_update__0++)
        {
         {
          Stencil<uint8_t, 1, 1, 1> _repeat_edge__2_stencil;
          // produce repeat_edge$2.stencil
-         int32_t _307 = _270 + _repeat_edge__2_scan_update__0;
-         int32_t _308 = _263 + _repeat_edge__2_scan_update__1;
-         int32_t _309 = _308 + -4;
-         int32_t _310 = _input_min_1 + _input_extent_1;
-         int32_t _311 = _310 + -1;
-         int32_t _312 = min(_309, _311);
-         int32_t _313 = max(_312, _input_min_1);
-         int32_t _314 = _313 * _input_stride_1;
-         int32_t _315 = _307 + _314;
-         int32_t _316 = _input_min_2 + _input_extent_2;
-         int32_t _317 = _316 + -1;
-         int32_t _318 = min(_output__2_s0_c, _317);
-         int32_t _319 = max(_318, _input_min_2);
-         int32_t _320 = _319 * _input_stride_2;
-         int32_t _321 = _315 + _320;
-         int32_t _322 = _input_min_1 * _input_stride_1;
-         int32_t _323 = _input_min_0 + _322;
-         int32_t _324 = _input_min_2 * _input_stride_2;
-         int32_t _325 = _323 + _324;
-         int32_t _326 = _321 - _325;
-         int32_t _327 = _326 + -4;
-         uint8_t _328 = _input[_327];
-         _repeat_edge__2_stencil(0, 0, 0) = _328;
-         // consume repeat_edge$2.stencil
-         _repeat_edge__2_stencil_update_stream.write(_repeat_edge__2_stencil);
-         (void)0;
-        } // realize _repeat_edge__2_stencil
-       } // for _repeat_edge__2_scan_update__0
-       int32_t _329 = 264 - _279;
-       for (int _repeat_edge__2_scan_update__0 = _279; _repeat_edge__2_scan_update__0 < _279 + _329; _repeat_edge__2_scan_update__0++)
-       {
-        {
-         Stencil<uint8_t, 1, 1, 1> _repeat_edge__2_stencil;
-         // produce repeat_edge$2.stencil
-         int32_t _330 = _input_min_0 + _input_extent_0;
-         int32_t _331 = _330 + -1;
-         int32_t _332 = max(_331, _input_min_0);
-         int32_t _333 = _263 + _repeat_edge__2_scan_update__1;
-         int32_t _334 = _333 + -4;
-         int32_t _335 = _input_min_1 + _input_extent_1;
-         int32_t _336 = _335 + -1;
-         int32_t _337 = min(_334, _336);
-         int32_t _338 = max(_337, _input_min_1);
-         int32_t _339 = _338 * _input_stride_1;
-         int32_t _340 = _332 + _339;
-         int32_t _341 = _input_min_2 + _input_extent_2;
-         int32_t _342 = _341 + -1;
-         int32_t _343 = min(_output__2_s0_c, _342);
-         int32_t _344 = max(_343, _input_min_2);
-         int32_t _345 = _344 * _input_stride_2;
-         int32_t _346 = _340 + _345;
-         int32_t _347 = _input_min_1 * _input_stride_1;
-         int32_t _348 = _input_min_0 + _347;
-         int32_t _349 = _input_min_2 * _input_stride_2;
-         int32_t _350 = _348 + _349;
-         int32_t _351 = _346 - _350;
-         uint8_t _352 = _input[_351];
-         _repeat_edge__2_stencil(0, 0, 0) = _352;
+         int32_t _308 = _input_min_0 + _input_extent_0;
+         int32_t _309 = _308 + -1;
+         int32_t _310 = max(_309, _input_min_0);
+         int32_t _311 = _241 + _repeat_edge__2_scan_update__1;
+         int32_t _312 = _311 + -4;
+         int32_t _313 = _input_min_1 + _input_extent_1;
+         int32_t _314 = _313 + -1;
+         int32_t _315 = min(_312, _314);
+         int32_t _316 = max(_315, _input_min_1);
+         int32_t _317 = _316 * _input_stride_1;
+         int32_t _318 = _310 + _317;
+         int32_t _319 = _input_min_2 + _input_extent_2;
+         int32_t _320 = _319 + -1;
+         int32_t _321 = min(_output__2_s0_c, _320);
+         int32_t _322 = max(_321, _input_min_2);
+         int32_t _323 = _322 * _input_stride_2;
+         int32_t _324 = _318 + _323;
+         int32_t _325 = _input_min_1 * _input_stride_1;
+         int32_t _326 = _input_min_0 + _325;
+         int32_t _327 = _input_min_2 * _input_stride_2;
+         int32_t _328 = _326 + _327;
+         int32_t _329 = _324 - _328;
+         uint8_t _330 = _input[_329];
+         _repeat_edge__2_stencil(0, 0, 0) = _330;
          // consume repeat_edge$2.stencil
          _repeat_edge__2_stencil_update_stream.write(_repeat_edge__2_stencil);
          (void)0;
@@ -799,19 +747,19 @@ static int __pipeline_hls(buffer_t *_input_buffer, buffer_t *_weight_buffer, con
            _f3_stencil = _f3_stencil_stream.read();
            (void)0;
            // consume f3.stencil
-           int32_t _379 = _270 + _output__2_s0_x_xi;
-           int32_t _380 = _263 + _output__2_s0_y_yi;
-           int32_t _381 = _380 * _output__2_stride_1;
-           int32_t _382 = _379 + _381;
-           int32_t _383 = _output__2_s0_c * _output__2_stride_2;
-           int32_t _384 = _382 + _383;
-           int32_t _385 = _output__2_min_1 * _output__2_stride_1;
-           int32_t _386 = _output__2_min_0 + _385;
-           int32_t _387 = _output__2_min_2 * _output__2_stride_2;
-           int32_t _388 = _386 + _387;
-           int32_t _389 = _384 - _388;
-           uint8_t _390 = _f3_stencil(0, 0, 0);
-           _output__2[_389] = _390;
+           int32_t _357 = _248 + _output__2_s0_x_xi;
+           int32_t _358 = _241 + _output__2_s0_y_yi;
+           int32_t _359 = _358 * _output__2_stride_1;
+           int32_t _360 = _357 + _359;
+           int32_t _361 = _output__2_s0_c * _output__2_stride_2;
+           int32_t _362 = _360 + _361;
+           int32_t _363 = _output__2_min_1 * _output__2_stride_1;
+           int32_t _364 = _output__2_min_0 + _363;
+           int32_t _365 = _output__2_min_2 * _output__2_stride_2;
+           int32_t _366 = _364 + _365;
+           int32_t _367 = _362 - _366;
+           uint8_t _368 = _f3_stencil(0, 0, 0);
+           _output__2[_367] = _368;
           } // realize _f3_stencil
          } // for _output__2_s0_x_xi
         } // for _output__2_s0_y_yi
@@ -918,10 +866,10 @@ int pipeline_hls(buffer_t *_input_buffer, buffer_t *_weight_buffer, const uint8_
  (void)_output__2_stride_3;
  const int32_t _output__2_elem_size = _output__2_buffer->elem_size;
  (void)_output__2_elem_size;
- int32_t _391 = __pipeline_hls(_input_buffer, _weight_buffer, _p2___bias, _output__2_buffer);
- bool _392 = _391 == 0;
- if (!_392)  {
-  return _391;
+ int32_t _369 = __pipeline_hls(_input_buffer, _weight_buffer, _p2___bias, _output__2_buffer);
+ bool _370 = _369 == 0;
+ if (!_370)  {
+  return _369;
  }
  return 0;
 }
