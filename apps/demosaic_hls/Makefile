@@ -19,7 +19,7 @@ include ../hls_support/Makefile.autopilot
 
 
 
-all: out.png
+all: demosaic.png
 
 pipeline: pipeline.cpp
 	$(CXX) $(CXXFLAGS) -Wall pipeline.cpp $(LDFLAGS) $(LIB_HALIDE) -o pipeline -lpthread -ldl -lz -ltinfo -g
@@ -30,8 +30,8 @@ pipeline_hls.cpp pipeline_native.o: pipeline
 run: run.cpp pipeline_native.o pipeline_hls.cpp hls_target.cpp
 	$(CXX) $(CXXFLAGS) -g -Wall -Wno-unknown-pragmas -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
 
-out.png: run
-	./run ../images/gray.png out.png
+demosaic.png: run
+	./run
 
 clean:
-	rm -f pipeline pipeline_hls.{h,cpp} pipeline_native.{h,o} run
+	rm -f pipeline pipeline_hls.{h,cpp} pipeline_native.{h,o} filter
