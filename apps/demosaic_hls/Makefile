@@ -31,7 +31,7 @@ run: run.cpp pipeline_native.o pipeline_hls.cpp hls_target.cpp
 	$(CXX) $(CXXFLAGS) -g -Wall -Wno-unknown-pragmas -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
 
 demosaic.png: run
-	./run
+	./run mosaic.png
 
 clean:
-	rm -f pipeline pipeline_hls.{h,cpp} pipeline_native.{h,o} filter
+	rm -f pipeline pipeline_hls.{h,cpp} pipeline_native.{h,o} filter demosaic.png

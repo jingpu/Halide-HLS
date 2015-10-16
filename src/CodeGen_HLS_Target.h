@@ -51,7 +51,11 @@ protected:
                         const std::vector<HLS_Argument> &args);
 
     protected:
+        std::string print_pragma(const Realize *op);
+
         using CodeGen_HLS_Base::visit;
+
+        void visit(const For *op);
     };
 
     /** A name for the HLS target */

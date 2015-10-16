@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
     save_image(mosaic_image, "mosaic.png");
     */
 
-    Image<uint8_t> input = load_image("mosaic.png");
+    Image<uint8_t> input = load_image(argv[1]);
     Image<uint8_t> out_native(input.width(), input.height(), 3);
     Image<uint8_t> out_hls(input.width(), input.height(), 3);
 
@@ -41,14 +41,18 @@ int main(int argc, char **argv) {
 
     printf("finish running HLS code\n");
 
+    bool success = true;
     for (int y = 0; y < out_native.height(); y++) {
         for (int x = 0; x < out_native.width(); x++) {
             if (fabs(out_native(x, y, 0) - out_hls(x, y, 0)) > 1e-4) {
                 printf("out_native(%d, %d, 0) = %d, but out_c(%d, %d, 0) = %d\n",
                        x, y, out_native(x, y, 0),
                        x, y, out_hls(x, y, 0));
+		success = false;
             }
 	}
     }
-    return 0;
+    if (success)
+        return 0;
+    else return 1;
 }

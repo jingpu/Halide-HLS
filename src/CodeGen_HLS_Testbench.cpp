@@ -49,7 +49,8 @@ vector<HLS_Argument> HLS_Closure::arguments(const Scope<CodeGen_HLS_Base::Stenci
         debug(3) << "var: " << i.first << "\n";
         if(ends_with(i.first, ".stream") ||
            ends_with(i.first, ".stencil") ) {
-            res.push_back({i.first, true, Type(), streams_scope.get(i.first)});
+            CodeGen_HLS_Base::Stencil_Type stype = streams_scope.get(i.first);
+            res.push_back({i.first, true, Type(), stype});
         } else if (ends_with(i.first, ".stencil_update")) {
             internal_error << "we don't expect to see a stencil_update type in HLS_Closure.\n";
         } else {
@@ -115,14 +116,17 @@ void CodeGen_HLS_Testbench::visit(const ProducerConsumer *op) {
 
         do_indent();
         stream << "// produce " << op->name << '\n';
-            do_indent();
-        stream << print_name(op->name) << "(";
+
+        // emits the target function call
+        do_indent();
+        stream << "p" << print_name(op->name) << "("; // avoid starting with '_'
         for(size_t i = 0; i < args.size(); i++) {
             stream << print_name(args[i].name);
             if(i != args.size() - 1)
                 stream << ", ";
         }
         stream <<");\n";
+
         do_indent();
         stream << "// consume " << op->name << '\n';
         print_stmt(op->consume);

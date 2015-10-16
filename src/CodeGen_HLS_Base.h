@@ -34,6 +34,8 @@ protected:
     Scope<Stencil_Type> stencils;  // scope of stencils and streams of stencils
 
     std::string print_stencil_type(Stencil_Type);
+    std::string print_name(const std::string &name);
+    virtual std::string print_pragma(const Realize *);
 
     using CodeGen_C::visit;
 

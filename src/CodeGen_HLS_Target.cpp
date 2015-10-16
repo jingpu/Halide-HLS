@@ -22,6 +22,29 @@ using std::vector;
 using std::ostringstream;
 using std::ofstream;
 
+namespace {
+
+class ContainForLoop : public IRVisitor {
+    using IRVisitor::visit;
+    void visit(const For *op) {
+        found = true;
+        return;
+    }
+
+public:
+    bool found;
+
+    ContainForLoop() : found(false) {}
+};
+
+bool contain_for_loop(Stmt s) {
+    ContainForLoop cfl;
+    s.accept(&cfl);
+    return cfl.found;
+}
+
+}
+
 CodeGen_HLS_Target::CodeGen_HLS_Target(const string &name)
     : target_name(name),
       hdrc(hdr_stream, true),
@@ -102,11 +125,25 @@ void CodeGen_HLS_Target::dump() {
 }
 
 
+string CodeGen_HLS_Target::CodeGen_HLS_C::print_pragma(const Realize *op) {
+    ostringstream oss;
+    internal_assert(stencils.contains(op->name));
+    Stencil_Type stype = stencils.get(op->name);
+    if (stype.is_stream) {
+        oss << "#pragma HLS STREAM variable=" << print_name(op->name) << " depth=1\n"
+            << "#pragma HLS RESOURCE variable=" << print_name(op->name) << " core=FIFO_SRL\n\n";
+    } else {
+        oss << "#pragma HLS ARRAY_PARTITION variable=" << print_name(op->name) << ".value complete dim=0\n\n";
+    }
+    return oss.str();
+}
+
+
 void CodeGen_HLS_Target::CodeGen_HLS_C::add_kernel(Stmt stmt,
                                                    const string &name,
                                                    const vector<HLS_Argument> &args) {
     // Emit the function prototype
-    stream << "void " << print_name(name) << "(\n";
+    stream << "void " << "p" << print_name(name) << "(\n";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_stencil) {
             CodeGen_HLS_Base::Stencil_Type stype = args[i].stencil_type;
@@ -129,7 +166,38 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::add_kernel(Stmt stmt,
     } else {
         stream << ")\n";
         open_scope();
+
+        // add HLS pragma at function scope
+        stream << "#pragma HLS DATAFLOW\n"
+               << "#pragma HLS INLINE region\n"
+               << "#pragma HLS INTERFACE s_axilite port=return"
+               << " bundle=axilite" << print_name(name) << "\n";
+        for (size_t i = 0; i < args.size(); i++) {
+            if (args[i].is_stencil) {
+                if (ends_with(args[i].name, ".stream")) {
+                    // stream arguments use AXI-stream interface
+                    stream << "#pragma HLS INTERFACE axis "
+                           << "port=" << print_name(args[i].name) << "\n";
+                } else {
+                    // stencil arguments use AXI-lite interface
+                    stream << "#pragma HLS INTERFACE s_axilite "
+                           << "port=" << print_name(args[i].name)
+                           << " bundle=axilite" << print_name(name) << "\n";
+                    stream << "#pragma HLS ARRAY_PARTITION "
+                           << "variable=" << print_name(args[i].name) << ".value complete dim=0\n";
+                }
+            } else {
+                // scalar arguments use AXI-lite interface
+                stream << "#pragma HLS INTERFACE s_axilite "
+                       << "port=" << print_name(args[i].name)
+                       << " bundle=axilite" << print_name(name) << "\n";
+            }
+        }
+        stream << "\n";
+
+        // print body
         print(stmt);
+
         close_scope("kernel hls_target" + print_name(name));
     }
     stream << "\n";
@@ -141,7 +209,35 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::add_kernel(Stmt stmt,
             stencils.pop(args[i].name);
         }
     }
+}
 
+
+void CodeGen_HLS_Target::CodeGen_HLS_C::visit(const For *op) {
+    internal_assert(op->for_type == ForType::Serial)
+        << "Can only emit serial for loops to HLS C\n";
+
+    string id_min = print_expr(op->min);
+    string id_extent = print_expr(op->extent);
+
+    do_indent();
+    stream << "for (int "
+           << print_name(op->name)
+           << " = " << id_min
+           << "; "
+           << print_name(op->name)
+           << " < " << id_min
+           << " + " << id_extent
+           << "; "
+           << print_name(op->name)
+           << "++)\n";
+
+    open_scope();
+    // add a 'PIPELINE' pragma if it is an innermost loop
+    if (!contain_for_loop(op->body)) {
+        stream << "#pragma HLS PIPELINE\n";
+    }
+    op->body.accept(this);
+    close_scope("for " + print_name(op->name));
 }
 
 }

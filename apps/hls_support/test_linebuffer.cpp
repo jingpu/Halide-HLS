@@ -5,8 +5,8 @@
 
 
 template <size_t N, typename T, size_t EXTENT_0, size_t EXTENT_1, size_t EXTENT_2, size_t EXTENT_3>
-void gen_inputs(stream< Stencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &in_stream_1,
-		stream< Stencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &in_stream_2) {
+void gen_inputs(stream<PackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &in_stream_1,
+		stream<PackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &in_stream_2) {
     for (int i = 0; i < N; i++) {
 	Stencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> input;
 
@@ -23,8 +23,8 @@ void gen_inputs(stream< Stencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &in
 
 
 template <size_t N, typename T, size_t EXTENT_0, size_t EXTENT_1, size_t EXTENT_2, size_t EXTENT_3>
-bool check_outputs(stream< Stencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream_1,
-		   stream< Stencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream_2) {
+bool check_outputs(stream<PackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream_1,
+		   stream<PackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream_2) {
     bool success = true;
     for (int i = 0; i < N; i++) {
 	Stencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> output_1 = out_stream_1.read();
@@ -46,10 +46,10 @@ bool check_outputs(stream< Stencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > 
 
 
 void test_1D() {
-    hls::stream<Stencil<uint8_t, 1> > input_stream;
-    hls::stream<Stencil<uint8_t, 1> > input_ref_stream;
-    hls::stream<Stencil<uint8_t, 3> > output_stream;
-    hls::stream<Stencil<uint8_t, 3> > output_ref_stream;
+    hls::stream<PackedStencil<uint8_t, 1> > input_stream;
+    hls::stream<PackedStencil<uint8_t, 1> > input_ref_stream;
+    hls::stream<PackedStencil<uint8_t, 3> > output_stream;
+    hls::stream<PackedStencil<uint8_t, 3> > output_ref_stream;
 
     gen_inputs<10>(input_stream, input_ref_stream);
 
@@ -65,10 +65,10 @@ void test_1D() {
 
 
 void test_2D() {
-    hls::stream<Stencil<uint8_t, 1, 1> > input_stream;
-    hls::stream<Stencil<uint8_t, 1, 1> > input_ref_stream;
-    hls::stream<Stencil<uint8_t, 5, 5> > output_stream;
-    hls::stream<Stencil<uint8_t, 5, 5> > output_ref_stream;
+    hls::stream<PackedStencil<uint8_t, 1, 1> > input_stream;
+    hls::stream<PackedStencil<uint8_t, 1, 1> > input_ref_stream;
+    hls::stream<PackedStencil<uint8_t, 5, 5> > output_stream;
+    hls::stream<PackedStencil<uint8_t, 5, 5> > output_ref_stream;
 
     gen_inputs<260*260>(input_stream, input_ref_stream);
 
@@ -81,6 +81,12 @@ void test_2D() {
 	printf("passed!\n");
     else
 	printf("failed!\n");
+}
+
+void syn_target(hls::stream<PackedStencil<uint16_t, 1, 1> > &input_stream,
+                hls::stream<PackedStencil<uint16_t, 5, 5> > &output_stream) {
+#pragma HLS DATAFLOW
+    linebuffer<260, 260>(input_stream, output_stream);
 }
 
 int main(int argc, char **argv) {

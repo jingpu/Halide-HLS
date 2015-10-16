@@ -34,4 +34,4 @@ out.png: run
 	./run ../images/gray.png out.png
 
 clean:
-	rm -f pipeline pipeline_hls.{h,cpp} pipeline_native.{h,o} run
+	rm -f pipeline pipeline_hls.{h,cpp} pipeline_native.{h,o} run out.png

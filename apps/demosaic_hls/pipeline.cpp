@@ -69,12 +69,8 @@ public:
 
     void compile_cpu() {
         std::cout << "\ncompiling cpu code..." << std::endl;
-        output.print_loop_nest();
-
-        //output.compile_to_c("pipeline_c.c", args, "pipeline_c");
-        //output.compile_to_header("pipeline_c.h", args, "pipeline_c");
-        //output.compile_to_lowered_stmt("pipeline_native.ir", args);
-        output.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
+        //output.print_loop_nest();
+        //output.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
         output.compile_to_header("pipeline_native.h", args, "pipeline_native");
         output.compile_to_object("pipeline_native.o", args, "pipeline_native");
     }
@@ -88,10 +84,8 @@ public:
         hw_output.stream();
         padded.stream();
 
-        output.print_loop_nest();
-
-        //output.compile_to_lowered_stmt("pipeline_hls.ir", args);
-        output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
+        //output.print_loop_nest();
+        //output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
         output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
         output.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
     }

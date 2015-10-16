@@ -117,6 +117,9 @@ private:
         local_sum(x, y, c) = cast<uint16_t>(bias);
         local_sum(x, y, c) += cast<uint16_t>(in(x+r.x, y+r.y, c)) * weight(r.x+2, r.y+2);
         res(x, y, c) = cast<uint8_t>(local_sum(x, y, c) >> 8);
+
+        // unroll the reduction
+        local_sum.update(0).unroll(r.x).unroll(r.y);
         return res;
     }
 };

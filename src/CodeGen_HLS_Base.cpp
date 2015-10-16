@@ -18,15 +18,18 @@ using std::endl;
 using std::string;
 using std::vector;
 using std::ostringstream;
+using std::to_string;
 
 string CodeGen_HLS_Base::print_stencil_type(Stencil_Type stencil_type) {
     ostringstream oss;
     // C: Stencil<uint16_t, 1, 1, 1> stencil_var;
     // C: hls::stream<Stencil<uint16_t, 1, 1, 1> > stencil_stream_var;
     if(stencil_type.is_stream)
-        oss << "hls::stream<";
+        oss << "hls::stream<PackedStencil<";
+    else
+        oss << "Stencil<";
 
-    oss << "Stencil<" << print_type(stencil_type.type);
+    oss << print_type(stencil_type.type);
     for(const auto &range : stencil_type.bounds) {
         internal_assert(is_one(simplify(range.min == 0)));
         oss << ", " << range.extent;
@@ -37,6 +40,29 @@ string CodeGen_HLS_Base::print_stencil_type(Stencil_Type stencil_type) {
         oss << " >";
 
     return oss.str();
+}
+
+string CodeGen_HLS_Base::print_name(const string &name) {
+    ostringstream oss;
+
+    // Prefix an underscore to avoid reserved words (e.g. a variable named "while")
+    if (isalpha(name[0])) {
+        oss << '_';
+    }
+
+    for (size_t i = 0; i < name.size(); i++) {
+	// vivado HLS compiler doesn't like '__'
+        if (!isalnum(name[i])) {
+            oss << "_";
+        }
+        else oss << name[i];
+    }
+    return oss.str();
+}
+
+string CodeGen_HLS_Base::print_pragma(const Realize *op) {
+    // nothing is printed by default
+    return string();
 }
 
 void CodeGen_HLS_Base::visit(const Call *op) {
@@ -105,7 +131,6 @@ void CodeGen_HLS_Base::visit(const Call *op) {
 void CodeGen_HLS_Base::visit(const Realize *op) {
     if (ends_with(op->name, ".stream")) {
         // create a stream type
-        open_scope();
         internal_assert(op->types.size() == 1);
         allocations.push(op->name, {op->types[0], "null"});
         Stencil_Type stype({true, op->types[0], op->bounds});
@@ -114,18 +139,16 @@ void CodeGen_HLS_Base::visit(const Realize *op) {
         do_indent();
         // C: hls::stream<Stencil<uint16_t, 1, 1, 1> > conv1_stencil_update_stream;
         stream << print_stencil_type(stype) << ' ' << print_name(op->name) << ";\n";
+        stream << print_pragma(op);
 
         op->body.accept(this);
 
         // We didn't generate free stmt inside for stream type
         allocations.pop(op->name);
         stencils.pop(op->name);
-
-        close_scope("realize " + print_name(op->name));
     } else if (ends_with(op->name, ".stencil") ||
                ends_with(op->name, ".stencil_update")) {
         // create a stencil type
-        open_scope();
         internal_assert(op->types.size() == 1);
         allocations.push(op->name, {op->types[0], "null"});
         Stencil_Type stype({false, op->types[0], op->bounds});
@@ -134,14 +157,13 @@ void CodeGen_HLS_Base::visit(const Realize *op) {
         do_indent();
         // Stencil<uint16_t, 1, 1, 1> conv1_stencil_update;
         stream << print_stencil_type(stype) << ' ' << print_name(op->name) << ";\n";
+        stream << print_pragma(op);
 
         op->body.accept(this);
 
         // We didn't generate free stmt inside for stream type
         allocations.pop(op->name);
         stencils.pop(op->name);
-
-        close_scope("realize " + print_name(op->name));
     } else {
         CodeGen_C::visit(op);
     }

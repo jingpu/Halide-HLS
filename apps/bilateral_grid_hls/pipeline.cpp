@@ -84,8 +84,8 @@ public:
         blurx.store_at(output, xo).compute_at(output, x_grid).reorder(x, y, z, c);
         blurz.store_at(output, xo).compute_at(output, x_grid).reorder(z, x, y, c);
 
-        histogram.store_at(output, xo).compute_at(output, x_grid).reorder(c, z, x, y);
-        histogram.update().reorder(c, r.x, r.y, x, y);
+        histogram.store_at(output, xo).compute_at(output, x_grid).reorder(c, z, x, y).unroll(c).unroll(z);
+        histogram.update().reorder(c, r.x, r.y, x, y).unroll(c);
 
         clamped.store_at(output, xo).compute_at(output, x_grid);
         input2.store_at(output, xo).compute_at(output, x_grid);
@@ -125,7 +125,7 @@ public:
         //output.print_loop_nest();
 
         //output.compile_to_lowered_stmt("pipeline_hls.ir", args);
-        output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
+        //output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
         output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
         output.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
     }
