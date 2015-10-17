@@ -20,33 +20,45 @@ void linebuffer_1D(stream<PackedStencil<T, IN_EXTENT_0, EXTENT_1, EXTENT_2, EXTE
     static_assert(OUT_EXTENT_0 % IN_EXTENT_0 == 0, "output extent is not divisible by input."); // TODO handle this situation.
 #pragma HLS INLINE
 
-    Stencil<T, OUT_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> buffer;
-#pragma HLS ARRAY_PARTITION variable=buffer.value complete dim=0
+    const size_t buffer_size = OUT_EXTENT_0 / IN_EXTENT_0;
+    PackedStencil<T, IN_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> buffer[buffer_size];  // shift register
+#pragma HLS ARRAY_PARTITION variable=buffer complete dim=1
 
     // initialize buffer
-    for(size_t i = 0; i <= OUT_EXTENT_0 - IN_EXTENT_0*2; i += IN_EXTENT_0) {
+ LB_1D_init:for (size_t i = 0; i < buffer_size - 1; i++) {
 #pragma HLS PIPELINE
-	Stencil<T, IN_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> in_stencil = in_stream.read();
-	buffer.write_stencil_at(in_stencil, i);
+        PackedStencil<T, IN_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> in_stencil = in_stream.read();
+        buffer[i] = in_stencil;
     }
 
     // produce one output per input
     const size_t NUM_OF_OUTPUT_0 = (IMG_EXTENT_0 - OUT_EXTENT_0) / IN_EXTENT_0 + 1;
-    for(size_t n = 0; n < NUM_OF_OUTPUT_0; n++) {
+ LB_1D_shift:for(size_t n = 0; n < NUM_OF_OUTPUT_0; n++) {
 #pragma HLS PIPELINE
-	Stencil<T, IN_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> in_stencil = in_stream.read();
+        PackedStencil<T, IN_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> in_stencil = in_stream.read();
+        PackedStencil<T, OUT_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> out_stencil;
 
-	buffer.write_stencil_at(in_stencil, OUT_EXTENT_0 - IN_EXTENT_0);
-	out_stream.write(buffer);
+        buffer[buffer_size - 1] = in_stencil;
 
-	// shift the buffer elements by IN_EXTENT
-	// TODO coalesce the loads and stores on dim 1, dim 2 and dim 3
-	for(size_t i = 0; i < OUT_EXTENT_0 - IN_EXTENT_0; i++)
-	    for(size_t st_idx_1 = 0; st_idx_1 < EXTENT_1; st_idx_1++)
-		for(size_t st_idx_2 = 0; st_idx_2 < EXTENT_2; st_idx_2++)
-		    for(size_t st_idx_3 = 0; st_idx_3 < EXTENT_3; st_idx_3++)
-		    buffer(i, st_idx_1, st_idx_2, st_idx_3) =
-			buffer(i + IN_EXTENT_0, st_idx_1, st_idx_2, st_idx_3);
+        // convert buffer to out_stencil, doing bit shuffling essentially
+        for(size_t idx_3 = 0; idx_3 < EXTENT_3; idx_3++)
+#pragma HLS UNROLL
+        for(size_t idx_2 = 0; idx_2 < EXTENT_2; idx_2++)
+#pragma HLS UNROLL
+        for(size_t idx_1 = 0; idx_1 < EXTENT_1; idx_1++)
+#pragma HLS UNROLL
+        for(size_t idx_0 = 0; idx_0 < IN_EXTENT_0; idx_0++)
+#pragma HLS UNROLL
+        for(size_t idx_buffer = 0; idx_buffer < buffer_size; idx_buffer++) {
+#pragma HLS UNROLL
+            out_stencil(idx_0+idx_buffer*IN_EXTENT_0, idx_1, idx_2, idx_3)
+                = buffer[idx_buffer](idx_0, idx_1, idx_2, idx_3);
+        }
+        out_stream.write(out_stencil);
+
+        // shift
+        for (size_t i = 0; i < buffer_size - 1; i++)
+            buffer[i] = buffer[i+1];
     }
 }
 
@@ -57,7 +69,7 @@ template <size_t IMG_EXTENT_0,
 void linebuffer_1D(stream<PackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &in_stream,
                    stream<PackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream) {
 #pragma HLS INLINE
-    for(size_t idx_0 = 0; idx_0 < IMG_EXTENT_0; idx_0 += EXTENT_0) {
+ LB_1D_pass:for(size_t idx_0 = 0; idx_0 < IMG_EXTENT_0; idx_0 += EXTENT_0) {
 #pragma HLS PIPELINE
         out_stream.write(in_stream.read());
     }
@@ -71,58 +83,60 @@ template <size_t IMG_EXTENT_0, size_t IMG_EXTENT_1, size_t EXTENT_2, size_t EXTE
 	  size_t OUT_EXTENT_1, typename T>
 void linebuffer_2D_col(stream<PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, EXTENT_2, EXTENT_3> > &in_stream,
 		       stream<PackedStencil<T, IN_EXTENT_0, OUT_EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream) {
+    static_assert(OUT_EXTENT_1 % IN_EXTENT_1 == 0, "output extent is not divisible by input."); // TODO handle this situation.
+#pragma HLS INLINE off
 
-    Stencil<T, IMG_EXTENT_0, OUT_EXTENT_1, EXTENT_2, EXTENT_3> linebuffer;
-#pragma HLS ARRAY_PARTITION variable=linebuffer.value complete dim=1
-#pragma HLS ARRAY_PARTITION variable=linebuffer.value complete dim=2
-#pragma HLS ARRAY_PARTITION variable=linebuffer.value complete dim=3
+    const size_t NUM_OF_LINES = OUT_EXTENT_1 / IN_EXTENT_1;
+    const size_t NUM_OF_COLS = IMG_EXTENT_0 / IN_EXTENT_0;
+    //Stencil<T, IMG_EXTENT_0, OUT_EXTENT_1, EXTENT_2, EXTENT_3> linebuffer;
+    PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, EXTENT_2, EXTENT_3> linebuffer[NUM_OF_LINES][NUM_OF_COLS];
+#pragma HLS ARRAY_PARTITION variable=linebuffer complete dim=1
 
     // initialize linebuffer, i.e. fill first (OUT_EXTENT_1 - IN_EXTENT_1) lines
-    size_t idx_1 = 0;  // the line index of coming stencil in the linebuffer
-    while(idx_1 <= OUT_EXTENT_1 - IN_EXTENT_1*2) {
-	for(size_t idx_0 = 0; idx_0 < IMG_EXTENT_0; idx_0 += IN_EXTENT_0)  {
+    size_t write_idx_1 = 0;  // the line index of coming stencil in the linebuffer
+ LB_2D_col_init:for (; write_idx_1 < NUM_OF_LINES - 1; write_idx_1++) {
+        for (size_t idx_col = 0; idx_col < NUM_OF_COLS; idx_col++) {
 #pragma HLS PIPELINE
-	    Stencil<T, IN_EXTENT_0, IN_EXTENT_1, EXTENT_2, EXTENT_3> in_stencil = in_stream.read();
-	    linebuffer.write_stencil_at(in_stencil, idx_0, idx_1);
-	}
-	idx_1 += IN_EXTENT_1;
+            linebuffer[write_idx_1][idx_col] = in_stream.read();
+        }
     }
 
     // produce a [IN_EXTENT_0, OUT_EXTENT_1] column stencil per input
     const size_t NUM_OF_OUTPUT_1 = (IMG_EXTENT_1 - OUT_EXTENT_1) / IN_EXTENT_1 + 1;
-    for (size_t n1 = 0; n1 < NUM_OF_OUTPUT_1; n1++) {
+ LB_2D_col:for (size_t n1 = 0; n1 < NUM_OF_OUTPUT_1; n1++) {
 #pragma HLS loop_flatten off
-	if (idx_1 >= OUT_EXTENT_1)
-	    idx_1 -= OUT_EXTENT_1;
+	if (write_idx_1 >= NUM_OF_LINES)
+	    write_idx_1 -= NUM_OF_LINES;
 
-	for(size_t idx_0 = 0; idx_0 < IMG_EXTENT_0; idx_0 += IN_EXTENT_0)  {
+	//for(size_t idx_0 = 0; idx_0 < IMG_EXTENT_0; idx_0 += IN_EXTENT_0)  {
+        for (size_t idx_col = 0; idx_col < NUM_OF_COLS; idx_col++) {
 #pragma HLS PIPELINE
-	    Stencil<T, IN_EXTENT_0, IN_EXTENT_1, EXTENT_2, EXTENT_3> in_stencil = in_stream.read();
-	    linebuffer.write_stencil_at(in_stencil, idx_0, idx_1);
+            linebuffer[write_idx_1][idx_col] = in_stream.read();
 
-	    Stencil<T, IN_EXTENT_0, OUT_EXTENT_1, EXTENT_2, EXTENT_3> col_buf, col_buf_preshuffled;
-#pragma HLS ARRAY_PARTITION variable=col_buf.value complete dim=3
-#pragma HLS ARRAY_PARTITION variable=col_buf_preshuffled.value complete dim=3
+	    PackedStencil<T, IN_EXTENT_0, OUT_EXTENT_1, EXTENT_2, EXTENT_3> col_buf;
 
-	    linebuffer.read_stencil_at(col_buf_preshuffled, idx_0, 0);
+            for(size_t idx_line = 0; idx_line < NUM_OF_LINES; idx_line++) {
+#pragma HLS UNROLL
+                size_t idx_line_in_buffer = idx_line + write_idx_1 + 1;
+                if (idx_line_in_buffer >= NUM_OF_LINES)
+                    idx_line_in_buffer -= NUM_OF_LINES;
 
-	    // shuffle the buffer
-	    // TODO coalesce the loads and stores on dim 2 and dim 3
-	    for(size_t st_idx_3 = 0; st_idx_3 < EXTENT_3; st_idx_3++)
-		for(size_t st_idx_2 = 0; st_idx_2 < EXTENT_2; st_idx_2++)
-		    for(size_t st_idx_1 = 0; st_idx_1 < OUT_EXTENT_1; st_idx_1++) {
-		    // the line index of the current output pixel in the linebuffer
-			size_t st_idx_1_in_pre = st_idx_1 + idx_1 + IN_EXTENT_1;
-			if(st_idx_1_in_pre >= OUT_EXTENT_1)
-			    st_idx_1_in_pre -= OUT_EXTENT_1;
+            for(size_t idx_3 = 0; idx_3 < EXTENT_3; idx_3++)
+#pragma HLS UNROLL
+            for(size_t idx_2 = 0; idx_2 < EXTENT_2; idx_2++)
+#pragma HLS UNROLL
+            for(size_t idx_1 = 0; idx_1 < IN_EXTENT_1; idx_1++)
+#pragma HLS UNROLL
+            for(size_t idx_0 = 0; idx_0 < IN_EXTENT_0; idx_0++)
+#pragma HLS UNROLL
+                col_buf(idx_0, idx_line*IN_EXTENT_0 + idx_1, idx_2, idx_3)
+                    = linebuffer[idx_line_in_buffer][idx_col](idx_0, idx_1, idx_2, idx_3);
+            }
 
-			for(size_t st_idx_0 = 0; st_idx_0 < IN_EXTENT_0; st_idx_0++)
-			    col_buf(st_idx_0, st_idx_1, st_idx_2, st_idx_3) =
-				col_buf_preshuffled(st_idx_0, st_idx_1_in_pre, st_idx_2, st_idx_3);
-		}
 	    out_stream.write(col_buf);
 	}
-	idx_1 += IN_EXTENT_1;  // increase the line address
+	//idx_1 += IN_EXTENT_1;  // increase the line address
+        write_idx_1++;
     }
 }
 
@@ -131,16 +145,12 @@ template <size_t IMG_EXTENT_0, size_t IMG_EXTENT_1, size_t EXTENT_2, size_t EXTE
 	  size_t IN_EXTENT_0, size_t IN_EXTENT_1,
 	  size_t OUT_EXTENT_0, size_t OUT_EXTENT_1, typename T>
 void linebuffer_2D(stream<PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, EXTENT_2, EXTENT_3> > &in_stream,
-		stream<PackedStencil<T, OUT_EXTENT_0, OUT_EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream) {
+                   stream<PackedStencil<T, OUT_EXTENT_0, OUT_EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream) {
     static_assert(IMG_EXTENT_1 > OUT_EXTENT_1, "output extent is larger than image.");
     static_assert(OUT_EXTENT_1 > IN_EXTENT_1, "input extent is larger than output."); // TODO handle this situation.
     static_assert(IMG_EXTENT_1 % IN_EXTENT_1 == 0, "image extent is not divisible by input."); // TODO handle this situation.
     static_assert(OUT_EXTENT_1 % IN_EXTENT_1 == 0, "output extent is not divisible by input."); // TODO handle this situation.
 #pragma HLS INLINE
-    // the following pragmas will cause writes to linebuffer (in linebuffer_2D_col()) disappear
-    // I believe it is a HLS compiler bug
-    //#pragma HLS DATA_PACK variable=in_stream
-    //#pragma HLS DATA_PACK variable=out_stream
 
     stream<PackedStencil<T, IN_EXTENT_0, OUT_EXTENT_1, EXTENT_2, EXTENT_3> > col_buf_stream;
 #pragma HLS STREAM variable=col_buf_stream depth=1
@@ -152,7 +162,7 @@ void linebuffer_2D(stream<PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, EXTENT_2, E
 
     // feed the column stencil stream to 1D line buffer
     const size_t NUM_OF_OUTPUT_1 = (IMG_EXTENT_1 - OUT_EXTENT_1) / IN_EXTENT_1 + 1;
-    for (size_t n1 = 0; n1 < NUM_OF_OUTPUT_1; n1++) {
+ LB_2D_shift_reg:for (size_t n1 = 0; n1 < NUM_OF_OUTPUT_1; n1++) {
 #pragma HLS loop_flatten off
 	linebuffer_1D<IMG_EXTENT_0>(col_buf_stream, out_stream);
     }
@@ -165,7 +175,7 @@ template <size_t IMG_EXTENT_0, size_t IMG_EXTENT_1,
 void linebuffer_2D(stream<PackedStencil<T, IN_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &in_stream,
                    stream<PackedStencil<T, OUT_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream) {
 #pragma HLS INLINE
-    for(size_t idx_1 = 0; idx_1 < IMG_EXTENT_1; idx_1 += EXTENT_1) {
+ LB_2D_pass:for(size_t idx_1 = 0; idx_1 < IMG_EXTENT_1; idx_1 += EXTENT_1) {
 	linebuffer_1D<IMG_EXTENT_0>(in_stream, out_stream);
     }
 }

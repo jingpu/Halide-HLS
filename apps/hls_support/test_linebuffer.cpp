@@ -83,10 +83,10 @@ void test_2D() {
 	printf("failed!\n");
 }
 
-void syn_target(hls::stream<PackedStencil<uint16_t, 1, 1> > &input_stream,
-                hls::stream<PackedStencil<uint16_t, 5, 5> > &output_stream) {
+void syn_target(hls::stream<PackedStencil<uint8_t, 1, 1, 3, 3> > &input_stream,
+                hls::stream<PackedStencil<uint8_t, 3, 3, 3, 3> > &output_stream) {
 #pragma HLS DATAFLOW
-    linebuffer<260, 260>(input_stream, output_stream);
+    linebuffer<600, 600, 3, 3>(input_stream, output_stream);
 }
 
 int main(int argc, char **argv) {

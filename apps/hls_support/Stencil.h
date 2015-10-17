@@ -9,9 +9,8 @@
 ///Forward declaration
 template <typename T, size_t EXTENT_0, size_t EXTENT_1, size_t EXTENT_2, size_t EXTENT_3> struct Stencil;
 
-#ifdef USE_PACKED_STENCIL
-
-#define AP_INT_MAX_W 32768
+//#define AP_INT_MAX_W 32768
+#define AP_INT_MAX_W 2048
 #include <ap_int.h>
 
 template <typename T, size_t EXTENT_0, size_t EXTENT_1 = 1, size_t EXTENT_2 = 1, size_t EXTENT_3 = 1>
@@ -19,12 +18,41 @@ struct PackedStencil {
     ap_uint<8*sizeof(T)*EXTENT_3*EXTENT_2*EXTENT_1*EXTENT_0> value;
     ap_uint<1> last;
 
+    /** writer
+     */
+    inline ap_range_ref<8*sizeof(T)*EXTENT_3*EXTENT_2*EXTENT_1*EXTENT_0, false>
+    operator()(size_t index_0, size_t index_1 = 0, size_t index_2 = 0, size_t index_3 = 0) {
+#pragma HLS INLINE
+        assert(index_0 < EXTENT_0 && index_1 < EXTENT_1 && index_2 < EXTENT_2 && index_3 < EXTENT_3);
+        const size_t word_length = sizeof(T) * 8; // in bits
+        const size_t lo = index_0 * word_length +
+                          index_1 * EXTENT_0 * word_length +
+                          index_2 * EXTENT_0 * EXTENT_1 * word_length +
+                          index_3 * EXTENT_0 * EXTENT_1 * EXTENT_2 * word_length;
+        const size_t hi = lo + word_length - 1;
+        return value.range(hi, lo);
+    }
+
+    /** reader
+     */
+    inline ap_range_ref<8*sizeof(T)*EXTENT_3*EXTENT_2*EXTENT_1*EXTENT_0, false>
+    operator()(size_t index_0, size_t index_1 = 0, size_t index_2 = 0, size_t index_3 = 0) const {
+#pragma HLS INLINE
+        assert(index_0 < EXTENT_0 && index_1 < EXTENT_1 && index_2 < EXTENT_2 && index_3 < EXTENT_3);
+        const size_t word_length = sizeof(T) * 8; // in bits
+        const size_t lo = index_0 * word_length +
+                          index_1 * EXTENT_0 * word_length +
+                          index_2 * EXTENT_0 * EXTENT_1 * word_length +
+                          index_3 * EXTENT_0 * EXTENT_1 * EXTENT_2 * word_length;
+        const size_t hi = lo + word_length - 1;
+        return value.range(hi, lo);
+    }
+
     // convert to PackedStencil
     operator Stencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3>() {
 #pragma HLS INLINE
         Stencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> res;
 #pragma HLS ARRAY_PARTITION variable=res.value complete dim=0
-        const size_t word_length = sizeof(T) * 8; // in bits
 
         for(size_t idx_3 = 0; idx_3 < EXTENT_3; idx_3++)
 #pragma HLS UNROLL
@@ -34,23 +62,11 @@ struct PackedStencil {
 #pragma HLS UNROLL
         for(size_t idx_0 = 0; idx_0 < EXTENT_0; idx_0++) {
 #pragma HLS UNROLL
-            const size_t lo = idx_0 * word_length +
-                idx_1 * EXTENT_0 * word_length +
-                idx_2 * EXTENT_0 * EXTENT_1 * word_length +
-                idx_3 * EXTENT_0 * EXTENT_1 * EXTENT_2 * word_length;
-            const size_t hi = lo + word_length - 1;
-            res.value[idx_3][idx_2][idx_1][idx_0] = value.range(hi, lo);
+            res.value[idx_3][idx_2][idx_1][idx_0] = operator()(idx_0, idx_1, idx_2, idx_3);
         }
         return res;
     }
 };
-
-#else
-
-// Here we should have used "alias template" feature in C=++11 if supported
-#define PackedStencil Stencil
-
-#endif
 
 /** multi-dimension (up-to 4 dimensions) stencil struct
  */
@@ -75,46 +91,6 @@ public:
         return value[index_3][index_2][index_1][index_0];
     }
 
-    template <size_t ST_EXTENT_0, size_t ST_EXTENT_1 = 1, size_t ST_EXTENT_2 = 1, size_t ST_EXTENT_3 = 1>
-    void write_stencil_at(const Stencil<T, ST_EXTENT_0, ST_EXTENT_1, ST_EXTENT_2, ST_EXTENT_3> &stencil,
-                          size_t index_0, size_t index_1 = 0, size_t index_2 = 0, size_t index_3 = 0) {
-#pragma HLS INLINE
-        assert(index_0 + ST_EXTENT_0 - 1 < EXTENT_0 &&
-               index_1 + ST_EXTENT_1 - 1 < EXTENT_1 &&
-               index_2 + ST_EXTENT_2 - 1 < EXTENT_2 &&
-               index_3 + ST_EXTENT_3 - 1 < EXTENT_3);
-        for(size_t st_idx_3 = 0; st_idx_3 < ST_EXTENT_3; st_idx_3++)
-#pragma HLS UNROLL
-        for(size_t st_idx_2 = 0; st_idx_2 < ST_EXTENT_2; st_idx_2++)
-#pragma HLS UNROLL
-        for(size_t st_idx_1 = 0; st_idx_1 < ST_EXTENT_1; st_idx_1++)
-#pragma HLS UNROLL
-        for(size_t st_idx_0 = 0; st_idx_0 < ST_EXTENT_0; st_idx_0++)
-#pragma HLS UNROLL
-            value[index_3+st_idx_3][index_2+st_idx_2][index_1+st_idx_1][index_0+st_idx_0] = stencil(st_idx_0, st_idx_1, st_idx_2, st_idx_3);
-    }
-
-
-    template <size_t ST_EXTENT_0, size_t ST_EXTENT_1 = 1, size_t ST_EXTENT_2 = 1, size_t ST_EXTENT_3 = 1>
-    void read_stencil_at(Stencil<T, ST_EXTENT_0, ST_EXTENT_1, ST_EXTENT_2, ST_EXTENT_3> &stencil,
-                         size_t index_0, size_t index_1 = 0, size_t index_2 = 0, size_t index_3 = 0) const {
-#pragma HLS INLINE
-        assert(index_0 + ST_EXTENT_0 - 1 < EXTENT_0 &&
-               index_1 + ST_EXTENT_1 - 1 < EXTENT_1 &&
-               index_2 + ST_EXTENT_2 - 1 < EXTENT_2 &&
-               index_3 + ST_EXTENT_3 - 1 < EXTENT_3);
-        for(size_t st_idx_3 = 0; st_idx_3 < ST_EXTENT_3; st_idx_3++)
-#pragma HLS UNROLL
-        for(size_t st_idx_2 = 0; st_idx_2 < ST_EXTENT_2; st_idx_2++)
-#pragma HLS UNROLL
-        for(size_t st_idx_1 = 0; st_idx_1 < ST_EXTENT_1; st_idx_1++)
-#pragma HLS UNROLL
-        for(size_t st_idx_0 = 0; st_idx_0 < ST_EXTENT_0; st_idx_0++)
-#pragma HLS UNROLL
-            stencil(st_idx_0, st_idx_1, st_idx_2, st_idx_3) = value[index_3+st_idx_3][index_2+st_idx_2][index_1+st_idx_1][index_0+st_idx_0];
-    }
-
-#ifdef USE_PACKED_STENCIL
     // convert to PackedStencil
     operator PackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3>() {
 #pragma HLS INLINE
@@ -138,7 +114,6 @@ public:
         }
         return res;
     }
-#endif
 
 };
 
