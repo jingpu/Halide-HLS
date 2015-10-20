@@ -47,6 +47,7 @@ int main(int argc, char **argv) {
 
     printf("finish running HLS code\n");
 
+    bool success = true;
     for (int y = 0; y < out_native.height(); y++) {
         for (int x = 0; x < out_native.width(); x++) {
 	    for (int c = 0; c < out_native.channels(); c++) {
@@ -54,11 +55,18 @@ int main(int argc, char **argv) {
                     printf("out_native(%d, %d, %d) = %d, but out_c(%d, %d, %d) = %d\n",
 			   x, y, c, out_native(x, y, c),
 			   x, y, c, out_hls(x, y, c));
+                    success = false;
+                }
             }
-	}
         }
     }
 
-    printf("Success!\n");
-    return 0;
+    if (success) {
+        printf("Successed!\n");
+        return 0;
+    } else {
+        printf("Failed!\n");
+        return 1;
+    }
+
 }

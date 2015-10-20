@@ -17,7 +17,7 @@ all: run
 
 
 test_linebuffer: test_linebuffer.cpp Stencil.h Linebuffer.h
-	$(CXX) -std=c++11 $(CXXFLAGS) -Wall -Wno-unknown-pragmas test_linebuffer.cpp  -o test_linebuffer
+	$(CXX) -std=c++11 $(CXXFLAGS) -Wall -Wno-unused-label -Wno-unknown-pragmas test_linebuffer.cpp  -o test_linebuffer
 
 run: test_linebuffer
 	./test_linebuffer
