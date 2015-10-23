@@ -182,6 +182,7 @@ ostream &operator<<(ostream &out, const HWKernel &k) {
     for (size_t i = 0; i < k.dims.size(); i++)
         out << "  dim " << k.func.args()[i] << ": " << k.dims[i] << '\n';
 
+    //internal_assert(k.consumer_dims.size() == k.buffered_consumers.size());
     if (k.consumer_dims.size() > 1) {
         for (const auto &p : k.consumer_dims) {
             out << "consumer " << p.first << '\n';
@@ -489,11 +490,11 @@ public:
         build_producer_pointers(dag);
         build_buffered_producer_and_consumer_pointers(dag);
         erase_duplicated_pointers(dag);
-        /*
+
         debug(0) << "after building producer pointers:" << "\n";
         for (const auto &p : dag.kernels)
             debug(0) << p.second << "\n";
-        */
+
         return dag;
     }
 };

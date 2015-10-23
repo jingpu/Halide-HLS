@@ -6,8 +6,6 @@
  * Defines the streaming optimization pass
  */
 
-#include <map>
-
 #include "IR.h"
 #include "ExtractHWKernelDAG.h"
 
@@ -16,7 +14,7 @@ namespace Internal {
 
 /** Perform streaming optimization
  */
-    Stmt stream_opt(Stmt s, const std::vector<HWKernelDAG> &dags);
+Stmt stream_opt(Stmt s, const HWKernelDAG &dag);
 
 }
 }

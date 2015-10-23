@@ -19,6 +19,7 @@
 #include "FindCalls.h"
 #include "Function.h"
 #include "FuseGPUThreadLoops.h"
+#include "GroupHWPipeline.h"
 #include "InjectHostDevBufferCopies.h"
 #include "InjectImageIntrinsics.h"
 #include "InjectOpenGLIntrinsics.h"
@@ -34,6 +35,7 @@
 #include "RemoveDeadAllocations.h"
 #include "RemoveTrivialForLoops.h"
 #include "RemoveUndef.h"
+#include "ReplaceImageParam.h"
 #include "ScheduleFunctions.h"
 #include "SelectGPUAPI.h"
 #include "SkipStages.h"
@@ -141,12 +143,17 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
 
     {
         // passes specific to HLS backend
+        debug(1) << "Performing HLS target optimization..\n";
         vector<HWKernelDAG> dags;
         s = extract_hw_kernel_dag(s, env, inlined_stages, dags);
 
-        debug(1) << "Performing streaming optimization..\n";
-        s = stream_opt(s, dags);
-        debug(2) << "Lowering after streaming optimization:\n" << s << '\n';
+        for(const HWKernelDAG &dag : dags) {
+            s = stream_opt(s, dag);
+            s = group_hw_pipeline(s, dag);
+            s = replace_image_param(s, dag);
+        }
+
+        debug(2) << "Lowering after HLS optimization:\n" << s << '\n';
     }
 
     debug(1) << "Performing storage folding optimization...\n";

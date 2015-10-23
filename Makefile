@@ -262,6 +262,7 @@ SOURCE_FILES = \
   Function.cpp \
   FuseGPUThreadLoops.cpp \
   Generator.cpp \
+  GroupHWPipeline.cpp \
   Image.cpp \
   InjectHostDevBufferCopies.cpp \
   InjectImageIntrinsics.cpp \
@@ -304,6 +305,7 @@ SOURCE_FILES = \
   RemoveDeadAllocations.cpp \
   RemoveTrivialForLoops.cpp \
   RemoveUndef.cpp \
+  ReplaceImageParam.cpp \
   Schedule.cpp \
   ScheduleFunctions.cpp \
   SelectGPUAPI.cpp \
