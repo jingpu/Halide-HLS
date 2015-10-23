@@ -28,7 +28,7 @@ pipeline_hls.cpp pipeline_native.o: pipeline
 	HL_DEBUG_CODEGEN=0 ./pipeline
 
 run: run.cpp pipeline_hls.cpp pipeline_native.o
-	$(CXX) $(CXXFLAGS) -Wall  -Wno-unknown-pragmas  run.cpp pipeline_hls.cpp hls_target.cpp pipeline_native.o  -g -lpthread -ldl -o run
+	$(CXX) $(CXXFLAGS) -Wall  -Wno-unknown-pragmas -Wno-unused-label  run.cpp pipeline_hls.cpp hls_target.cpp pipeline_native.o  -g -lpthread -ldl -o run
 
 test: run
 	./run

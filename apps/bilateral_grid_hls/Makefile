@@ -28,7 +28,7 @@ pipeline_hls.cpp pipeline_native.o: pipeline
 	HL_DEBUG_CODEGEN=0 ./pipeline
 
 run: run.cpp pipeline_native.o pipeline_hls.cpp hls_target.cpp
-	$(CXX) $(CXXFLAGS) -g -Wall -Wno-unknown-pragmas -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
+	$(CXX) $(CXXFLAGS) -g -Wall -Wno-unknown-pragmas -Wno-unused-label -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
 
 out.png: run
 	./run ../images/gray.png out.png

@@ -51,7 +51,7 @@ protected:
                         const std::vector<HLS_Argument> &args);
 
     protected:
-        std::string print_pragma(const Realize *op);
+        std::string print_stencil_pragma(const std::string &name);
 
         using CodeGen_HLS_Base::visit;
 

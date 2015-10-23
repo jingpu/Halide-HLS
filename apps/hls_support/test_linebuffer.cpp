@@ -49,14 +49,12 @@ void test_1D() {
     hls::stream<PackedStencil<uint8_t, 1> > input_stream;
     hls::stream<PackedStencil<uint8_t, 1> > input_ref_stream;
     hls::stream<PackedStencil<uint8_t, 3> > output_stream;
-    PackedStencilStreamGroup<1, uint8_t, 3> output_streams;
-    output_streams.val[0] = &output_stream;
     hls::stream<PackedStencil<uint8_t, 3> > output_ref_stream;
 
     gen_inputs<10>(input_stream, input_ref_stream);
 
     printf("test linebuffer_1D()... ");
-    linebuffer<10>(input_stream, output_streams);
+    linebuffer<10>(input_stream, output_stream);
     linebuffer_ref<10>(input_ref_stream, output_ref_stream);
 
     if (check_outputs<8>(output_stream, output_ref_stream))
@@ -70,14 +68,12 @@ void test_2D() {
     hls::stream<PackedStencil<uint8_t, 1, 1> > input_stream;
     hls::stream<PackedStencil<uint8_t, 1, 1> > input_ref_stream;
     hls::stream<PackedStencil<uint8_t, 5, 5> > output_stream;
-    PackedStencilStreamGroup<1, uint8_t, 5, 5> output_streams;
-    output_streams.val[0] = &output_stream;
     hls::stream<PackedStencil<uint8_t, 5, 5> > output_ref_stream;
 
     gen_inputs<260*260>(input_stream, input_ref_stream);
 
     printf("test linebuffer_2D()... ");
-    linebuffer<260, 260>(input_stream, output_streams);
+    linebuffer<260, 260>(input_stream, output_stream);
     //hls_target(input_stream, output_stream);
     linebuffer_ref<260, 260>(input_ref_stream, output_ref_stream);
 
@@ -90,9 +86,7 @@ void test_2D() {
 void syn_target(hls::stream<PackedStencil<uint8_t, 1, 1, 3, 3> > &input_stream,
                 hls::stream<PackedStencil<uint8_t, 3, 3, 3, 3> > &output_stream) {
 #pragma HLS DATAFLOW
-    PackedStencilStreamGroup<1, uint8_t, 3, 3, 3, 3> output_streams;
-    output_streams.val[0] = &output_stream;
-    linebuffer<600, 600, 3, 3>(input_stream, output_streams);
+    linebuffer<600, 600, 3, 3>(input_stream, output_stream);
 }
 
 int main(int argc, char **argv) {

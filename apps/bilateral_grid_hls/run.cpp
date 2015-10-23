@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
 
     for (int y = 0; y < out_native.height(); y++) {
         for (int x = 0; x < out_native.width(); x++) {
-            if (fabs(out_native(x, y, 0) - out_hls(x, y, 0)) > 1e-4) {
+            if (out_native(x, y, 0) != out_hls(x, y, 0)) {
                 printf("out_native(%d, %d, 0) = %d, but out_c(%d, %d, 0) = %d\n",
                        x, y, out_native(x, y, 0),
                        x, y, out_hls(x, y, 0));

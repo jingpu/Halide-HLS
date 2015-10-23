@@ -24,19 +24,25 @@ string CodeGen_HLS_Base::print_stencil_type(Stencil_Type stencil_type) {
     ostringstream oss;
     // C: Stencil<uint16_t, 1, 1, 1> stencil_var;
     // C: hls::stream<Stencil<uint16_t, 1, 1, 1> > stencil_stream_var;
-    if(stencil_type.is_stream)
-        oss << "hls::stream<PackedStencil<";
-    else
-        oss << "Stencil<";
 
-    oss << print_type(stencil_type.type);
+    switch(stencil_type.type) {
+    case Stencil_Type::StencilContainerType::Stencil :
+        oss << "Stencil<";
+        break;
+    case Stencil_Type::StencilContainerType::Stream :
+        oss << "hls::stream<PackedStencil<";
+        break;
+    default: internal_error;
+    }
+
+    oss << print_type(stencil_type.elemType);
     for(const auto &range : stencil_type.bounds) {
         internal_assert(is_one(simplify(range.min == 0)));
         oss << ", " << range.extent;
     }
     oss << ">";
 
-    if(stencil_type.is_stream)
+    if(stencil_type.type == Stencil_Type::StencilContainerType::Stream)
         oss << " >";
 
     return oss.str();
@@ -60,7 +66,7 @@ string CodeGen_HLS_Base::print_name(const string &name) {
     return oss.str();
 }
 
-string CodeGen_HLS_Base::print_pragma(const Realize *op) {
+string CodeGen_HLS_Base::print_stencil_pragma(const string &name) {
     // nothing is printed by default
     return string();
 }
@@ -133,31 +139,34 @@ void CodeGen_HLS_Base::visit(const Realize *op) {
         // create a stream type
         internal_assert(op->types.size() == 1);
         allocations.push(op->name, {op->types[0], "null"});
-        Stencil_Type stype({true, op->types[0], op->bounds});
-        stencils.push(op->name, stype);
+        Stencil_Type stream_type({Stencil_Type::StencilContainerType::Stream,
+                    op->types[0], op->bounds});
+        stencils.push(op->name, stream_type);
 
+        // emits the declaration for the stream
         do_indent();
-        // C: hls::stream<Stencil<uint16_t, 1, 1, 1> > conv1_stencil_update_stream;
-        stream << print_stencil_type(stype) << ' ' << print_name(op->name) << ";\n";
-        stream << print_pragma(op);
+        stream << print_stencil_type(stream_type) << ' ' << print_name(op->name) << ";\n";
+        stream << print_stencil_pragma(op->name);
 
+        // traverse down
         op->body.accept(this);
 
         // We didn't generate free stmt inside for stream type
         allocations.pop(op->name);
         stencils.pop(op->name);
+
     } else if (ends_with(op->name, ".stencil") ||
                ends_with(op->name, ".stencil_update")) {
         // create a stencil type
         internal_assert(op->types.size() == 1);
         allocations.push(op->name, {op->types[0], "null"});
-        Stencil_Type stype({false, op->types[0], op->bounds});
+        Stencil_Type stype({Stencil_Type::StencilContainerType::Stencil, op->types[0], op->bounds});
         stencils.push(op->name, stype);
 
         do_indent();
         // Stencil<uint16_t, 1, 1, 1> conv1_stencil_update;
         stream << print_stencil_type(stype) << ' ' << print_name(op->name) << ";\n";
-        stream << print_pragma(op);
+        stream << print_stencil_pragma(op->name);
 
         op->body.accept(this);
 

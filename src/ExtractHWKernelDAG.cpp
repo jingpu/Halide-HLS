@@ -12,6 +12,8 @@
 #include "Derivative.h"
 #include "Bounds.h"
 
+#include <algorithm>
+
 namespace Halide {
 namespace Internal {
 
@@ -173,10 +175,20 @@ ostream &operator<<(ostream &out, const set<T> &s) {
 ostream &operator<<(ostream &out, const HWKernel &k) {
     out << "HWKernel " << k.name << " consumes " << k.producers << "\n"
         << "\tconsumed by " << k.consumers << "\n";
-    if(k.is_buffered)
-        out << "[buffered]\n";
+    if(k.is_buffered) {
+        out << "[buffered] consumes " << k.buffered_producers << "\n"
+        << "\tconsumed by " << k.buffered_consumers << "\n";
+    }
     for (size_t i = 0; i < k.dims.size(); i++)
         out << "  dim " << k.func.args()[i] << ": " << k.dims[i] << '\n';
+
+    if (k.consumer_dims.size() > 1) {
+        for (const auto &p : k.consumer_dims) {
+            out << "consumer " << p.first << '\n';
+            for (size_t i = 0; i < p.second.size(); i++)
+                out << "  dim " << k.func.args()[i] << ": " << p.second[i] << '\n';
+        }
+    }
     return out;
 }
 
@@ -223,8 +235,61 @@ void build_producer_pointers(HWKernelDAG &dag) {
 
             internal_assert(dag.kernels.count(s));
             HWKernel &consumer = dag.kernels[s];
-            consumer.producers.insert(kernel.name);
+            consumer.producers.push_back(kernel.name);
         }
+    }
+}
+
+// Returned a set of producer (input) kernels, which
+// are set buffered (i.e. optimized as stream in this pass).
+// We recursively search the producer kernels until we find
+// an buffered kernels
+vector<string> get_buffered_producers(const HWKernel &k, const HWKernelDAG &dag) {
+    vector<string> res;
+    for (const string &s : k.producers) {
+        const auto it = dag.kernels.find(s);
+        internal_assert(it != dag.kernels.end());
+        const HWKernel &producer = it->second;
+        if (producer.is_buffered) {
+            res.push_back(s);
+        } else {
+            // recurse
+            vector<string> buffered_producers = get_buffered_producers(producer, dag);
+            res.insert(res.end(), buffered_producers.begin(), buffered_producers.end());
+        }
+    }
+    return res;
+}
+
+// Build the buffered_producers and buffered_consumers pointers for each HWKernel in dag
+void build_buffered_producer_and_consumer_pointers(HWKernelDAG &dag) {
+    for (auto &p : dag.kernels) {
+        HWKernel &kernel = p.second;
+        if (kernel.is_buffered) {
+            kernel.buffered_producers = get_buffered_producers(kernel, dag);
+            for (const string &s : kernel.buffered_producers) {
+                internal_assert(dag.kernels.count(s));
+                HWKernel &consumer = dag.kernels[s];
+                internal_assert(consumer.is_buffered);
+                consumer.buffered_consumers.push_back(kernel.name);
+            }
+        }
+    }
+}
+
+void erase_duplicates(vector<string> &vec) {
+    sort(vec.begin(), vec.end());
+    vec.erase(unique(vec.begin(), vec.end()), vec.end());
+}
+
+// erase the duplicated points in producers, consumers, buffered_producers and buffered_consumers
+void erase_duplicated_pointers(HWKernelDAG &dag) {
+    for (auto &p : dag.kernels) {
+        HWKernel &kernel = p.second;
+        erase_duplicates(kernel.consumers);
+        erase_duplicates(kernel.producers);
+        erase_duplicates(kernel.buffered_consumers);
+        erase_duplicates(kernel.buffered_producers);
     }
 }
 
@@ -273,7 +338,7 @@ class BuildDAGForFunction : public IRVisitor {
             }
 
             vector<StencilDimSpecs> dims = extract_stencil_specs(box, scan_loops);
-            HWKernel k({func, func.name(), dag.loop_vars, true, dims, {}, {}});
+            HWKernel k({func, func.name(), scan_loops, true, dims, {}, {}, {}});
             dag.kernels[k.name] = k;
 
             debug(3) << k << "\n";
@@ -317,7 +382,7 @@ class BuildDAGForFunction : public IRVisitor {
                     debug(3) << "func " << stage.name << " stage " << stage.stage
                              << " is a hw kernel.\n";
                     Function cur_func = env.find(stage.name)->second;
-                    HWKernel cur_kernel({cur_func, stage.name, dag.loop_vars, false, {}, {}, {}});
+                    HWKernel cur_kernel({cur_func, stage.name, scan_loops, false, {}, {}, {}, {}});
                     // if cur_func is non-pure function, we may already create an HWKernel for it
                     if (dag.kernels.count(stage.name))
                         cur_kernel = dag.kernels[stage.name];
@@ -332,8 +397,11 @@ class BuildDAGForFunction : public IRVisitor {
                                                                    consumer.stage))->second;
                         merge_boxes(cur_box, b);
                         // insert the consumer name if it is not the kernel function itself
-                        if (consumer.name != cur_kernel.name)
-                            cur_kernel.consumers.insert(consumer.name);
+                        if (consumer.name != cur_kernel.name) {
+                            cur_kernel.consumers.push_back(consumer.name);
+                            vector<StencilDimSpecs> consumer_dims = extract_stencil_specs(b, scan_loops, scope);
+                            cur_kernel.consumer_dims[consumer.name] = consumer_dims;
+                        }
                     }
 
                     for (size_t k = 0; k < cur_box.size(); k++)
@@ -419,6 +487,8 @@ public:
         dag.name = func.name();
         dag.loop_vars = scan_loops;
         build_producer_pointers(dag);
+        build_buffered_producer_and_consumer_pointers(dag);
+        erase_duplicated_pointers(dag);
         /*
         debug(0) << "after building producer pointers:" << "\n";
         for (const auto &p : dag.kernels)

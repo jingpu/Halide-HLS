@@ -40,8 +40,11 @@ struct HWKernel {
     std::vector<std::string> loop_vars;
     bool is_buffered;
     std::vector<StencilDimSpecs> dims;
-    std::set<std::string> producers;
-    std::set<std::string> consumers;
+    std::vector<std::string> producers;
+    std::vector<std::string> consumers;
+    std::vector<std::string> buffered_producers;
+    std::vector<std::string> buffered_consumers;
+    std::map<std::string, std::vector<StencilDimSpecs> > consumer_dims;
 };
 
 struct HWKernelDAG {

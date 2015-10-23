@@ -25,8 +25,9 @@ public:
         : CodeGen_C(dest, is_header, include_guard, additional_headers) {}
 
     struct Stencil_Type {
-        bool is_stream;  // is is a stream of stencils?
-        Type type;  // type of the element
+        typedef enum {Stencil, Stream} StencilContainerType;
+        StencilContainerType type;
+        Type elemType;  // type of the element
         Region bounds;  // extent of each dimension
     };
 
@@ -35,7 +36,7 @@ protected:
 
     std::string print_stencil_type(Stencil_Type);
     std::string print_name(const std::string &name);
-    virtual std::string print_pragma(const Realize *);
+    virtual std::string print_stencil_pragma(const std::string &name);
 
     using CodeGen_C::visit;
 

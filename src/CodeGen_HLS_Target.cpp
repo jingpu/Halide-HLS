@@ -125,15 +125,17 @@ void CodeGen_HLS_Target::dump() {
 }
 
 
-string CodeGen_HLS_Target::CodeGen_HLS_C::print_pragma(const Realize *op) {
+string CodeGen_HLS_Target::CodeGen_HLS_C::print_stencil_pragma(const string &name) {
     ostringstream oss;
-    internal_assert(stencils.contains(op->name));
-    Stencil_Type stype = stencils.get(op->name);
-    if (stype.is_stream) {
-        oss << "#pragma HLS STREAM variable=" << print_name(op->name) << " depth=1\n"
-            << "#pragma HLS RESOURCE variable=" << print_name(op->name) << " core=FIFO_SRL\n\n";
+    internal_assert(stencils.contains(name));
+    Stencil_Type stype = stencils.get(name);
+    if (stype.type == Stencil_Type::StencilContainerType::Stream) {
+        oss << "#pragma HLS STREAM variable=" << print_name(name) << " depth=1\n"
+            << "#pragma HLS RESOURCE variable=" << print_name(name) << " core=FIFO_SRL\n\n";
+    } else if (stype.type == Stencil_Type::StencilContainerType::Stencil) {
+        oss << "#pragma HLS ARRAY_PARTITION variable=" << print_name(name) << ".value complete dim=0\n\n";
     } else {
-        oss << "#pragma HLS ARRAY_PARTITION variable=" << print_name(op->name) << ".value complete dim=0\n\n";
+        internal_error;
     }
     return oss.str();
 }
@@ -148,11 +150,11 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::add_kernel(Stmt stmt,
         if (args[i].is_stencil) {
             CodeGen_HLS_Base::Stencil_Type stype = args[i].stencil_type;
             stream << print_stencil_type(args[i].stencil_type) << " ";
-            if (stype.is_stream) {
+            if (args[i].stencil_type.type == Stencil_Type::StencilContainerType::Stream) {
                 stream << "&";  // hls_stream needs to be passed by reference
             }
             stream << print_name(args[i].name);
-            allocations.push(args[i].name, {args[i].stencil_type.type, "null"});
+            allocations.push(args[i].name, {args[i].stencil_type.elemType, "null"});
             stencils.push(args[i].name, args[i].stencil_type);
         } else {
             stream << print_type(args[i].scalar_type) << " " << print_name(args[i].name);
@@ -204,7 +206,7 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::add_kernel(Stmt stmt,
 
     for (size_t i = 0; i < args.size(); i++) {
         // Remove buffer arguments from allocation scope
-        if (args[i].stencil_type.is_stream) {
+        if (args[i].stencil_type.type == Stencil_Type::StencilContainerType::Stream) {
             allocations.pop(args[i].name);
             stencils.pop(args[i].name);
         }

@@ -54,9 +54,7 @@ public:
         std::cout << "\ncompiling cpu code..." << std::endl;
         //output.print_loop_nest();
 
-        //output.compile_to_c("pipeline_native.c", args, "pipeline_native");
-        //output.compile_to_lowered_stmt("pipeline_native.ir", args);
-        //output.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
+        output.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
         output.compile_to_header("pipeline_native.h", args, "pipeline_native");
         output.compile_to_object("pipeline_native.o", args, "pipeline_native");
     }
@@ -64,52 +62,24 @@ public:
     void compile_hls() {
         std::cout << "\ncompiling HLS code..." << std::endl;
 
-        clamped.store_at(output, xo).compute_at(output, xi).stream();
-        conv1.store_at(output, xo).compute_at(output, xi).stream();
-        hw_output.store_at(output, xo).compute_at(output, xi).stream();
-
+        // HLS schedule: make a hw pipeline producing 'hw_output', taking
+        // inputs of 'clamped', buffering intermediates at (output, xo) loop
+        // level
+        hw_output.store_at(output, xo).compute_at(output, xi);
         hw_output.accelerate_at(output, xo, {clamped});
 
-        //output.print_loop_nest();
+        // mark func as stream. TODO remove this in user app
+        clamped.stream();
+        conv1.stream();
+        hw_output.stream();
 
-        output.compile_to_lowered_stmt("pipeline_hls.ir", args);
+        //output.print_loop_nest();
         output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
         output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
         output.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
     }
 
 private:
-    Func convolve55(Func in) {
-        Func in_16, res;
-        in_16(x, y, c) = cast<uint16_t>(in(x, y, c));
-        res(x, y, c) = cast<uint8_t>((in_16(x-2, y-2, c) * gaussian2d[0][0]
-                                      + in_16(x-1, y-2, c) * gaussian2d[0][1]
-                                      + in_16(x  , y-2, c) * gaussian2d[0][2]
-                                      + in_16(x+1, y-2, c) * gaussian2d[0][3]
-                                      + in_16(x+2, y-2, c) * gaussian2d[0][4]
-                                      + in_16(x-2, y-1, c) * gaussian2d[1][0]
-                                      + in_16(x-1, y-1, c) * gaussian2d[1][1]
-                                      + in_16(x  , y-1, c) * gaussian2d[1][2]
-                                      + in_16(x+1, y-1, c) * gaussian2d[1][3]
-                                      + in_16(x+2, y-1, c) * gaussian2d[1][4]
-                                      + in_16(x-2, y  , c) * gaussian2d[2][0]
-                                      + in_16(x-1, y  , c) * gaussian2d[2][1]
-                                      + in_16(x  , y  , c) * gaussian2d[2][2]
-                                      + in_16(x+1, y  , c) * gaussian2d[2][3]
-                                      + in_16(x+2, y  , c) * gaussian2d[2][4]
-                                      + in_16(x-2, y+1, c) * gaussian2d[3][0]
-                                      + in_16(x-1, y+1, c) * gaussian2d[3][1]
-                                      + in_16(x  , y+1, c) * gaussian2d[3][2]
-                                      + in_16(x+1, y+1, c) * gaussian2d[3][3]
-                                      + in_16(x+2, y+1, c) * gaussian2d[3][4]
-                                      + in_16(x-2, y+2, c) * gaussian2d[4][0]
-                                      + in_16(x-1, y+2, c) * gaussian2d[4][1]
-                                      + in_16(x  , y+2, c) * gaussian2d[4][2]
-                                      + in_16(x+1, y+2, c) * gaussian2d[4][3]
-                                      + in_16(x+2, y+2, c) * gaussian2d[4][4]) >> 8);
-        return res;
-    }
-
     Func convolve55_rd(Func in) {
         Func local_sum, res;
         RDom r(-2, 5, -2, 5);

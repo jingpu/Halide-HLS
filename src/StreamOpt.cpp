@@ -10,6 +10,7 @@
 #include "Bounds.h"
 
 #include <iostream>
+#include <algorithm>
 using std::ostream;
 
 namespace Halide {
@@ -243,27 +244,6 @@ class AddStreamOperationForFunction : public IRMutator {
 
     using IRMutator::visit;
 
-    // Returned a set of producer (input) kernels, which
-    // are set buffered (i.e. optimized as stream in this pass).
-    // We recursively search the producer kernels until we find
-    // an buffered kernels
-    vector<string> get_buffered_producers(const HWKernel &k) {
-        vector<string> res;
-        for (const string &s : k.producers) {
-            const auto it = dag.kernels.find(s);
-            internal_assert(it != dag.kernels.end());
-            const HWKernel &producer = it->second;
-            if (producer.is_buffered) {
-                res.push_back(s);
-            } else {
-                // recurse
-                vector<string> buffered_producers = get_buffered_producers(producer);
-                res.insert(res.end(), buffered_producers.begin(), buffered_producers.end());
-            }
-        }
-        return res;
-    }
-
     // Add realize and read_stream calls arround IR s
     Stmt add_input_stencil(Stmt s, const HWKernel &input) {
         string stencil_name = input.name + ".stencil";
@@ -325,7 +305,7 @@ class AddStreamOperationForFunction : public IRMutator {
             Stmt stencil_realize = Realize::make(stencil_name, op->types, op->bounds, op->condition, stencil_pc);
 
             // add read_stream for each input stencil (producers fed to func)
-            for (const string& s : get_buffered_producers(kernel)) {
+            for (const string& s : kernel.buffered_producers) {
                 const auto it = dag.kernels.find(s);
                 internal_assert(it != dag.kernels.end());
                 stencil_realize = add_input_stencil(stencil_realize, it->second);
