@@ -11,6 +11,7 @@
 #include "Simplify.h"
 #include "Derivative.h"
 #include "Bounds.h"
+#include "ExprUsesVar.h"
 
 #include <algorithm>
 
@@ -25,39 +26,6 @@ using std::ostream;
 
 
 namespace {
-
-// Does an expression depend on a particular variable?
-class ExprDependsOnVar : public IRVisitor {
-    using IRVisitor::visit;
-
-    void visit(const Variable *op) {
-        if (op->name == var) result = true;
-    }
-
-    void visit(const Let *op) {
-        op->value.accept(this);
-        // The name might be hidden within the body of the let, in
-        // which case there's no point descending.
-        if (op->name != var) {
-            op->body.accept(this);
-        }
-    }
-public:
-
-    bool result;
-    string var;
-
-    ExprDependsOnVar(string v) : result(false), var(v) {
-    }
-};
-
-bool expr_depends_on_var(Expr e, string v) {
-    ExprDependsOnVar depends(v);
-    e.accept(&depends);
-    return depends.result;
-}
-
-
 class ExpandExpr : public IRMutator {
     using IRMutator::visit;
     const Scope<Expr> &scope;
@@ -216,7 +184,7 @@ extract_stencil_specs(Box box, const vector<string> &scan_loops,
         dim_specs.loop_var = "undef";
         // look for loop var that slides along this dimensions
         for (size_t j = 0; j < scan_loops.size(); j++) {
-            if (expr_depends_on_var(min, scan_loops[j])) {
+            if (expr_uses_var(min, scan_loops[j])) {
                 dim_specs.loop_var = scan_loops[j];
                 Expr step = simplify(finite_difference(min, dim_specs.loop_var));
                 const IntImm *step_int = step.as<IntImm>();
