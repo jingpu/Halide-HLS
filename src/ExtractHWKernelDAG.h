@@ -32,19 +32,20 @@ struct StencilDimSpecs {
     int step;     // stencil window shifting step
     Expr min_pos; // stencil origin position w.r.t. the original image buffer
     std::string loop_var;  // outer loop var that shifts this dimensions
+    Interval store_bound;
 };
 
 struct HWKernel {
     Function func;
     std::string name;
-    std::vector<std::string> loop_vars;
-    bool is_buffered;
+    bool is_inlined;
     std::vector<StencilDimSpecs> dims;
-    std::vector<std::string> producers;
-    std::vector<std::string> consumers;
-    std::vector<std::string> buffered_producers;
-    std::vector<std::string> buffered_consumers;
-    std::map<std::string, std::vector<StencilDimSpecs> > consumer_dims;
+    std::vector<std::string> input_streams;  // used when inserting read_stream calls
+    std::map<std::string, std::vector<StencilDimSpecs> > consumer_stencils; // used for transforming call nodes and inserting dispatch calls
+
+    HWKernel() {}
+    HWKernel(Function f, const std::string &s)
+        : func(f), name(s) {}
 };
 
 struct HWKernelDAG {

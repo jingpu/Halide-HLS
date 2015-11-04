@@ -105,11 +105,20 @@ void CodeGen_HLS_Base::visit(const Call *op) {
         stream << a0 << ".write(" << a1 << ");\n";
         id = "0"; // skip evaluation
     } else if (op->name == "read_stream") {
-        internal_assert(op->args.size() == 2);
-        string a0 = print_expr(op->args[0]);
+        internal_assert(op->args.size() == 2 || op->args.size() == 3);
         string a1 = print_expr(op->args[1]);
+
+        const Variable *stream_name_var = op->args[0].as<Variable>();
+        internal_assert(stream_name_var);
+        string stream_name = stream_name_var->name;
+        if (op->args.size() == 3) {
+            // stream name is maggled with the consumer name
+            const StringImm *consumer_imm = op->args[2].as<StringImm>();
+            internal_assert(consumer_imm);
+            stream_name += ".to." + consumer_imm->value;
+        }
         do_indent();
-        stream << a1 << " = " << a0 << ".read();\n";
+        stream << a1 << " = " << print_name(stream_name) << ".read();\n";
         id = "0"; // skip evaluation
     } else if (ends_with(op->name, ".stencil") ||
                ends_with(op->name, ".stencil_update")) {
@@ -129,6 +138,147 @@ void CodeGen_HLS_Base::visit(const Call *op) {
         rhs << ")";
 
         print_assignment(op->type, rhs.str());
+    } else if (op->name == "dispatch_stream") {
+        // emits the calling arguments in comment
+        vector<string> args(op->args.size());
+        for(size_t i = 0; i < op->args.size(); i++)
+            args[i] = print_expr(op->args[i]);
+
+        do_indent();
+        stream << "// dispatch_stream(";
+        for(size_t i = 0; i < args.size(); i++) {
+            stream << args[i];
+            if (i != args.size() - 1)
+                stream << ", ";
+        }
+        stream << ");\n";
+        // syntax:
+        //   dispatch_stream(stream_name, num_of_dimensions,
+        //                   stencil_size_dim_0, stencil_step_dim_0, store_extent_dim_0,
+        //                   [stencil_size_dim_1, stencil_step_dim_1, store_extent_dim_1, ...]
+        //                   num_of_consumers,
+        //                   consumer_0_name, consumer_0_offset_dim_0, consumer_0_extent_dim_0,
+        //                   [consumer_0_offset_dim_1, consumer_0_extent_dim_1, ...]
+        //                   [consumer_1_name, ...])
+
+        // recover the structed data from op->args
+        internal_assert(op->args.size() >= 2);
+        const Variable *stream_name_var = op->args[0].as<Variable>();
+        internal_assert(stream_name_var);
+        string stream_name = stream_name_var->name;
+        size_t num_of_demensions = *as_const_int(op->args[1]);
+        vector<int> stencil_sizes(num_of_demensions);
+        vector<int> stencil_steps(num_of_demensions);
+        vector<int> store_extents(num_of_demensions);
+
+        internal_assert(op->args.size() >= num_of_demensions*3 + 2);
+        for (size_t i = 0; i < num_of_demensions; i++) {
+            stencil_sizes[i] = *as_const_int(op->args[i*3 + 2]);
+            stencil_steps[i] = *as_const_int(op->args[i*3 + 3]);
+            store_extents[i] = *as_const_int(op->args[i*3 + 4]);
+        }
+
+        internal_assert(op->args.size() >= num_of_demensions*3 + 3);
+        size_t num_of_consumers = *as_const_int(op->args[num_of_demensions*3 + 2]);
+        vector<string> consumer_names(num_of_consumers);
+        vector<vector<int> > consumer_offsets(num_of_consumers);
+        vector<vector<int> > consumer_extents(num_of_consumers);
+
+        internal_assert(op->args.size() >= num_of_demensions*3 + 3 + num_of_consumers*(1+2*num_of_demensions));
+        for (size_t i = 0; i < num_of_consumers; i++) {
+            const StringImm *string_imm = op->args[num_of_demensions*3 + 3 + (1 + 2*num_of_demensions)*i].as<StringImm>();
+            internal_assert(string_imm);
+            consumer_names[i] = string_imm->value;
+            vector<int> offsets(num_of_demensions);
+            vector<int > extents(num_of_demensions);
+            for (size_t j = 0; j < num_of_demensions; j++) {
+                offsets[j] = *as_const_int(op->args[num_of_demensions*3 + 4 + (1 + 2*num_of_demensions)*i + 2*j]);
+                extents[j] = *as_const_int(op->args[num_of_demensions*3 + 5 + (1 + 2*num_of_demensions)*i + 2*j]);
+            }
+            consumer_offsets[i] = offsets;
+            consumer_extents[i] = extents;
+        }
+
+        // emits declarations of streams for each consumer
+        internal_assert(stencils.contains(stream_name));
+        Stencil_Type stream_type = stencils.get(stream_name);
+
+        // Optimization. if there is only one consumer, use C++ reference
+        // for the consumer stream
+        if (num_of_consumers == 1) {
+            string consumer_stream_name = stream_name + ".to." + consumer_names[0];
+            do_indent();
+            stream << print_stencil_type(stream_type) << " &"
+                   << print_name(consumer_stream_name) << " = "
+                   << print_name(stream_name) << ";\n";
+            id = "0"; // skip evaluation
+            return;
+        }
+
+        for (size_t i = 0; i < num_of_consumers; i++) {
+            string consumer_stream_name = stream_name + ".to." + consumer_names[i];
+            do_indent();
+            stream << print_stencil_type(stream_type) << ' '
+                   << print_name(consumer_stream_name) << ";\n";
+            // pragma
+            stencils.push(consumer_stream_name, stream_type);
+            stream << print_stencil_pragma(consumer_stream_name);
+            stencils.pop(consumer_stream_name);
+        }
+
+        // emits for a loop for each dimensions (larger dimension number, outer the loop)
+        for (int i = num_of_demensions - 1; i >= 0; i--) {
+            string dim_name = "_dim_" + to_string(i);
+            do_indent();
+            // HLS C: for(int dim = 0; dim <= store_extent - stencil.size; dim += stencil.step)
+            stream << "for (int " << dim_name <<" = 0; "
+                   << dim_name << " <= " << store_extents[i] - stencil_sizes[i] << "; "
+                   << dim_name << " += " << stencil_steps[i] << ")\n";
+        }
+        open_scope();
+        // pragma
+        stream << "#pragma HLS PIPELINE\n";
+        // read stencil from stream
+        Stencil_Type stencil_type = stream_type;
+        stencil_type.type = Stencil_Type::StencilContainerType::Stencil;
+        string stencil_name = "tmp_stencil";
+        do_indent();
+        stream << print_stencil_type(stencil_type) << ' '
+               << print_name(stencil_name) << " = "
+               << print_name(stream_name) << ".read();\n";
+        // pragma
+        stencils.push(stencil_name, stencil_type);
+        stream << print_stencil_pragma(stencil_name);
+        stencils.pop(stencil_name);
+
+        // dispatch the stencil to each consumer stream
+        for (size_t i = 0; i < num_of_consumers; i++) {
+            string consumer_stream_name = stream_name + ".to." + consumer_names[i];
+            // emits the predicate for dispatching stencils
+            // HLS C: if(dim_0 >= consumer_offset_0 && dim_0 <= consumer_offset_0 + consumer_extent_0 - stencil_size_0
+            //           [&& dim_1 >= consumer_offset_1 && dim_1 <= consumer_offset_1 + consumer_extent_1 - stencil_size_1...])
+            do_indent();
+            stream << "if (";
+            for (size_t j = 0; j < num_of_demensions; j++) {
+                string dim_name = "_dim_" + to_string(j);
+                stream << dim_name << " >= " << consumer_offsets[i][j] << " && "
+                       << dim_name << " <= " << consumer_offsets[i][j] + consumer_extents[i][j] - stencil_sizes[j];
+                if (j != num_of_demensions - 1)
+                    stream << " && ";
+            }
+            stream << ")\n";
+
+            // emits the write call in the if body
+            open_scope();
+            do_indent();
+            stream << print_name(consumer_stream_name) << ".write("
+                   << print_name(stencil_name) << ");\n";
+            close_scope("");
+        }
+
+        close_scope("");
+
+        id = "0"; // skip evaluation
     } else {
         CodeGen_C::visit(op);
     }
