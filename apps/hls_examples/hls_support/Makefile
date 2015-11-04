@@ -13,14 +13,13 @@ include ./Makefile.autopilot
 
 
 #### end of HLS flags
-all: run
+all: test
 
+run: run.cpp Stencil.h Linebuffer.h
+	$(CXX) -std=c++11 $(CXXFLAGS) run.cpp -Wall -Wno-unused-label -Wno-unknown-pragmas  -o $@
 
-test_linebuffer: test_linebuffer.cpp Stencil.h Linebuffer.h
-	$(CXX) -std=c++11 $(CXXFLAGS) -Wall -Wno-unused-label -Wno-unknown-pragmas test_linebuffer.cpp  -o test_linebuffer
-
-run: test_linebuffer
-	./test_linebuffer
+test: run
+	./run
 
 clean:
 	rm -f test_linebuffer
