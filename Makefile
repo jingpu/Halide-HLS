@@ -253,7 +253,6 @@ SOURCE_FILES = \
   DeviceInterface.cpp \
   EarlyFree.cpp \
   Error.cpp \
-  ExprUsesVar.cpp \
   ExtractHWKernelDAG.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
