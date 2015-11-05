@@ -362,8 +362,8 @@ class SlidingWindow : public IRMutator {
             return;
         }
 
-        // If the Function is scheduled as a stream, skip it
-        if (sched.is_stream()) {
+        // If the Function is scheduled as a hw kernel, skip it
+        if (sched.is_hw_kernel()) {
             IRMutator::visit(op);
             return;
         }

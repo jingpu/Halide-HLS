@@ -4,6 +4,7 @@
 /** \file
  * Defines the internal representation of the schedule for a function
  */
+#include <set>
 
 #include "Expr.h"
 
@@ -192,10 +193,10 @@ public:
     LoopLevel &compute_level();
     // @}
 
-    /** Scheduled as a stream? */
+    /** Function is a hw kernel? */
     // @{
-    bool is_stream() const;
-    bool &is_stream();
+    bool is_hw_kernel() const;
+    bool &is_hw_kernel();
     // @}
 
     /** Is accelerated using hardware? */
@@ -204,10 +205,10 @@ public:
     bool &is_accelerated();
     // @}
 
-    /** The input function of the hardware accelerator pipeline. */
+    /** The input functions of the hardware accelerator pipeline. */
     // @{
-    std::vector<std::string> accelerate_inputs() const;
-    std::vector<std::string> &accelerate_inputs();
+    std::set<std::string> accelerate_inputs() const;
+    std::set<std::string> &accelerate_inputs();
     // @}
 
 

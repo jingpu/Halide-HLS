@@ -1462,9 +1462,6 @@ public:
      * outside the outermost loop. */
     EXPORT Func &store_root();
 
-    /** Schedule a function as a stream. */
-    EXPORT Func &stream();
-
     /** Schedule a function onto the hardware accelerator.
      * Extract the pipeline from inputs to this function at
      * f.var loop level.*/

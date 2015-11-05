@@ -68,11 +68,6 @@ public:
         hw_output.store_at(output, xo).compute_at(output, xi);
         hw_output.accelerate_at(output, xo, {clamped});
 
-        // mark func as stream. TODO remove this in user app
-        clamped.stream();
-        conv1.stream();
-        hw_output.stream();
-
         //output.print_loop_nest();
         output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
         output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");

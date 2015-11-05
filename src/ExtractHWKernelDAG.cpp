@@ -362,8 +362,6 @@ class BuildDAGForFunction : public IRVisitor {
 
             debug(3) << k << "\n";
 
-            const set<string> input_func(func.schedule().accelerate_inputs().begin(),
-                                         func.schedule().accelerate_inputs().end());
             // Figure out how much of each func in the pipeline we're producing
             // do this from output of the pipeline to inputs
             // 'inlined_stages' is sorted, so we do it straight backward
@@ -380,21 +378,23 @@ class BuildDAGForFunction : public IRVisitor {
             i--;
             while (i >= 0) {
                 const BoundsInference_Stage &stage = inlined_stages[i];
-                // it is a hw kernel if its consumers are hw kernels and
-                // are not input functions
-                bool is_hw_kernel = false;
-                for(int consumer_idx : stage.consumers) {
-                    string consumer_name = inlined_stages[consumer_idx].name;
-                    if (dag.kernels.count(consumer_name) &&
-                        !input_func.count(consumer_name)) {
-                        is_hw_kernel = true;
-                        break;
+                Function cur_func = env.find(stage.name)->second;
+
+                // cur_func is in the HWKernelDAG if it is a hw kernel,
+                // and its consumers are in the HWKernelDAG
+                bool in_dag = false;
+                if (cur_func.schedule().is_hw_kernel() ) {
+                    for(int consumer_idx : stage.consumers) {
+                        string consumer_name = inlined_stages[consumer_idx].name;
+                        if (dag.kernels.count(consumer_name)) {
+                            in_dag = true;
+                            break;
+                        }
                     }
                 }
-                if (is_hw_kernel) {
+                if (in_dag) {
                     debug(3) << "func " << stage.name << " stage " << stage.stage
                              << " is a hw kernel.\n";
-                    Function cur_func = env.find(stage.name)->second;
                     HWKernel cur_kernel(cur_func, stage.name);
 
                     // if cur_func is non-pure function, we may already create
@@ -518,8 +518,6 @@ class BuildDAGForFunction : public IRVisitor {
                     debug(3) << cur_kernel << "\n\n";
                     // update dag and hw_kernel_stages
                     dag.kernels[cur_kernel.name] = cur_kernel;
-                    if(input_func.count(stage.name))
-                        dag.input_kernels.insert(stage.name);
                 }
                 i--;
             }
@@ -536,6 +534,7 @@ public:
         s.accept(this);
         dag.name = func.name();
         dag.loop_vars = scan_loops;
+        dag.input_kernels = func.schedule().accelerate_inputs(); // TODO we don't use it later
         calculate_input_streams(dag);
         /*
         debug(0) << "after building producer pointers:" << "\n";

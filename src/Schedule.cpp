@@ -21,13 +21,13 @@ struct ScheduleContents {
     bool memoized;
     bool touched;
     bool allow_race_conditions;
-    bool is_stream;
+    bool is_hw_kernel;
     bool is_accelerated;
-    std::vector<std::string> accelerate_inputs;
+    std::set<std::string> accelerate_inputs;
 
     ScheduleContents()
         : memoized(false), touched(false), allow_race_conditions(false),
-          is_stream(false), is_accelerated(false) {};
+          is_hw_kernel(false), is_accelerated(false) {};
 };
 
 
@@ -132,12 +132,12 @@ void Schedule::set_reduction_domain(const ReductionDomain &d) {
     contents.ptr->reduction_domain = d;
 }
 
-bool &Schedule::is_stream() {
-    return contents.ptr->is_stream;
+bool &Schedule::is_hw_kernel() {
+    return contents.ptr->is_hw_kernel;
 }
 
-bool Schedule::is_stream() const {
-    return contents.ptr->is_stream;
+bool Schedule::is_hw_kernel() const {
+    return contents.ptr->is_hw_kernel;
 }
 
 bool Schedule::is_accelerated() const {
@@ -148,11 +148,11 @@ bool &Schedule::is_accelerated() {
     return contents.ptr->is_accelerated;
 }
 
-std::vector<std::string> Schedule::accelerate_inputs() const{
+std::set<std::string> Schedule::accelerate_inputs() const{
     return contents.ptr->accelerate_inputs;
 }
 
-std::vector<std::string> &Schedule::accelerate_inputs() {
+std::set<std::string> &Schedule::accelerate_inputs() {
     return contents.ptr->accelerate_inputs;
 }
 

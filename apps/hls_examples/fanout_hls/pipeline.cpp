@@ -54,12 +54,6 @@ public:
         hw_output.store_at(output, xo).compute_at(output, xi);
         hw_output.accelerate_at(output, xo, {A});
 
-        // mark func as stream. TODO remove this in user app
-        A.stream();
-        B.stream();
-        C.stream();
-        hw_output.stream();
-
         //output.print_loop_nest();
         output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
         output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");

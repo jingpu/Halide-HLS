@@ -80,10 +80,6 @@ public:
 
         hw_output.accelerate_at(output, xo, {padded});
 
-        // mark func as stream. TODO remove this in user app
-        hw_output.stream();
-        padded.stream();
-
         //output.print_loop_nest();
         //output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
         output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");

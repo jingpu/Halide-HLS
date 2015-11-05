@@ -24,6 +24,7 @@
 #include "LLVM_Headers.h"
 #include "Output.h"
 #include "LLVM_Output.h"
+#include "MarkHWKernels.h"
 
 namespace Halide {
 
@@ -32,6 +33,7 @@ using std::min;
 using std::make_pair;
 using std::string;
 using std::vector;
+using std::set;
 using std::pair;
 using std::ofstream;
 
@@ -1135,22 +1137,16 @@ Func &Func::store_root() {
     return *this;
 }
 
-Func &Func::stream() {
-    invalidate_cache();
-    func.schedule().is_stream() = true;
-    return *this;
-}
-
 Func &Func::accelerate_at(Func f, Var var, const vector<Func> &inputs) {
     invalidate_cache();
     store_at(f, var);
     func.schedule().is_accelerated() = true;
 
-    vector<string> input_names(inputs.size());
-    for (size_t i = 0; i < inputs.size(); i++)
-        input_names[i] = inputs[i].name();
+    for (size_t i = 0; i < inputs.size(); i++) {
+        func.schedule().accelerate_inputs().insert(inputs[i].name());
+    }
 
-    func.schedule().accelerate_inputs() = input_names;
+    mark_hw_kernels(this->function(), func.schedule().accelerate_inputs());
     return *this;
 }
 

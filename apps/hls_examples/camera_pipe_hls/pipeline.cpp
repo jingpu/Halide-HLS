@@ -14,6 +14,8 @@ Expr avg(Expr a, Expr b) {
 }
 
 class MyPipeline {
+    bool do_hw_schedule;
+
     ImageParam input;
     ImageParam matrix_3200, matrix_7000;
     Param<float> color_temp; //, 3200.0f);
@@ -75,6 +77,7 @@ class MyPipeline {
         r_r(x, y)  = deinterleaved(x, y, 1);
         b_b(x, y)  = deinterleaved(x, y, 2);
         g_gb(x, y) = deinterleaved(x, y, 3);
+
 
         // These are the ones we need to interpolate
         Func b_r, g_r, b_gr, r_gr, b_gb, r_gb, r_b, g_b;
@@ -162,20 +165,36 @@ class MyPipeline {
 
 
         /* THE SCHEDULE */
-        // Compute these in chunks over tiles
-        // Don't vectorize, because sse is bad at 16-bit interleaving
-        g_r.compute_at(processed, x_grid).store_at(processed, tx).stream();
-        g_b.compute_at(processed, x_grid).store_at(processed, tx).stream();
-        r_gr.compute_at(processed, x_grid).store_at(processed, tx).stream();
-        b_gr.compute_at(processed, x_grid).store_at(processed, tx).stream();
-        r_gb.compute_at(processed, x_grid).store_at(processed, tx).stream();
-        b_gb.compute_at(processed, x_grid).store_at(processed, tx).stream();
-        r_b.compute_at(processed, x_grid).store_at(processed, tx).stream();
-        b_r.compute_at(processed, x_grid).store_at(processed, tx).stream();
-        // These interleave in x and y, so unrolling them helps
-        output.compute_at(processed, x_grid).store_at(processed, tx).stream()
-            .unroll(x).unroll(y)
-            .bound(c, 0, 3).unroll(c);
+        if (do_hw_schedule) {
+            // Compute these in chunks over tiles
+            // Don't vectorize, because sse is bad at 16-bit interleaving
+            g_r.compute_at(processed, x_grid).store_at(processed, tx);
+            g_b.compute_at(processed, x_grid).store_at(processed, tx);
+            r_gr.compute_at(processed, x_grid).store_at(processed, tx);
+            b_gr.compute_at(processed, x_grid).store_at(processed, tx);
+            r_gb.compute_at(processed, x_grid).store_at(processed, tx);
+            b_gb.compute_at(processed, x_grid).store_at(processed, tx);
+            r_b.compute_at(processed, x_grid).store_at(processed, tx);
+            b_r.compute_at(processed, x_grid).store_at(processed, tx);
+            // These interleave in x and y, so unrolling them helps
+            output.compute_at(processed, x_grid).store_at(processed, tx)
+                .unroll(x).unroll(y)
+                .bound(c, 0, 3).unroll(c);
+        } else {
+            // optimized for X86
+            // Don't vectorize, because sse is bad at 16-bit interleaving
+            g_r.compute_at(processed, tx);
+            g_b.compute_at(processed, tx);
+            r_gr.compute_at(processed, tx);
+            b_gr.compute_at(processed, tx);
+            r_gb.compute_at(processed, tx);
+            b_gb.compute_at(processed, tx);
+            r_b.compute_at(processed, tx);
+            b_r.compute_at(processed, tx);
+            // These interleave in x and y, so unrolling them helps
+            output.compute_at(processed, tx).unroll(x, 2).unroll(y, 2)
+                .reorder(c, x, y).bound(c, 0, 3).unroll(c);
+        }
 
         return output;
     }
@@ -234,8 +253,8 @@ class MyPipeline {
 
 
 public:
-    MyPipeline()
-        : input(UInt(16), 2),
+    MyPipeline(bool hw_schedule)
+        : do_hw_schedule(hw_schedule), input(UInt(16), 2),
           matrix_3200(Float(32), 2, "m3200"), matrix_7000(Float(32), 2, "m7000"),
           color_temp("color_temp"), gamma("gamma"), contrast("contrast"),
           args({color_temp, gamma, contrast, input, matrix_3200, matrix_7000})
@@ -272,38 +291,42 @@ public:
             .bound(ty, 0, (out_height/128)*128)
             .bound(c, 0, 3); // bound color loop 0-3, properly
 
-        // Compute in chunks over tiles,
-        processed.tile(tx, ty, xi, yi, 128, 128);
-        processed.tile(xi, yi, x_grid, y_grid, x_in, y_in, 2, 2);
-        processed.reorder(x_in, y_in, c, x_grid, y_grid, tx, ty);
-
-        denoised.compute_at(processed, x_grid).store_at(processed, tx).stream();
-        deinterleaved.compute_at(processed, x_grid).store_at(processed, tx).stream();
-        corrected.compute_at(processed, x_in);
     }
 
     void compile_cpu() {
+        assert(!do_hw_schedule);
         std::cout << "\ncompiling cpu code..." << std::endl;
         //processed.print_loop_nest();
 
-        //output.compile_to_c("pipeline_c.c", args, "pipeline_c");
-        //output.compile_to_header("pipeline_c.h", args, "pipeline_c");
-        //output.compile_to_lowered_stmt("pipeline_native.ir", args);
-        //output.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
-        //processed.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
 
+        // Compute in chunks over tiles
+        denoised.compute_at(processed, tx);
+        deinterleaved.compute_at(processed, tx);
+        corrected.compute_at(processed, tx);
+        processed.tile(tx, ty, xi, yi, 128, 128).reorder(xi, yi, c, tx, ty);
+
+        processed.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
         processed.compile_to_file("pipeline_native", args);
     }
 
 
     void compile_hls() {
+        assert(do_hw_schedule);
         std::cout << "\ncompiling HLS code..." << std::endl;
 
-        demosaiced.accelerate_at(processed, tx, {deinterleaved});
+
+        // Block in chunks over tiles, do line buffering for intermediate functions
+        processed.tile(tx, ty, xi, yi, 128, 128);
+        processed.tile(xi, yi, x_grid, y_grid, x_in, y_in, 2, 2);
+        processed.reorder(x_in, y_in, c, x_grid, y_grid, tx, ty);
+
+        denoised.compute_at(processed, x_grid).store_at(processed, tx);
+        deinterleaved.compute_at(processed, x_grid).store_at(processed, tx).unroll(c);
+        corrected.compute_at(processed, x_in);
+
+        demosaiced.accelerate_at(processed, tx, {denoised});
 
         //processed.print_loop_nest();
-
-        //output.compile_to_lowered_stmt("pipeline_hls.ir", args);
         processed.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
         processed.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
         processed.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
@@ -311,10 +334,10 @@ public:
 };
 
 int main(int argc, char **argv) {
-    MyPipeline p1;
+    MyPipeline p1(false);
     p1.compile_cpu();
 
-    MyPipeline p2;
+    MyPipeline p2(true);
     p2.compile_hls();
     return 0;
 }

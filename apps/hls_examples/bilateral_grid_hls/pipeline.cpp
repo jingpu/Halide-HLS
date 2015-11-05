@@ -98,9 +98,6 @@ public:
         std::cout << "\ncompiling cpu code..." << std::endl;
         //output.print_loop_nest();
 
-        //output.compile_to_c("pipeline_c.c", args, "pipeline_c");
-        //output.compile_to_header("pipeline_c.h", args, "pipeline_c");
-        //output.compile_to_lowered_stmt("pipeline_native.ir", args);
         //output.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
         output.compile_to_header("pipeline_native.h", args, "pipeline_native");
         output.compile_to_object("pipeline_native.o", args, "pipeline_native");
@@ -113,19 +110,9 @@ public:
         hw_output.store_at(output, xo).compute_at(output, x_grid);
         hw_output.accelerate_at(output, xo, {clamped, input2});
 
-        // mark func as stream. TODO remove this in user app
-        clamped.stream();
-        histogram.stream();
-        blurz.stream();
-        blurx.stream();
-        blury.stream();
-        input2.stream();
-        hw_output.stream();
-
         //output.print_loop_nest();
 
-        //output.compile_to_lowered_stmt("pipeline_hls.ir", args);
-        //output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
+        output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
         output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
         output.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
     }

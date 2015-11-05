@@ -282,6 +282,7 @@ SOURCE_FILES = \
   LLVM_Output.cpp \
   LLVM_Runtime_Linker.cpp \
   Lower.cpp \
+  MarkHWKernels.cpp \
   MatlabWrapper.cpp \
   Memoization.cpp \
   Module.cpp \
