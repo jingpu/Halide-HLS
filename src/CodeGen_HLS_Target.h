@@ -56,6 +56,7 @@ protected:
         using CodeGen_HLS_Base::visit;
 
         void visit(const For *op);
+        void visit(const Allocate *op);
     };
 
     /** A name for the HLS target */

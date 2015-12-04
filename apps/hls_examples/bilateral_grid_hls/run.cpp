@@ -14,8 +14,7 @@ using namespace Halide::Tools;
 int main(int argc, char **argv) {
 
     if (argc < 3) {
-        printf("Usage: ./filter input.png output.png\n"
-               "e.g. ./filter input.png output.png\n");
+        printf("Usage: ./run input.png output.png\n");
         return 0;
     }
 
