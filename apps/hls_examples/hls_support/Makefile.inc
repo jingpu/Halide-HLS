@@ -1,4 +1,4 @@
-
+AUTOPILOT_ROOT = /home/jingpu/vivado_hls
 AUTOPILOT_ROOT ?= /cad/xilinx/vivado/2015.2/Vivado_HLS/2015.2
 AUTOPILOT_MACH ?= lnx64
 

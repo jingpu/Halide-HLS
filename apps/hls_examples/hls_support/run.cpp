@@ -46,10 +46,8 @@ bool check_outputs(stream<PackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_
 
 
 void test_1D() {
-    hls::stream<PackedStencil<uint8_t, 1> > input_stream;
-    hls::stream<PackedStencil<uint8_t, 1> > input_ref_stream;
-    hls::stream<PackedStencil<uint8_t, 3> > output_stream;
-    hls::stream<PackedStencil<uint8_t, 3> > output_ref_stream;
+    hls::stream<PackedStencil<uint8_t, 1> > input_stream, input_ref_stream;
+    hls::stream<PackedStencil<uint8_t, 3> > output_stream, output_ref_stream;
 
     gen_inputs<10>(input_stream, input_ref_stream);
 
@@ -65,19 +63,34 @@ void test_1D() {
 
 
 void test_2D() {
-    hls::stream<PackedStencil<uint8_t, 1, 1> > input_stream;
-    hls::stream<PackedStencil<uint8_t, 1, 1> > input_ref_stream;
-    hls::stream<PackedStencil<uint8_t, 5, 5> > output_stream;
-    hls::stream<PackedStencil<uint8_t, 5, 5> > output_ref_stream;
+    hls::stream<PackedStencil<uint8_t, 2, 1> > input_stream, input_ref_stream;
+    hls::stream<PackedStencil<uint8_t, 2, 3> > output_stream, output_ref_stream;
 
-    gen_inputs<260*260>(input_stream, input_ref_stream);
+    gen_inputs<10*12>(input_stream, input_ref_stream);
 
     printf("test linebuffer_2D()... ");
-    linebuffer<260, 260>(input_stream, output_stream);
+    linebuffer<20, 12>(input_stream, output_stream);
     //hls_target(input_stream, output_stream);
-    linebuffer_ref<260, 260>(input_ref_stream, output_ref_stream);
+    linebuffer_ref<20, 12>(input_ref_stream, output_ref_stream);
 
-    if (check_outputs<256*256>(output_stream, output_ref_stream))
+    if (check_outputs<10*10>(output_stream, output_ref_stream))
+	printf("passed!\n");
+    else
+	printf("failed!\n");
+}
+
+void test_3D() {
+    hls::stream<PackedStencil<uint8_t, 2, 2, 1> > input_stream, input_ref_stream;
+    hls::stream<PackedStencil<uint8_t, 2, 2, 3> > output_stream, output_ref_stream;
+
+    gen_inputs<10*10*12>(input_stream, input_ref_stream);
+
+    printf("test linebuffer_3D()... ");
+    linebuffer<20, 20, 12>(input_stream, output_stream);
+    //hls_target(input_stream, output_stream);
+    linebuffer_ref<20, 20, 12>(input_ref_stream, output_ref_stream);
+
+    if (check_outputs<10*10*10>(output_stream, output_ref_stream))
 	printf("passed!\n");
     else
 	printf("failed!\n");
@@ -92,5 +105,6 @@ void syn_target(hls::stream<PackedStencil<uint8_t, 1, 1, 3, 3> > &input_stream,
 int main(int argc, char **argv) {
     test_1D();
     test_2D();
+    test_3D();
     return 0;
 }
