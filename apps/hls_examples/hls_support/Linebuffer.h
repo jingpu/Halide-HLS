@@ -12,13 +12,13 @@ using hls::stream;
 
 template <size_t IMG_EXTENT_0, size_t EXTENT_1, size_t EXTENT_2, size_t EXTENT_3,
 	  size_t IN_EXTENT_0,  size_t OUT_EXTENT_0, typename T>
-void linebuffer_1D(stream<PackedStencil<T, IN_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &in_stream,
-		   stream<PackedStencil<T, OUT_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream) {
+void linebuffer_1D_shift(stream<PackedStencil<T, IN_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &in_stream,
+                         stream<PackedStencil<T, OUT_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream) {
     static_assert(IMG_EXTENT_0 > OUT_EXTENT_0, "image extent not is larger than output.");
     static_assert(OUT_EXTENT_0 > IN_EXTENT_0, "input extent is larger than output."); // TODO handle this situation.
     static_assert(IMG_EXTENT_0 % IN_EXTENT_0 == 0, "image extent is not divisible by input."); // TODO handle this situation.
     static_assert(OUT_EXTENT_0 % IN_EXTENT_0 == 0, "output extent is not divisible by input."); // TODO handle this situation.
-#pragma HLS INLINE
+#pragma HLS INLINE off
 
     const size_t buffer_size = OUT_EXTENT_0 / IN_EXTENT_0;
     PackedStencil<T, IN_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> buffer[buffer_size];  // shift register
@@ -62,6 +62,20 @@ void linebuffer_1D(stream<PackedStencil<T, IN_EXTENT_0, EXTENT_1, EXTENT_2, EXTE
     }
 }
 
+template <size_t IMG_EXTENT_0, size_t EXTENT_1, size_t EXTENT_2, size_t EXTENT_3,
+	  size_t IN_EXTENT_0,  size_t OUT_EXTENT_0, typename T>
+void linebuffer_1D(stream<PackedStencil<T, IN_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &in_stream,
+		   stream<PackedStencil<T, OUT_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream) {
+#pragma HLS INLINE off
+#pragma HLS DATAFLOW
+    static_assert(IMG_EXTENT_0 > OUT_EXTENT_0, "image extent not is larger than output.");
+    static_assert(OUT_EXTENT_0 > IN_EXTENT_0, "input extent is larger than output."); // TODO handle this situation.
+    static_assert(IMG_EXTENT_0 % IN_EXTENT_0 == 0, "image extent is not divisible by input."); // TODO handle this situation.
+    static_assert(OUT_EXTENT_0 % IN_EXTENT_0 == 0, "output extent is not divisible by input."); // TODO handle this situation.
+
+    linebuffer_1D_shift<IMG_EXTENT_0>(in_stream, out_stream);
+}
+
 // An overloaded (trivial) 1D line buffer, where all the input dimensions and
 // the output dimensions are the same size
 template <size_t IMG_EXTENT_0,
@@ -70,7 +84,7 @@ void linebuffer_1D(stream<PackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_
                    stream<PackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream) {
 #pragma HLS INLINE
  LB_1D_pass:for(size_t idx_0 = 0; idx_0 < IMG_EXTENT_0; idx_0 += EXTENT_0) {
-#pragma HLS PIPELINE
+#pragma HLS PIPELINE rewind
         out_stream.write(in_stream.read());
     }
 }
@@ -145,7 +159,8 @@ void linebuffer_2D(stream<PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, EXTENT_2, E
     static_assert(OUT_EXTENT_1 > IN_EXTENT_1, "input extent is larger than output."); // TODO handle this situation.
     static_assert(IMG_EXTENT_1 % IN_EXTENT_1 == 0, "image extent is not divisible by input."); // TODO handle this situation.
     static_assert(OUT_EXTENT_1 % IN_EXTENT_1 == 0, "output extent is not divisible by input."); // TODO handle this situation.
-#pragma HLS INLINE
+#pragma HLS INLINE off
+#pragma HLS DATAFLOW
 
     stream<PackedStencil<T, IN_EXTENT_0, OUT_EXTENT_1, EXTENT_2, EXTENT_3> > col_buf_stream;
 #pragma HLS STREAM variable=col_buf_stream depth=1
@@ -158,7 +173,6 @@ void linebuffer_2D(stream<PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, EXTENT_2, E
     // feed the column stencil stream to 1D line buffer
     const size_t NUM_OF_OUTPUT_1 = (IMG_EXTENT_1 - OUT_EXTENT_1) / IN_EXTENT_1 + 1;
  LB_2D_shift_reg:for (size_t n1 = 0; n1 < NUM_OF_OUTPUT_1; n1++) {
-#pragma HLS loop_flatten off
 	linebuffer_1D<IMG_EXTENT_0>(col_buf_stream, out_stream);
     }
 }
@@ -248,7 +262,8 @@ void linebuffer_3D(stream<PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, IN_EXTENT_2
     static_assert(OUT_EXTENT_2 > IN_EXTENT_2, "input extent is larger than output."); // TODO handle this situation.
     static_assert(IMG_EXTENT_2 % IN_EXTENT_2 == 0, "image extent is not divisible by input."); // TODO handle this situation.
     static_assert(OUT_EXTENT_2 % IN_EXTENT_2 == 0, "output extent is not divisible by input."); // TODO handle this situation.
-#pragma HLS INLINE
+#pragma HLS INLINE off
+#pragma HLS DATAFLOW
 
     stream<PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, OUT_EXTENT_2, EXTENT_3> > col_buf_stream;
 #pragma HLS STREAM variable=col_buf_stream depth=1
@@ -261,7 +276,6 @@ void linebuffer_3D(stream<PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, IN_EXTENT_2
     // feed the column stencil stream to 1D line buffer
     const size_t NUM_OF_OUTPUT_2 = (IMG_EXTENT_2 - OUT_EXTENT_2) / IN_EXTENT_2 + 1;
  LB_3D_shift_reg:for (size_t n2 = 0; n2 < NUM_OF_OUTPUT_2; n2++) {
-#pragma HLS loop_flatten off
 	linebuffer_2D<IMG_EXTENT_0, IMG_EXTENT_1>(col_buf_stream, out_stream);
     }
 }
@@ -299,8 +313,6 @@ void linebuffer(stream<PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, IN_EXTENT_2, I
 		stream<PackedStencil<T, OUT_EXTENT_0, OUT_EXTENT_1, OUT_EXTENT_2, OUT_EXTENT_3> > &out_stream) {
     static_assert(IMG_EXTENT_3 == IN_EXTENT_3 && IMG_EXTENT_3 == OUT_EXTENT_3,
 		  "dont not support 4D line buffer yet.");
-    //static_assert(IMG_EXTENT_2 == IN_EXTENT_2 && IMG_EXTENT_2 == OUT_EXTENT_2,
-    //		  "dont not support 3D line buffer yet.");
 #pragma HLS INLINE
     linebuffer_3D<IMG_EXTENT_0, IMG_EXTENT_1, IMG_EXTENT_2>(in_stream, out_stream);
 }

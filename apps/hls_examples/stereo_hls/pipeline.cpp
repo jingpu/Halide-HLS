@@ -6,8 +6,8 @@ using namespace Halide;
 Var x("x"), y("y"), z("z"), c("c");
 Var x_grid("x_grid"), y_grid("y_grid"), xo("xo"), yo("yo"), x_in("x_in"), y_in("y_in");
 
-int windowR = 4;
-int searchR = 120;
+int windowR = 8;
+int searchR = 64;
 
 class MyPipeline {
 public:
