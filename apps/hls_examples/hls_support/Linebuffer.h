@@ -293,6 +293,19 @@ void linebuffer_3D(stream<PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, EXTENT_2, E
     }
 }
 
+// An overloaded (trivial) 4D line buffer, where input dim 3 and output dim 3 are the same size
+template <size_t IMG_EXTENT_0, size_t IMG_EXTENT_1, size_t IMG_EXTENT_2, size_t IMG_EXTENT_3,
+          size_t IN_EXTENT_0, size_t IN_EXTENT_1, size_t IN_EXTENT_2,
+          size_t OUT_EXTENT_0, size_t OUT_EXTENT_1, size_t OUT_EXTENT_2,
+          size_t EXTENT_3, typename T>
+void linebuffer_4D(stream<PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, IN_EXTENT_2, EXTENT_3> > &in_stream,
+                   stream<PackedStencil<T, OUT_EXTENT_0, OUT_EXTENT_1, OUT_EXTENT_2, EXTENT_3> > &out_stream) {
+#pragma HLS INLINE
+ LB_4D_pass:for(size_t idx_3 = 0; idx_3 < IMG_EXTENT_3; idx_3 += EXTENT_3) {
+	linebuffer_3D<IMG_EXTENT_0, IMG_EXTENT_1, IMG_EXTENT_2>(in_stream, out_stream);
+    }
+}
+
 
 /** A line buffer that buffers a image size [IMG_EXTENT_0, IMG_EXTENT_1, IMG_EXTENT_2].
  * The input is a stencil size [IN_EXTENT_0, IN_EXTENT_1, IN_EXTENT_2], and it traversal
@@ -311,10 +324,9 @@ template <size_t IMG_EXTENT_0, size_t IMG_EXTENT_1=1, size_t IMG_EXTENT_2=1, siz
 	  typename T>
 void linebuffer(stream<PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, IN_EXTENT_2, IN_EXTENT_3> > &in_stream,
 		stream<PackedStencil<T, OUT_EXTENT_0, OUT_EXTENT_1, OUT_EXTENT_2, OUT_EXTENT_3> > &out_stream) {
-    static_assert(IMG_EXTENT_3 == IN_EXTENT_3 && IMG_EXTENT_3 == OUT_EXTENT_3,
-		  "dont not support 4D line buffer yet.");
+    static_assert(OUT_EXTENT_3 == IN_EXTENT_3, "dont not support 4D line buffer yet.");
 #pragma HLS INLINE
-    linebuffer_3D<IMG_EXTENT_0, IMG_EXTENT_1, IMG_EXTENT_2>(in_stream, out_stream);
+    linebuffer_4D<IMG_EXTENT_0, IMG_EXTENT_1, IMG_EXTENT_2, IMG_EXTENT_3>(in_stream, out_stream);
 }
 
 
