@@ -10,7 +10,7 @@ class MyPipeline {
 public:
     ImageParam input;
     std::vector<Argument> args;
-
+    Param<uint8_t> phase; // One bit each for x and y phase
     Func padded;
     Func red, green, blue;
     Func output, hw_output;
@@ -31,17 +31,17 @@ public:
         vNeighbors(x, y) = cast<uint8_t>(padded(x, y-1)/2 + padded(x, y+1)/2);
         hNeighbors(x, y) = cast<uint8_t>(padded(x-1, y)/2 + padded(x+1, y)/2);
 
-        green(x, y) = select((y % 2) == 0,
-             select((x % 2) == 0, neswNeighbors(x, y), padded(x, y)), // First row, RG
-             select((x % 2) == 0, padded(x, y), neswNeighbors(x, y))); // Second row, GB
+        green(x, y) = select((y % 2) == (phase / 2),
+             select((x % 2) == (phase % 2), neswNeighbors(x, y), padded(x, y)), // First row, RG
+             select((x % 2) == (phase % 2), padded(x, y), neswNeighbors(x, y))); // Second row, GB
 
-        red(x, y) = select((y % 2) == 0,
-             select((x % 2) == 0, padded(x, y), hNeighbors(x, y)), // First row, RG
-             select((x % 2) == 0, vNeighbors(x, y), diagNeighbors(x, y))); // Second row, GB
+        red(x, y) = select((y % 2) == (phase / 2),
+             select((x % 2) == (phase % 2), padded(x, y), hNeighbors(x, y)), // First row, RG
+             select((x % 2) == (phase % 2), vNeighbors(x, y), diagNeighbors(x, y))); // Second row, GB
 
-        blue(x, y) = select((y % 2) == 0,
-             select((x % 2) == 0, diagNeighbors(x, y), vNeighbors(x, y)), // First row, RG
-             select((x % 2) == 0, hNeighbors(x, y), padded(x, y))); // Second row, GB
+        blue(x, y) = select((y % 2) == (phase / 2),
+             select((x % 2) == (phase % 2), diagNeighbors(x, y), vNeighbors(x, y)), // First row, RG
+             select((x % 2) == (phase % 2), hNeighbors(x, y), padded(x, y))); // Second row, GB
 
         hw_output(x, y, c) = cast<uint8_t>(select(c == 0, red(x, y),
                                                   c == 1, green(x, y),
@@ -64,7 +64,7 @@ public:
             .bound(y, 0, (out_height/256)*256);
 
         // Arguments
-        args = {input};
+        args = {input, phase};
     }
 
     void compile_cpu() {
@@ -81,7 +81,7 @@ public:
         hw_output.accelerate_at(output, xo, {padded});
 
         //output.print_loop_nest();
-        //output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
+        output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
         output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
         output.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
     }
