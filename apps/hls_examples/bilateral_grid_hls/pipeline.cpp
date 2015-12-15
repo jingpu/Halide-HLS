@@ -202,7 +202,7 @@ public:
         // The comment constraints and schedules.
         output.bound(x, 0, 1024);
         output.bound(y, 0, 1024);
-        output.tile(x, y, xo, yo, x_in, y_in, 256, 256);
+        output.tile(x, y, xo, yo, x_in, y_in, 8, 8);
 
         output_shuffled.compute_root();
         output_shuffled.tile(x_grid, y_grid, xo, yo, x_grid, y_grid, 32, 32);
@@ -225,7 +225,11 @@ public:
 
     void compile_cpu() {
         std::cout << "\ncompiling cpu code..." << std::endl;
-        // output.print_loop_nest();
+        input_shuffled.vectorize(x_in);
+        input2_shuffled.vectorize(x_in);
+        output.vectorize(x_in);
+
+        output.print_loop_nest();
 
         output.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
         output.compile_to_header("pipeline_native.h", args, "pipeline_native");
@@ -249,10 +253,10 @@ public:
 
 int main(int argc, char **argv) {
     MyPipeline p1;
-    p1.compile_cpu();
+    p1.compile_hls();
 
     MyPipelineOpt p2;
-    p2.compile_hls();
+    p2.compile_cpu();
 
     return 0;
 }
