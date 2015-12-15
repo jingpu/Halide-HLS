@@ -9,8 +9,12 @@
 ///Forward declaration
 template <typename T, size_t EXTENT_0, size_t EXTENT_1, size_t EXTENT_2, size_t EXTENT_3> struct Stencil;
 
+#ifndef AP_INT_MAX_W
 //#define AP_INT_MAX_W 32768
+//#define AP_INT_MAX_W 10880
 #define AP_INT_MAX_W 2048
+#endif
+
 #include <ap_int.h>
 
 template <typename T, size_t EXTENT_0, size_t EXTENT_1 = 1, size_t EXTENT_2 = 1, size_t EXTENT_3 = 1>

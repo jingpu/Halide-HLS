@@ -206,7 +206,8 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::add_kernel(Stmt stmt,
     }
 }
 
-
+// almost that same as CodeGen_C::visit(const For *)
+// we just add a 'HLS PIPELINE' pragma after the 'for' statement
 void CodeGen_HLS_Target::CodeGen_HLS_C::visit(const For *op) {
     internal_assert(op->for_type == ForType::Serial)
         << "Can only emit serial for loops to HLS C\n";
@@ -233,6 +234,43 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::visit(const For *op) {
     }
     op->body.accept(this);
     close_scope("for " + print_name(op->name));
+}
+
+
+// most code is copied from CodeGen_C::visit(const Allocate *)
+// we want to check that the allocation size is constant, and
+// add a 'HLS ARRAY_PARTITION' pragma to the allocation
+void CodeGen_HLS_Target::CodeGen_HLS_C::visit(const Allocate *op) {
+    open_scope();
+
+    internal_assert(!op->new_expr.defined());
+    internal_assert(!is_zero(op->condition));
+    int32_t constant_size;
+    if (constant_allocation_size(op->extents, op->name, constant_size)) {
+
+    } else {
+        internal_error << "Size for allocation " << op->name
+                       << " is not a constant.\n";
+    }
+
+    Allocation alloc;
+    alloc.type = op->type;
+    allocations.push(op->name, alloc);
+
+    do_indent();
+    stream << print_type(op->type) << ' '
+           << print_name(op->name)
+           << "[" << constant_size << "];\n";
+    // add a 'ARRAY_PARTITION" pragma
+    stream << "#pragma HLS ARRAY_PARTITION variable=" << print_name(op->name) << " complete dim=0\n\n";
+
+    op->body.accept(this);
+
+    // Should have been freed internally
+    internal_assert(!allocations.contains(op->name));
+
+    close_scope("alloc " + print_name(op->name));
+
 }
 
 }

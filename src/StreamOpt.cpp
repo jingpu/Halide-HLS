@@ -96,7 +96,7 @@ class CreateStencilForFunction : public IRMutator {
             const auto it = dag.kernels.find(kernel_name);
             if (it != dag.kernels.end() &&
                 !it->second.is_inlined) {
-                // if we traverse into a produce node of buffered kernel, record the name
+                // if we traverse into a produce node of non-inlined kernel, record the name
                 internal_assert(in_kernel == "");
                 in_kernel = kernel_name;
                 Stmt produce = mutate(op->produce);
@@ -202,10 +202,9 @@ class CreateStencilForFunction : public IRMutator {
                 Expr old_arg = mutate(op->args[i]);
                 Expr offset;
                 if (kernel.name == in_kernel ||
-                    kernel.is_inlined ||
-                    kernel.name == dag.name) {
+                    kernel.is_output) {
                     // The call is in an update definition of the kernel itself,
-                    // it is a inlined function, or it is the output kernel
+                    // or it is the output kernel
                     offset = kernel.dims[i].min_pos;
                 } else if (kernel.consumer_stencils.size() > 0) {
                     // This is call to kernel in the expr of other kernels (in_kernel),
@@ -217,6 +216,7 @@ class CreateStencilForFunction : public IRMutator {
                         << " in kernel " << kernel.name << "\n";
                     offset = it->second[i].min_pos;
                 }
+                internal_assert(offset.defined());
 
                 Expr new_arg = old_arg - offset;
                 new_arg = simplify(expand_expr(new_arg, scope));
@@ -232,7 +232,7 @@ class CreateStencilForFunction : public IRMutator {
             vector<Expr > new_args(op->args.size());
             bool changed = false;
 
-            // simplify the args
+            // simplify the args. apply aggressive expansion and simplification on expr
             for (size_t i = 0; i < op->args.size(); i++) {
                 Expr old_arg = mutate(op->args[i]);
                 Expr new_arg = simplify(expand_expr(old_arg, scope));
@@ -370,7 +370,7 @@ class AddStreamOperationForFunction : public IRMutator {
             }
 
             Stmt stream_consume = pc->consume;
-            if (kernel.name == dag.name) {
+            if (kernel.is_output) {
                 // Adhoc for the dag output kernel
                 // we need to insert read_stream for the dag here
                 // because it doesn't have any consumer
@@ -973,6 +973,12 @@ class StreamOpt : public IRMutator {
         const HWKernel &kernel = it->second;
         internal_assert(kernel.name == op->name);
         internal_assert(kernel.func.name() == kernel.name);
+
+        // inlined kernels are skipped
+        if (kernel.is_inlined) {
+            IRMutator::visit(op);
+            return;
+        }
         debug(3) << "Find " << kernel << "\n";
 
         Stmt new_body = op->body;
@@ -981,30 +987,28 @@ class StreamOpt : public IRMutator {
         debug(3) << "IR after CreateStencilForFunction pass on Function " << kernel.name
                  << ":\n" << new_body << '\n';
 
-        if (!kernel.is_inlined) {
-            // if the HW kernel is buffered, we try to implement line buffers
-            new_body = AddStreamOperationForFunction(kernel, dag).mutate(new_body);
-            debug(3) << "IR after AddStreamOperationForFunction pass on Function " << kernel.name
+        // if the HW kernel is buffered, we try to implement line buffers
+        new_body = AddStreamOperationForFunction(kernel, dag).mutate(new_body);
+        debug(3) << "IR after AddStreamOperationForFunction pass on Function " << kernel.name
+                 << ":\n" << new_body << '\n';
+
+        new_body = PushLoopsIntoStreamForFunction(kernel).mutate(new_body);
+
+        debug(3) << "IR after PullUpTargetNode pass on Function " << kernel.name
+                 << ":\n" << new_body << '\n';
+
+        // check if we need a line buffer
+        // We skip inserting a line buffer for the output kernel
+        bool insert_linebuffer = true;
+        if (kernel.is_output)
+            insert_linebuffer = false;
+
+        if (insert_linebuffer) {
+            new_body = LinebufferForFunction(kernel).mutate(new_body);
+            debug(3) << "IR after LinebufferForFunction pass on Function " << kernel.name
                      << ":\n" << new_body << '\n';
-
-            new_body = PushLoopsIntoStreamForFunction(kernel).mutate(new_body);
-
-            debug(3) << "IR after PullUpTargetNode pass on Function " << kernel.name
-                     << ":\n" << new_body << '\n';
-
-            // check if we need a line buffer
-            // We skip inserting a line buffer for the output kernel
-            bool insert_linebuffer = true;
-            if (kernel.name == dag.name)
-                insert_linebuffer = false;
-
-            if (insert_linebuffer) {
-                new_body = LinebufferForFunction(kernel).mutate(new_body);
-                debug(3) << "IR after LinebufferForFunction pass on Function " << kernel.name
-                         << ":\n" << new_body << '\n';
-            } else {
-                debug(3) << "Skip inserting linebuffer for Function " << kernel.name << '\n';
-            }
+        } else {
+            debug(3) << "Skip inserting linebuffer for Function " << kernel.name << '\n';
         }
 
         new_body = mutate(new_body);

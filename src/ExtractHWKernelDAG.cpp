@@ -356,7 +356,7 @@ class BuildDAGForFunction : public IRVisitor {
                 dims[i].store_bound = Interval(store_min, store_max);
             }
             HWKernel k(func, func.name());
-            k.is_inlined = false;
+            k.is_output = true;
             k.dims = dims;
             dag.kernels[k.name] = k;
 

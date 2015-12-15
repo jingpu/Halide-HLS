@@ -39,13 +39,14 @@ struct HWKernel {
     Function func;
     std::string name;
     bool is_inlined;
+    bool is_output;
     std::vector<StencilDimSpecs> dims;
     std::vector<std::string> input_streams;  // used when inserting read_stream calls
     std::map<std::string, std::vector<StencilDimSpecs> > consumer_stencils; // used for transforming call nodes and inserting dispatch calls
 
-    HWKernel() {}
+    HWKernel() : is_inlined(false), is_output(false) {}
     HWKernel(Function f, const std::string &s)
-        : func(f), name(s) {}
+        : func(f), name(s), is_inlined(false), is_output(false) {}
 };
 
 struct HWKernelDAG {
