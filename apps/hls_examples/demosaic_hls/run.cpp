@@ -32,12 +32,12 @@ int main(int argc, char **argv) {
 
     printf("start.\n");
 
-    pipeline_native(input, out_native);
+    pipeline_native(input, 3, out_native);
     save_image(out_native, "demosaicked.png");
 
     printf("finish running native code\n");
 
-    pipeline_hls(input, out_hls);
+    pipeline_hls(input, 3, out_hls);
 
     printf("finish running HLS code\n");
 

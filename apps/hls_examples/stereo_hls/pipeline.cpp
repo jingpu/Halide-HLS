@@ -6,8 +6,10 @@ using namespace Halide;
 Var x("x"), y("y"), z("z"), c("c");
 Var x_grid("x_grid"), y_grid("y_grid"), xo("xo"), yo("yo"), x_in("x_in"), y_in("y_in");
 
-int windowR = 8;
+int windowR = 4;
 int searchR = 64;
+//int windowR = 8;
+//int searchR = 120;
 
 class MyPipeline {
 public:
@@ -33,18 +35,20 @@ public:
         right_remapped = rectify_float(right_padded, right_remap_padded);
         left_remapped = rectify_float(left_padded, left_remap_padded);
 
-        SAD(x, y, c) = sum(cast<uint16_t>(absd(right_remapped(x+win.x, y+win.y),
-                                               left_remapped(x+win.x+20+c, y+win.y))));
-        offset(x, y) = argmin(SAD(x, y, search.x))[0];
+        SAD(x, y, c) += cast<uint16_t>(absd(right_remapped(x+win.x, y+win.y),
+                                            left_remapped(x+win.x+20+c, y+win.y)));
 
-        hw_output(x, y) = cast<uint8_t>(offset(x, y) * 255 / searchR);
+        // offset(x, y) = argmin(SAD(x, y, search.x))[0];
+        offset(x, y) = {cast<int32_t>(0), cast<uint16_t>(65535)};
+        offset(x, y) = {select(SAD(x, y, search.x) < offset(x, y)[1], cast<int32_t>(search.x),
+                               offset(x, y)[0]),
+                        min(SAD(x, y, search.x), offset(x, y)[1])};
+
+        hw_output(x, y) = cast<uint8_t>(cast<uint32_t>(offset(x, y)[0]) * 255 / searchR);
         output(x, y) = hw_output(x, y);
 
         // The comment constraints and schedules.
-        //output.bound(x, 0, 1024);
-        //output.bound(y, 0, 1024);
         output.tile(x, y, xo, yo, x_in, y_in, 256, 256);
-        //output.tile(x_in, y_in, x_grid, y_grid, x_in, y_in, 8, 8);
 
         right_remapped.store_at(output, xo).compute_at(output, x_in);
         left_remapped.store_at(output, xo).compute_at(output, x_in);
@@ -70,6 +74,9 @@ public:
 
     void compile_hls() {
         std::cout << "\ncompiling HLS code..." << std::endl;
+
+        SAD.update(0).unroll(win.x).unroll(win.y);
+        offset.update(0).unroll(search.x, 4);
 
         hw_output.store_at(output, xo).compute_at(output, x_in);
         hw_output.accelerate_at(output, xo, {right_remapped, left_remapped});
