@@ -14,8 +14,8 @@ using namespace Halide::Tools;
 int main(int argc, char **argv) {
 
     Image<uint8_t> input = load_image(argv[1]);
-    Image<uint8_t> out_native(input.width(), input.height(), 3);
-    Image<uint8_t> out_hls(input.width(), input.height(), 3);
+    Image<uint8_t> out_native(input.width(), input.height(), input.channels());
+    Image<uint8_t> out_hls(input.width(), input.height(), input.channels());
 
     printf("start.\n");
 
@@ -24,7 +24,6 @@ int main(int argc, char **argv) {
 
     printf("finished running native code\n");
 
-    //    /*    
     pipeline_hls(input, out_hls);
 
     printf("finished running HLS code\n");
@@ -43,6 +42,4 @@ int main(int argc, char **argv) {
     if (success)
         return 0;
     else return 1;
-    //    */
-    return 0;
 }

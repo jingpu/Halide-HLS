@@ -18,7 +18,7 @@ run: run.cpp pipeline_native.o pipeline_hls.cpp hls_target.cpp
 	$(CXX) $(CXXFLAGS) $(HLS_CXXFLAGS) -g -Wall -Werror $^  -lpthread -ldl -o $@  $(PNGFLAGS)
 
 corners.png: run
-	./run gray.png
+	./run ../../images/gray_small.png
 
 clean:
 	rm -f pipeline run corners.png

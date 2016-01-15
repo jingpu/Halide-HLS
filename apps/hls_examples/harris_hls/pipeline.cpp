@@ -7,6 +7,9 @@ Var x("x"), y("y"), c("c");
 Var xo("xo"), yo("yo"), xi("xi"), yi("yi"), tile_index("ti");
 Var xio("xio"), yio("yio"), xv("xv"), yp("yp");
 
+bool use_threadhold = true;
+uint8_t threadhold = 4;
+
 class MyPipeline {
 
 public:
@@ -62,19 +65,29 @@ public:
       window_max(x,y) = maximum(harris(x+r7.x, y+r7.y));
       harris_local(x,y) = select( harris(x,y) == window_max(x,y), harris(x,y),0);
 
+      if (use_threadhold) {
+          harris_supp(x, y) = select( harris_local(x, y) >= threadhold, cast<uint8_t>(255), 0);
+      } else {
       // threshold at 1/8 of maximum value of entire image
       RDom full_range(0, input.width(), 0, input.height());
       threshold_val(x,y) = maximum(harris(x+full_range.x, y+full_range.y)) >> 3;
       harris_supp(x,y) = select( harris_local(x,y) >= threshold_val(0,0), cast<uint8_t>(255), 0 );
+      }
     }
 
     // Output image of coners and orientation
     {
-      output(x,y) = harris_supp(x,y);
-      hw_output(x,y) = output(x,y);
+      hw_output(x,y) = harris_supp(x,y);
+      output(x,y) = hw_output(x,y);
     }
 
     // schedule
+    output.tile(x, y, xo, yo, xi, yi, 256, 256);
+    padded.store_at(output, xo).compute_at(output, xi);
+    harris.store_at(output, xo).compute_at(output, xi);
+
+
+    /*
     harris.compute_root();
     threshold_val.compute_root();
 
@@ -87,6 +100,7 @@ public:
       .tile(xi,yi,xio,yio,xv,yp,4,8)
       .vectorize(xv)
       .unroll(yp);
+    */
 
     // Arguments
     args = {input};
@@ -103,10 +117,11 @@ public:
   void compile_hls() {
     std::cout << "\ncompiling HLS code..." << std::endl;
 
+    hw_output.store_at(output, xo).compute_at(output, xi);
     hw_output.accelerate_at(output, xo, {padded});
 
     //output.print_loop_nest();
-    //output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
+    output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
     output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
     output.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
   }
