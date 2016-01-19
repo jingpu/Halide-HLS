@@ -14,7 +14,7 @@ template <size_t IMG_EXTENT_0, size_t EXTENT_1, size_t EXTENT_2, size_t EXTENT_3
 	  size_t IN_EXTENT_0,  size_t OUT_EXTENT_0, typename T>
 void linebuffer_1D_shift(stream<PackedStencil<T, IN_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &in_stream,
                          stream<PackedStencil<T, OUT_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream) {
-    static_assert(IMG_EXTENT_0 > OUT_EXTENT_0, "image extent not is larger than output.");
+    static_assert(IMG_EXTENT_0 >= OUT_EXTENT_0, "image extent not is larger than output.");
     static_assert(OUT_EXTENT_0 > IN_EXTENT_0, "input extent is larger than output."); // TODO handle this situation.
     static_assert(IMG_EXTENT_0 % IN_EXTENT_0 == 0, "image extent is not divisible by input."); // TODO handle this situation.
     static_assert(OUT_EXTENT_0 % IN_EXTENT_0 == 0, "output extent is not divisible by input."); // TODO handle this situation.
@@ -68,7 +68,7 @@ void linebuffer_1D(stream<PackedStencil<T, IN_EXTENT_0, EXTENT_1, EXTENT_2, EXTE
 		   stream<PackedStencil<T, OUT_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream) {
 #pragma HLS INLINE off
 #pragma HLS DATAFLOW
-    static_assert(IMG_EXTENT_0 > OUT_EXTENT_0, "image extent not is larger than output.");
+    static_assert(IMG_EXTENT_0 >= OUT_EXTENT_0, "image extent not is larger than output.");
     static_assert(OUT_EXTENT_0 > IN_EXTENT_0, "input extent is larger than output."); // TODO handle this situation.
     static_assert(IMG_EXTENT_0 % IN_EXTENT_0 == 0, "image extent is not divisible by input."); // TODO handle this situation.
     static_assert(OUT_EXTENT_0 % IN_EXTENT_0 == 0, "output extent is not divisible by input."); // TODO handle this situation.
@@ -155,7 +155,7 @@ template <size_t IMG_EXTENT_0, size_t IMG_EXTENT_1, size_t EXTENT_2, size_t EXTE
 	  size_t OUT_EXTENT_0, size_t OUT_EXTENT_1, typename T>
 void linebuffer_2D(stream<PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, EXTENT_2, EXTENT_3> > &in_stream,
                    stream<PackedStencil<T, OUT_EXTENT_0, OUT_EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream) {
-    static_assert(IMG_EXTENT_1 > OUT_EXTENT_1, "output extent is larger than image.");
+    static_assert(IMG_EXTENT_1 >= OUT_EXTENT_1, "output extent is larger than image.");
     static_assert(OUT_EXTENT_1 > IN_EXTENT_1, "input extent is larger than output."); // TODO handle this situation.
     static_assert(IMG_EXTENT_1 % IN_EXTENT_1 == 0, "image extent is not divisible by input."); // TODO handle this situation.
     static_assert(OUT_EXTENT_1 % IN_EXTENT_1 == 0, "output extent is not divisible by input."); // TODO handle this situation.
@@ -258,7 +258,7 @@ template <size_t IMG_EXTENT_0, size_t IMG_EXTENT_1, size_t IMG_EXTENT_2, size_t 
 	  size_t OUT_EXTENT_0, size_t OUT_EXTENT_1,  size_t OUT_EXTENT_2, typename T>
 void linebuffer_3D(stream<PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, IN_EXTENT_2, EXTENT_3> > &in_stream,
                    stream<PackedStencil<T, OUT_EXTENT_0, OUT_EXTENT_1, OUT_EXTENT_2, EXTENT_3> > &out_stream) {
-    static_assert(IMG_EXTENT_2 > OUT_EXTENT_2, "output extent is larger than image.");
+    static_assert(IMG_EXTENT_2 >= OUT_EXTENT_2, "output extent is larger than image.");
     static_assert(OUT_EXTENT_2 > IN_EXTENT_2, "input extent is larger than output."); // TODO handle this situation.
     static_assert(IMG_EXTENT_2 % IN_EXTENT_2 == 0, "image extent is not divisible by input."); // TODO handle this situation.
     static_assert(OUT_EXTENT_2 % IN_EXTENT_2 == 0, "output extent is not divisible by input."); // TODO handle this situation.
