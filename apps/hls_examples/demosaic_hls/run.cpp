@@ -30,6 +30,7 @@ int main(int argc, char **argv) {
     Image<uint8_t> out_native(input.width(), input.height(), 3);
     Image<uint8_t> out_hls(input.width(), input.height(), 3);
 
+
     printf("start.\n");
 
     pipeline_native(input, 3, out_native);
@@ -55,4 +56,30 @@ int main(int argc, char **argv) {
     if (success)
         return 0;
     else return 1;
+
+    /*
+    FILE *ptr;
+    ptr = fopen("raw", "wb");
+    uint8_t in_pixel[1];
+    for (int y = 0; y < 480; y++) {
+        for (int x = 0; x < 640; x++) {
+            in_pixel[0] = input(x, y);
+            fwrite(in_pixel, sizeof(in_pixel), 1, ptr);
+        }
+    }
+    fclose(ptr);
+
+    ptr = fopen("dump_ref", "wb");
+    uint8_t out_pixel[4];
+    for (int y = 1; y < 1 + 480; y++) {
+        for (int x = 1; x < 1 + 640; x++) {
+            out_pixel[0] = out_native(x, y, 0);
+            out_pixel[1] = out_native(x, y, 1);
+            out_pixel[2] = out_native(x, y, 2);
+            out_pixel[3] = 0;
+            fwrite(out_pixel, sizeof(out_pixel), 1, ptr);
+        }
+    }
+    fclose(ptr);
+    */
 }
