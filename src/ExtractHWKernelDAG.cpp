@@ -409,10 +409,7 @@ class BuildDAGForFunction : public IRVisitor {
                         cur_kernel.is_inlined = false;
                         debug(3) << "[buffered]\n";
                     } else {
-                        // This must be a inlined non-pure function
-                        internal_assert(!cur_func.is_pure() &&
-                                        cur_func.schedule().compute_level().is_inline() &&
-                                        cur_func.schedule().store_level().is_inline());
+                        // It is a function "inlined" into a buffered kernel
                         cur_kernel.is_inlined = true;
                         debug(3) << "[inlined]\n";
                     }

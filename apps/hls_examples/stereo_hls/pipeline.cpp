@@ -24,7 +24,7 @@ public:
         : left(UInt(8), 3), right(UInt(8), 3),
           left_remap(UInt(8), 3), right_remap(UInt(8), 3),
           SAD("SAD"), offset("offset"), output("output"), hw_output("hw_output"),
-          win(-windowR, windowR*2+1, -windowR, windowR*2+1),
+          win(-windowR, windowR*2, -windowR, windowR*2),
           search(0, searchR)
     {
         right_padded = BoundaryConditions::constant_exterior(right, 0);
@@ -38,13 +38,16 @@ public:
         SAD(x, y, c) += cast<uint16_t>(absd(right_remapped(x+win.x, y+win.y),
                                             left_remapped(x+win.x+20+c, y+win.y)));
 
-        // offset(x, y) = argmin(SAD(x, y, search.x))[0];
-        offset(x, y) = {cast<int32_t>(0), cast<uint16_t>(65535)};
-        offset(x, y) = {select(SAD(x, y, search.x) < offset(x, y)[1], cast<int32_t>(search.x),
+        //offset(x, y) = argmin(SAD(x, y, search.x));
+        // avoid using the form of the inlined reduction function of "argmin",
+        // so that we can get a handle for scheduling
+        offset(x, y) = {cast<int8_t>(0), cast<uint16_t>(65535)};
+        offset(x, y) = {select(SAD(x, y, search.x) < offset(x, y)[1],
+                               cast<int8_t>(search.x),
                                offset(x, y)[0]),
                         min(SAD(x, y, search.x), offset(x, y)[1])};
 
-        hw_output(x, y) = cast<uint8_t>(cast<uint32_t>(offset(x, y)[0]) * 255 / searchR);
+        hw_output(x, y) = cast<uint8_t>(cast<uint16_t>(offset(x, y)[0]) * 255 / searchR);
         output(x, y) = hw_output(x, y);
 
         // The comment constraints and schedules.
@@ -75,8 +78,12 @@ public:
     void compile_hls() {
         std::cout << "\ncompiling HLS code..." << std::endl;
 
-        SAD.update(0).unroll(win.x).unroll(win.y);
-        offset.update(0).unroll(search.x, 4);
+        RVar so("so"), si("si");
+        //offset.update(0).unroll(search.x, 16); // the unrolling doesn's generate code that balances the computation, creating a long critical path
+        offset.update(0).split(search.x, so, si, 16);
+        SAD.compute_at(offset, so);
+        SAD.unroll(c);
+        SAD.update(0).unroll(win.x).unroll(win.y).unroll(c);
 
         hw_output.store_at(output, xo).compute_at(output, x_in);
         hw_output.accelerate_at(output, xo, {right_remapped, left_remapped});
