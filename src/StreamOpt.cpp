@@ -356,6 +356,18 @@ class AddStreamOperationForFunction : public IRMutator {
             // syntax for write_stream()
             // write_stream(des_stream, src_stencil)
             vector<Expr> write_args({stream_var, stencil_var});
+            if (kernel.is_output) {
+                // for dag output kernel, we want to record the scan loop vars,
+                // so that code gen knows when to assert TLAST signal
+                for (size_t i = 0; i < kernel.dims.size(); i++) {
+                    if (kernel.dims[i].loop_var != "undef") {
+                        Expr loop_var = Variable::make(Int(32), kernel.dims[i].loop_var);
+                        Expr loop_max = Variable::make(Int(32), kernel.dims[i].loop_var+".loop_max");
+                        write_args.push_back(loop_var);
+                        write_args.push_back(loop_max);
+                    }
+                 }
+            }
             Stmt write_call = Evaluate::make(Call::make(Handle(), "write_stream", write_args, Call::Intrinsic));
 
             // realize and PC node for func.stencil

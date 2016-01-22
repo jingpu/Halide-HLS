@@ -96,14 +96,71 @@ void CodeGen_HLS_Base::visit(const Call *op) {
         stream << "buffer_to_stencil(" << a0 << ", " << a1 << ");\n";
         id = "0"; // skip evaluation
     } else if (op->name == "write_stream") {
-        // IR: write_stream(buffered.stencil_update.stream, buffered.stencil_update)
-        // C: buffered_stencil_update_stream.write(buffered_stencil_update);
-        internal_assert(op->args.size() == 2);
-        string a0 = print_expr(op->args[0]);
-        string a1 = print_expr(op->args[1]);
-        do_indent();
-        stream << a0 << ".write(" << a1 << ");\n";
-        id = "0"; // skip evaluation
+        if (op->args.size() == 2) {
+            // normal case
+            // IR: write_stream(buffered.stencil_update.stream, buffered.stencil_update)
+            // C: buffered_stencil_update_stream.write(buffered_stencil_update);
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            do_indent();
+            stream << a0 << ".write(" << a1 << ");\n";
+            id = "0"; // skip evaluation
+        } else {
+            // write stream call for the dag output kernel
+            // IR: write_stream(output.stencil.stream, output.stencil, loop_var_1, loop_max_1, ...)
+            // C:  PackedStencil<uint8_t, 1, 1, 1> _output_stencil_packed = _output_stencil;
+            //     if (_loop_var_1 == loop_max_1 && ...)
+            //       _output_stencil_packed.last = 1;
+            //     else
+            //       _output_stencil_packed.last = 0;
+            //     _output_stencil_stream.write(_output_stencil_packed);
+            internal_assert(op->args.size() > 2 && op->args.size() % 2 == 0);
+            const Variable *stream_var = op->args[0].as<Variable>();
+            const Variable *stencil_var = op->args[1].as<Variable>();
+            internal_assert(stream_var && stencil_var);
+            string stream_name = stream_var->name;
+            string stencil_name = stencil_var->name;
+            string packed_stencil_name = stencil_name + "_packed";
+
+            internal_assert(stencils.contains(stencil_name));
+            Stencil_Type stencil_type = stencils.get(stencil_name);
+            internal_assert(stencil_type.type == Stencil_Type::StencilContainerType::Stencil);
+
+            // emit code declaring the packed stencil
+            do_indent();
+            stream << "Packed" << print_stencil_type(stencil_type)
+                   << print_name(packed_stencil_name) << " = "
+                   << print_name(stencil_name) << ";\n";
+
+            // emit code asserting TLAST
+            vector<string> loop_vars, loop_maxes;
+            for (size_t i = 2; i < op->args.size(); i += 2) {
+                loop_vars.push_back(print_expr(op->args[i]));
+                loop_maxes.push_back(print_expr(op->args[i+1]));
+            }
+            do_indent();
+            stream << "if (";
+            for (size_t i = 0; i < loop_vars.size(); i++) {
+                stream << loop_vars[i] << " == " << loop_maxes[i];
+                if (i < loop_vars.size() - 1)
+                    stream << " && ";
+            }
+            stream << ") {\n";
+            do_indent();
+            stream << ' ' << print_name(packed_stencil_name) << ".last = 1;\n";
+            do_indent();
+            stream << "} else {\n";
+            do_indent();
+            stream << ' ' << print_name(packed_stencil_name) << ".last = 0;\n";
+            do_indent();
+            stream << "}\n";
+
+            // emit code writing stream
+            do_indent();
+            stream << print_name(stream_name) << ".write("
+                   << print_name(packed_stencil_name) << ");\n";
+            id = "0"; // skip evaluation
+        }
     } else if (op->name == "read_stream") {
         internal_assert(op->args.size() == 2 || op->args.size() == 3);
         string a1 = print_expr(op->args[1]);
@@ -148,6 +205,7 @@ void CodeGen_HLS_Base::visit(const Call *op) {
         stream << "// dispatch_stream(";
         for(size_t i = 0; i < args.size(); i++) {
             stream << args[i];
+
             if (i != args.size() - 1)
                 stream << ", ";
         }
