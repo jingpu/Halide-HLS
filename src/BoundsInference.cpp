@@ -584,6 +584,17 @@ public:
                         }
                     }
 
+                    // Dump out the region required of each stage for debugging.
+                    /*
+                    debug(0) << "Box required of " << producer.name
+                             << " by " << consumer.name
+                             << " stage " << consumer.stage << ":\n";
+                    for (size_t k = 0; k < b.size(); k++) {
+                        debug(0) << "  " << b[k].min << " ... " << b[k].max << "\n";
+                    }
+                    debug(0) << "\n";
+                    */
+
                     producer.bounds[make_pair(consumer.name, consumer.stage)] = b;
                     producer.consumers.push_back((int)i);
                 }
@@ -621,25 +632,6 @@ public:
                 s.bounds[make_pair(s.name, s.stage)] = output_box;
             }
         }
-
-        // Dump out the region required of each stage for debugging.
-        /*
-        for (size_t i = 0; i < stages.size(); i++) {
-            debug(0) << "Region required of " << stages[i].name
-                     << " stage " << stages[i].stage << ":\n";
-            for (size_t j = 0; j < stages[i].consumers.size(); j++) {
-                const Stage &consumer = stages[stages[i].consumers[j]];
-                debug(0) << " for consumer " << consumer.name
-                         << "  stage " << consumer.stage << ":\n";
-
-                const Box &bounds = stages[i].bounds[make_pair(consumer.name, consumer.stage)];
-                for (size_t k = 0; k < bounds.size(); k++) {
-                    debug(0) << "  [" << simplify(bounds[k].min) << ", " << simplify(bounds[k].max) << "] when " << bounds.used << "\n";
-                }
-            }
-            debug(0) << "\n";
-        }
-        */
     }
 
     using IRMutator::visit;
