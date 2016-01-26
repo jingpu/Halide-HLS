@@ -1129,6 +1129,16 @@ Stmt schedule_functions(const vector<Function> &outputs,
             is_output |= o.same_as(f);
         }
 
+        // if the function is linebuffered hardware kernel,
+        // copy the compute and store levels from the accelerator
+        // pipeline exit function
+        if (f.schedule().is_hw_kernel() && f.schedule().is_linebuffered()) {
+            internal_assert(env.count(f.schedule().accelerate_exit()));
+            Function func_exit = env.find(f.schedule().accelerate_exit())->second;
+            f.schedule().compute_level() = func_exit.schedule().compute_level();
+            f.schedule().store_level() = func_exit.schedule().store_level();
+        }
+
         validate_schedule(f, s, is_output);
 
         if (f.has_pure_definition() &&

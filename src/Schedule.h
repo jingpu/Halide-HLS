@@ -199,6 +199,12 @@ public:
     bool &is_hw_kernel();
     // @}
 
+    /** Function is a linebuffered hw kernel? */
+    // @{
+    bool is_linebuffered() const;
+    bool &is_linebuffered();
+    // @}
+
     /** Is accelerated using hardware? */
     // @{
     bool is_accelerated() const;
@@ -211,6 +217,11 @@ public:
     std::set<std::string> &accelerate_inputs();
     // @}
 
+    /** The output functions of the hardware accelerator pipeline. */
+    // @{
+    std::string accelerate_exit() const;
+    std::string &accelerate_exit();
+    // @}
 
     /** Are race conditions permitted? */
     // @{

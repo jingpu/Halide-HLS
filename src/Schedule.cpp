@@ -21,13 +21,15 @@ struct ScheduleContents {
     bool memoized;
     bool touched;
     bool allow_race_conditions;
-    bool is_hw_kernel;
-    bool is_accelerated;
+    bool is_hw_kernel;   // TODO equivalent to !accelerate_exit.empty()
+    bool is_accelerated;  // TODO equivalent to !accelerate_input.empty()
+    bool is_linebuffered;
     std::set<std::string> accelerate_inputs;
+    std::string accelerate_exit;
 
     ScheduleContents()
         : memoized(false), touched(false), allow_race_conditions(false),
-          is_hw_kernel(false), is_accelerated(false) {};
+          is_hw_kernel(false), is_accelerated(false), is_linebuffered(false) {};
 };
 
 
@@ -148,12 +150,28 @@ bool &Schedule::is_accelerated() {
     return contents.ptr->is_accelerated;
 }
 
+bool Schedule::is_linebuffered() const {
+    return contents.ptr->is_linebuffered;
+}
+
+bool &Schedule::is_linebuffered() {
+    return contents.ptr->is_linebuffered;
+}
+
 std::set<std::string> Schedule::accelerate_inputs() const{
     return contents.ptr->accelerate_inputs;
 }
 
 std::set<std::string> &Schedule::accelerate_inputs() {
     return contents.ptr->accelerate_inputs;
+}
+
+std::string Schedule::accelerate_exit() const{
+    return contents.ptr->accelerate_exit;
+}
+
+std::string &Schedule::accelerate_exit() {
+    return contents.ptr->accelerate_exit;
 }
 
 bool &Schedule::allow_race_conditions() {

@@ -86,7 +86,7 @@ public:
         SAD.update(0).unroll(win.x).unroll(win.y).unroll(c);
 
         hw_output.store_at(output, xo).compute_at(output, x_in);
-        hw_output.accelerate_at(output, xo, {right_remapped, left_remapped});
+        hw_output.accelerate({right_remapped, left_remapped});
 
         //output.print_loop_nest();
 

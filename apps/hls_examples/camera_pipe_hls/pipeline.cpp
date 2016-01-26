@@ -319,11 +319,12 @@ public:
         processed.tile(xi, yi, x_grid, y_grid, x_in, y_in, 2, 2);
         processed.reorder(x_in, y_in, c, x_grid, y_grid, tx, ty);
 
-        denoised.compute_at(processed, x_grid).store_at(processed, tx);
-        deinterleaved.compute_at(processed, x_grid).store_at(processed, tx).unroll(c);
         corrected.compute_at(processed, x_in);
 
-        demosaiced.accelerate_at(processed, tx, {denoised});
+        // hardware pipeline from denoised to demosaiced
+        demosaiced.accelerate({denoised});
+        denoised.linebuffer();
+        deinterleaved.linebuffer().unroll(c);
 
         //processed.print_loop_nest();
         processed.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);

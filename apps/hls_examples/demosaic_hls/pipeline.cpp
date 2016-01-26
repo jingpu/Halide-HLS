@@ -52,9 +52,6 @@ public:
         output.tile(x, y, xo, yo, xi, yi, 256, 256);
         output.reorder(c, xi, yi, xo, yo);
 
-        padded.store_at(output, xo).compute_at(output, xi);
-        hw_output.store_at(output, xo).compute_at(output, xi).unroll(c);
-
         // common constraints
         output.bound(c, 0, 3);
         // We can generate slightly better code if we know the output is a whole number of tiles.
@@ -78,7 +75,9 @@ public:
     void compile_hls() {
         std::cout << "\ncompiling HLS code..." << std::endl;
 
-        hw_output.accelerate_at(output, xo, {padded});
+        hw_output.accelerate({padded});
+        hw_output.store_at(output, xo).compute_at(output, xi).unroll(c);
+        padded.linebuffer();
 
         //output.print_loop_nest();
         output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);

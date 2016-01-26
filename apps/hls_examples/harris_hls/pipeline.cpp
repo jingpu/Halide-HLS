@@ -83,8 +83,6 @@ public:
 
     // schedule
     output.tile(x, y, xo, yo, xi, yi, 256, 256);
-    padded.store_at(output, xo).compute_at(output, xi);
-    harris.store_at(output, xo).compute_at(output, xi);
 
 
     /*
@@ -108,6 +106,10 @@ public:
 
   void compile_cpu() {
     std::cout << "\ncompiling cpu code..." << std::endl;
+
+    padded.store_at(output, xo).compute_at(output, xi);
+    harris.store_at(output, xo).compute_at(output, xi);
+
     //output.print_loop_nest();
     //output.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
     output.compile_to_header("pipeline_native.h", args, "pipeline_native");
@@ -118,7 +120,9 @@ public:
     std::cout << "\ncompiling HLS code..." << std::endl;
 
     hw_output.store_at(output, xo).compute_at(output, xi);
-    hw_output.accelerate_at(output, xo, {padded});
+    hw_output.accelerate({padded});
+    padded.linebuffer();
+    harris.linebuffer();
 
     //output.print_loop_nest();
     output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);

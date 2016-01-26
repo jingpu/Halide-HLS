@@ -1463,9 +1463,12 @@ public:
     EXPORT Func &store_root();
 
     /** Schedule a function onto the hardware accelerator.
-     * Extract the pipeline from inputs to this function at
-     * f.var loop level.*/
-    EXPORT Func &accelerate_at(Func f, Var var, const std::vector<Func> &inputs);
+     * Extract the pipeline from inputs to this function.*/
+    EXPORT Func &accelerate(const std::vector<Func> &inputs);
+
+    /** Schedule a function to be linebuffered.
+     */
+    EXPORT Func &linebuffer();
 
     /** Insert a buffer before this function.
      * The buffered function will be stored as buffered.

@@ -34,10 +34,8 @@ public:
         hw_output = convolve55_rd(conv1);
         output(x, y, c) = hw_output(x, y, c);
 
-        // define common schedule: tile output, and linebuffer the intermediate
+        // define common schedule: tile output
         output.tile(x, y, xo, yo, xi, yi, 256, 256);
-        conv1.store_at(output, xo).compute_at(output, xi);
-        clamped.store_at(output, xo).compute_at(output, xi);
 
         // restrict arguments
         weight.set_bounds(0, 0, 5);
@@ -52,8 +50,11 @@ public:
 
     void compile_cpu() {
         std::cout << "\ncompiling cpu code..." << std::endl;
-        //output.print_loop_nest();
 
+        conv1.store_at(output, xo).compute_at(output, xi);
+        clamped.store_at(output, xo).compute_at(output, xi);
+
+        //output.print_loop_nest();
         output.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
         output.compile_to_header("pipeline_native.h", args, "pipeline_native");
         output.compile_to_object("pipeline_native.o", args, "pipeline_native");
@@ -65,8 +66,12 @@ public:
         // HLS schedule: make a hw pipeline producing 'hw_output', taking
         // inputs of 'clamped', buffering intermediates at (output, xo) loop
         // level
-        hw_output.store_at(output, xo).compute_at(output, xi);
-        hw_output.accelerate_at(output, xo, {clamped});
+        hw_output.accelerate({clamped});  // define the inputs and the output
+        hw_output.store_at(output, xo);   // define the tile size processed by the pipeline
+        hw_output.compute_at(output, xi); // define the throughput of the pipeline
+
+        clamped.linebuffer();  // line-buffer the inputs is required
+        conv1.linebuffer();    // line-buffer an intermediate stage is optional
 
         //output.print_loop_nest();
         output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);

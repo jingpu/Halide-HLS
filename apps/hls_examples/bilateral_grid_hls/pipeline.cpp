@@ -106,7 +106,7 @@ public:
         std::cout << "\ncompiling HLS code..." << std::endl;
 
         hw_output.store_at(output, xo).compute_at(output, x_grid);
-        hw_output.accelerate_at(output, xo, {clamped, input2});
+        hw_output.accelerate({clamped, input2});
 
         //output.print_loop_nest();
 
@@ -229,7 +229,7 @@ public:
         input2_shuffled.vectorize(x_in);
         output.vectorize(x_in);
 
-        output.print_loop_nest();
+        //output.print_loop_nest();
 
         output.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
         output.compile_to_header("pipeline_native.h", args, "pipeline_native");
@@ -241,7 +241,7 @@ public:
         std::cout << "\ncompiling HLS code..." << std::endl;
 
         hw_output.store_at(output_shuffled, xo).compute_at(output_shuffled, x_grid);
-        hw_output.accelerate_at(output_shuffled, xo, {input_shuffled, input2_shuffled});
+        hw_output.accelerate({input_shuffled, input2_shuffled});
 
         //output.print_loop_nest();
 
@@ -253,10 +253,10 @@ public:
 
 int main(int argc, char **argv) {
     MyPipeline p1;
-    p1.compile_hls();
+    p1.compile_cpu();
 
     MyPipelineOpt p2;
-    p2.compile_cpu();
+    p2.compile_hls();
 
     return 0;
 }

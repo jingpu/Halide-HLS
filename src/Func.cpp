@@ -1137,16 +1137,21 @@ Func &Func::store_root() {
     return *this;
 }
 
-Func &Func::accelerate_at(Func f, Var var, const vector<Func> &inputs) {
+Func &Func::accelerate(const vector<Func> &inputs) {
     invalidate_cache();
-    store_at(f, var);
     func.schedule().is_accelerated() = true;
-
+    // save the inputs of the accelerator pipeline in the schedule
     for (size_t i = 0; i < inputs.size(); i++) {
         func.schedule().accelerate_inputs().insert(inputs[i].name());
     }
-
+    // mark metadata onto all the halide functions in the pipeline
     mark_hw_kernels(this->function(), func.schedule().accelerate_inputs());
+    return *this;
+}
+
+Func &Func::linebuffer() {
+    invalidate_cache();
+    func.schedule().is_linebuffered() = true;
     return *this;
 }
 

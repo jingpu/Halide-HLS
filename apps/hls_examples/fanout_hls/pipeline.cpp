@@ -52,7 +52,7 @@ public:
         // inputs of 'clamped', buffering intermediates at (output, xo) loop
         // level
         hw_output.store_at(output, xo).compute_at(output, xi);
-        hw_output.accelerate_at(output, xo, {A});
+        hw_output.accelerate({A});
 
         //output.print_loop_nest();
         output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
