@@ -1,4 +1,4 @@
-AUTOPILOT_ROOT ?= /cad/xilinx/vivado/2015.2/Vivado_HLS/2015.2
+AUTOPILOT_ROOT ?= /cad/xilinx/vivado/2015.4/Vivado_HLS/2015.4
 AUTOPILOT_MACH ?= lnx64
 
 AUTOPILOT_TOOL := ${AUTOPILOT_ROOT}/${AUTOPILOT_MACH}/tools
