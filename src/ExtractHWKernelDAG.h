@@ -43,6 +43,7 @@ struct HWKernel {
     std::vector<StencilDimSpecs> dims;
     std::vector<std::string> input_streams;  // used when inserting read_stream calls
     std::map<std::string, std::vector<StencilDimSpecs> > consumer_stencils; // used for transforming call nodes and inserting dispatch calls
+    std::map<std::string, int> consumer_fifo_depths;
 
     HWKernel() : is_inlined(false), is_output(false) {}
     HWKernel(Function f, const std::string &s)
