@@ -26,6 +26,7 @@ struct ScheduleContents {
     bool is_linebuffered;
     std::set<std::string> accelerate_inputs;
     std::string accelerate_exit;
+    std::map<std::string, int> fifo_depths;   // key is the name of the consumer
 
     ScheduleContents()
         : memoized(false), touched(false), allow_race_conditions(false),
@@ -164,6 +165,14 @@ std::set<std::string> Schedule::accelerate_inputs() const{
 
 std::set<std::string> &Schedule::accelerate_inputs() {
     return contents.ptr->accelerate_inputs;
+}
+
+std::map<std::string, int> Schedule::fifo_depths() const {
+    return contents.ptr->fifo_depths;
+}
+
+std::map<std::string, int> &Schedule::fifo_depths() {
+    return contents.ptr->fifo_depths;
 }
 
 std::string Schedule::accelerate_exit() const{

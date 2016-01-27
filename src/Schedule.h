@@ -5,6 +5,7 @@
  * Defines the internal representation of the schedule for a function
  */
 #include <set>
+#include <map>
 
 #include "Expr.h"
 
@@ -215,6 +216,12 @@ public:
     // @{
     std::set<std::string> accelerate_inputs() const;
     std::set<std::string> &accelerate_inputs();
+    // @}
+
+    /** The fifo depths downstreaming from the function. */
+    // @{
+    std::map<std::string, int> fifo_depths() const;
+    std::map<std::string, int> &fifo_depths();
     // @}
 
     /** The output functions of the hardware accelerator pipeline. */

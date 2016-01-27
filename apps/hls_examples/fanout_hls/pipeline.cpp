@@ -27,11 +27,7 @@ public:
         hw_output(x) = A(x) + A(x+1) + B(x) + B(x+1) + C(x);
         output(x) = hw_output(x);
 
-        // define common schedule: tile output, and linebuffer the intermediate
-        output.split(x, xo, xi, 64);
-        A.store_at(output, xo).compute_at(output, xi);
-        B.store_at(output, xo).compute_at(output, xi);
-        C.store_at(output, xo).compute_at(output, xi);
+        // define common schedule: tile output
 
         args.push_back(input);
     }
@@ -51,8 +47,13 @@ public:
         // HLS schedule: make a hw pipeline producing 'hw_output', taking
         // inputs of 'clamped', buffering intermediates at (output, xo) loop
         // level
+        output.split(x, xo, xi, 64);
         hw_output.store_at(output, xo).compute_at(output, xi);
         hw_output.accelerate({A});
+
+        A.linebuffer().fifo_depth(hw_output, 4).fifo_depth(C, 2);
+        B.linebuffer();
+        C.linebuffer();
 
         //output.print_loop_nest();
         output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);

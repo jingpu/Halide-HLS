@@ -1155,6 +1155,17 @@ Func &Func::linebuffer() {
     return *this;
 }
 
+Func &Func::fifo_depth(Func consumer, int depth) {
+    invalidate_cache();
+    user_assert(depth > 0) << "Fifo depth must be greater than zero.\n";
+
+    // TODO check if consumer is a linebuffered function downstreaming
+    // from this function.
+    // Also check if the this function is scheduled to be linebuffered
+    func.schedule().fifo_depths()[consumer.name()] = depth;
+    return *this;
+}
+
 Func &Func::insert_buffer(Func &buffered) {
     invalidate_cache();
     func.insert_buffer(buffered.func);

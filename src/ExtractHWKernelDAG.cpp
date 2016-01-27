@@ -460,6 +460,15 @@ class BuildDAGForFunction : public IRVisitor {
                             consumer_stencil = extract_stencil_specs(p.second, scan_loops, stencil_bounds, store_bounds);
                             debug(3) << "extracted stencil: " << consumer_stencil << "\n";
                             cur_kernel.consumer_stencils[p.first] = consumer_stencil;
+
+                            // If there is schedule of the fifo depth, use the value from
+                            // schedule; otherwise, use one as default.
+                            if (cur_func.schedule().fifo_depths().count(p.first)) {
+                                cur_kernel.consumer_fifo_depths[p.first]
+                                    = cur_func.schedule().fifo_depths().find(p.first)->second;
+                            } else {
+                                cur_kernel.consumer_fifo_depths[p.first] = 1;
+                            }
                         }
                     }
 

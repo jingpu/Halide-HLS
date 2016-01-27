@@ -772,7 +772,8 @@ class LinebufferForFunction : public IRMutator {
             //                   stencil_size_dim_0, stencil_step_dim_0, store_extent_dim_0,
             //                   [stencil_size_dim_1, stencil_step_dim_1, store_extent_dim_1, ...]
             //                   num_of_consumers,
-            //                   consumer_0_name, consumer_0_offset_dim_0, consumer_0_extent_dim_0,
+            //                   consumer_0_name, fifo_0_depth,
+            //                   consumer_0_offset_dim_0, consumer_0_extent_dim_0,
             //                   [consumer_0_offset_dim_1, consumer_0_extent_dim_1, ...]
             //                   [consumer_1_name, ...])
             vector<Expr> dispatch_args({stream_var, (int)kernel.dims.size()});
@@ -787,6 +788,8 @@ class LinebufferForFunction : public IRMutator {
             dispatch_args.push_back((int)kernel.consumer_stencils.size());
             for (const auto& p : kernel.consumer_stencils) {
                 dispatch_args.push_back(p.first);
+                internal_assert(kernel.consumer_fifo_depths.count(p.first));
+                dispatch_args.push_back(kernel.consumer_fifo_depths.find(p.first)->second);
                 internal_assert(p.second.size() == kernel.dims.size());
                 for (size_t i = 0; i < kernel.dims.size(); i++) {
                     Expr store_offset = simplify(p.second[i].store_bound.min -

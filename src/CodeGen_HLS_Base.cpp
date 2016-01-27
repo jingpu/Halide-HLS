@@ -215,7 +215,8 @@ void CodeGen_HLS_Base::visit(const Call *op) {
         //                   stencil_size_dim_0, stencil_step_dim_0, store_extent_dim_0,
         //                   [stencil_size_dim_1, stencil_step_dim_1, store_extent_dim_1, ...]
         //                   num_of_consumers,
-        //                   consumer_0_name, consumer_0_offset_dim_0, consumer_0_extent_dim_0,
+        //                   consumer_0_name, fifo_0_depth,
+        //                   consumer_0_offset_dim_0, consumer_0_extent_dim_0,
         //                   [consumer_0_offset_dim_1, consumer_0_extent_dim_1, ...]
         //                   [consumer_1_name, ...])
 
@@ -239,19 +240,23 @@ void CodeGen_HLS_Base::visit(const Call *op) {
         internal_assert(op->args.size() >= num_of_demensions*3 + 3);
         size_t num_of_consumers = *as_const_int(op->args[num_of_demensions*3 + 2]);
         vector<string> consumer_names(num_of_consumers);
+        vector<int> consumer_fifo_depth(num_of_consumers);
         vector<vector<int> > consumer_offsets(num_of_consumers);
         vector<vector<int> > consumer_extents(num_of_consumers);
 
-        internal_assert(op->args.size() >= num_of_demensions*3 + 3 + num_of_consumers*(1+2*num_of_demensions));
+        internal_assert(op->args.size() >= num_of_demensions*3 + 3 + num_of_consumers*(2 + 2*num_of_demensions));
         for (size_t i = 0; i < num_of_consumers; i++) {
-            const StringImm *string_imm = op->args[num_of_demensions*3 + 3 + (1 + 2*num_of_demensions)*i].as<StringImm>();
+            const StringImm *string_imm = op->args[num_of_demensions*3 + 3 + (2 + 2*num_of_demensions)*i].as<StringImm>();
             internal_assert(string_imm);
             consumer_names[i] = string_imm->value;
+            const IntImm *int_imm = op->args[num_of_demensions*3 + 4 + (2 + 2*num_of_demensions)*i].as<IntImm>();
+            internal_assert(int_imm);
+            consumer_fifo_depth[i] = int_imm->value;
             vector<int> offsets(num_of_demensions);
             vector<int > extents(num_of_demensions);
             for (size_t j = 0; j < num_of_demensions; j++) {
-                offsets[j] = *as_const_int(op->args[num_of_demensions*3 + 4 + (1 + 2*num_of_demensions)*i + 2*j]);
-                extents[j] = *as_const_int(op->args[num_of_demensions*3 + 5 + (1 + 2*num_of_demensions)*i + 2*j]);
+                offsets[j] = *as_const_int(op->args[num_of_demensions*3 + 5 + (2 + 2*num_of_demensions)*i + 2*j]);
+                extents[j] = *as_const_int(op->args[num_of_demensions*3 + 6 + (2 + 2*num_of_demensions)*i + 2*j]);
             }
             consumer_offsets[i] = offsets;
             consumer_extents[i] = extents;
@@ -261,9 +266,9 @@ void CodeGen_HLS_Base::visit(const Call *op) {
         internal_assert(stencils.contains(stream_name));
         Stencil_Type stream_type = stencils.get(stream_name);
 
-        // Optimization. if there is only one consumer, use C++ reference
-        // for the consumer stream
-        if (num_of_consumers == 1) {
+        // Optimization. if there is only one consumer and its fifo depth is one
+        // , use C++ reference for the consumer stream
+        if (num_of_consumers == 1 && consumer_fifo_depth[0] == 1) {
             string consumer_stream_name = stream_name + ".to." + consumer_names[0];
             do_indent();
             stream << print_stencil_type(stream_type) << " &"
@@ -275,11 +280,13 @@ void CodeGen_HLS_Base::visit(const Call *op) {
 
         for (size_t i = 0; i < num_of_consumers; i++) {
             string consumer_stream_name = stream_name + ".to." + consumer_names[i];
+            Stencil_Type consumer_stream_type = stream_type;
+            consumer_stream_type.depth = consumer_fifo_depth[i];
             do_indent();
-            stream << print_stencil_type(stream_type) << ' '
+            stream << print_stencil_type(consumer_stream_type) << ' '
                    << print_name(consumer_stream_name) << ";\n";
             // pragma
-            stencils.push(consumer_stream_name, stream_type);
+            stencils.push(consumer_stream_name, consumer_stream_type);
             stream << print_stencil_pragma(consumer_stream_name);
             stencils.pop(consumer_stream_name);
         }
@@ -348,7 +355,7 @@ void CodeGen_HLS_Base::visit(const Realize *op) {
         internal_assert(op->types.size() == 1);
         allocations.push(op->name, {op->types[0], "null"});
         Stencil_Type stream_type({Stencil_Type::StencilContainerType::Stream,
-                    op->types[0], op->bounds});
+                    op->types[0], op->bounds, 1});
         stencils.push(op->name, stream_type);
 
         // emits the declaration for the stream
@@ -368,7 +375,7 @@ void CodeGen_HLS_Base::visit(const Realize *op) {
         // create a stencil type
         internal_assert(op->types.size() == 1);
         allocations.push(op->name, {op->types[0], "null"});
-        Stencil_Type stype({Stencil_Type::StencilContainerType::Stencil, op->types[0], op->bounds});
+        Stencil_Type stype({Stencil_Type::StencilContainerType::Stencil, op->types[0], op->bounds, 1});
         stencils.push(op->name, stype);
 
         do_indent();

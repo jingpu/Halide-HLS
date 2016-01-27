@@ -1470,6 +1470,10 @@ public:
      */
     EXPORT Func &linebuffer();
 
+    /** Set the depth of the fifo from this function to consumer
+     */
+    EXPORT Func &fifo_depth(Func consumer, int depth);
+
     /** Insert a buffer before this function.
      * The buffered function will be stored as buffered.
      * Buffered function will have the same values, and a clean
