@@ -54,7 +54,7 @@ public:
     {
         std::cout << "\ncompiling HLS code..." << std::endl;
 
-        hw_sum.accelerate_at(sum, xo, {padded1, padded2});
+        hw_sum.accelerate({padded1, padded2});
 
         sum.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
         sum.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");

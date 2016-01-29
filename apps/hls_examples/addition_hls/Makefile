@@ -17,7 +17,7 @@ pipeline_hls.cpp pipeline_native.o: addition
 run: run.cpp pipeline_native.o pipeline_hls.cpp hls_target.cpp
 	$(CXX) $(CXXFLAGS) $(HLS_CXXFLAGS) -g -Wall -Werror $^  -lpthread -ldl -o $@  $(PNGFLAGS)
 
-demosaic.png: run
+sum.png: run
 	./run a.png b.png
 
 clean:
