@@ -68,26 +68,32 @@ public:
         hw_output(x, y) = cast<uint8_t>(cast<uint16_t>(offset(x, y)[0]) * 255 / searchR);
         output(x, y) = hw_output(x, y);
 
-        // The comment constraints and schedules.
-        output.tile(x, y, xo, yo, x_in, y_in, 256, 256);
-
-        right_remapped.store_at(output, xo).compute_at(output, x_in);
-        left_remapped.store_at(output, xo).compute_at(output, x_in);
-
-        right_padded.compute_root();
-        left_padded.compute_root();
-        right_remap_padded.compute_root();
-        left_remap_padded.compute_root();
-
         // Arguments
         args = {right, left, right_remap, left_remap};
     }
 
     void compile_cpu() {
         std::cout << "\ncompiling cpu code..." << std::endl;
-        //output.print_loop_nest();
 
-        //output.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
+        output.tile(x, y, xo, yo, x_in, y_in, 256, 256);
+
+        right_padded.compute_root().vectorize(_0, 8);
+        left_padded.compute_root().vectorize(_0, 8);
+        right_remap_padded.compute_root().vectorize(_0, 8);
+        left_remap_padded.compute_root().vectorize(_0, 8);
+
+        right_remapped.store_at(output, xo).compute_at(output, x_in);
+        left_remapped.store_at(output, xo).compute_at(output, x_in);
+        right_remapped.vectorize(x, 8);
+        left_remapped.vectorize(x, 8);
+
+        SAD.compute_at(output, x_in);
+        SAD.unroll(c);
+        SAD.update(0).vectorize(c, 8).unroll(win.x).unroll(win.y);
+
+        output.print_loop_nest();
+
+        output.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
         output.compile_to_header("pipeline_native.h", args, "pipeline_native");
         output.compile_to_object("pipeline_native.o", args, "pipeline_native");
     }
@@ -96,15 +102,23 @@ public:
     void compile_hls() {
         std::cout << "\ncompiling HLS code..." << std::endl;
 
+        right_padded.compute_root();
+        left_padded.compute_root();
+        right_remap_padded.compute_root();
+        left_remap_padded.compute_root();
+
+        output.tile(x, y, xo, yo, x_in, y_in, 256, 256);
+        hw_output.store_at(output, xo).compute_at(output, x_in);
+        hw_output.accelerate({right_remapped, left_remapped});
+        right_remapped.linebuffer();
+        left_remapped.linebuffer();
+
         RVar so("so"), si("si");
         //offset.update(0).unroll(search.x, 16); // the unrolling doesn's generate code that balances the computation, creating a long critical path
         offset.update(0).split(search.x, so, si, 16);
         SAD.compute_at(offset, so);
         SAD.unroll(c);
         SAD.update(0).unroll(win.x).unroll(win.y).unroll(c);
-
-        hw_output.store_at(output, xo).compute_at(output, x_in);
-        hw_output.accelerate({right_remapped, left_remapped});
 
         //output.print_loop_nest();
 
@@ -178,20 +192,18 @@ MyPipelineOpt()
 
 
 void compile_cpu() {
-            std::cout << "\ncompiling cpu code..." << std::endl;
-            output.print_loop_nest();
+    std::cout << "\ncompiling cpu code..." << std::endl;
+    output.print_loop_nest();
 
-            //output.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
-            output.compile_to_header("pipeline_native.h", args, "pipeline_native");
-            output.compile_to_object("pipeline_native.o", args, "pipeline_native");
-        }
+    //output.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
+    output.compile_to_header("pipeline_native.h", args, "pipeline_native");
+    output.compile_to_object("pipeline_native.o", args, "pipeline_native");
+}
 
 void compile_hls() {
     std::cout << "\ncompiling HLS code..." << std::endl;
 
-    RVar so("so"), si("si");
     offset.update(0).unroll(search.x, 4);
-    //offset.update(0).split(search.x, so, si, 4);
     SAD.compute_at(offset_l1, Var::outermost());
     SAD.unroll(c);
     SAD.update(0).unroll(win.x).unroll(win.y).unroll(c);
@@ -201,7 +213,7 @@ void compile_hls() {
     hw_output.store_at(output, xo).compute_at(output, x_in);
     hw_output.accelerate({right_remapped, left_remapped});
 
-    output.print_loop_nest();
+    //output.print_loop_nest();
 
     output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
     output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
