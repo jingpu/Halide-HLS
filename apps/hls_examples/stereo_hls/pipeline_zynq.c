@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include <fcntl.h>
+#include <unistd.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include "buffer.h"
@@ -198,7 +199,7 @@ static int __pipeline_hls(buffer_t *_p5_buffer, buffer_t *_p4_buffer, buffer_t *
     printf("Failed to allocate buffer 2!\n");
     return(0);
   }
-  
+
  uint8_t *_p5 = (uint8_t *)(_p5_buffer->host);
  (void)_p5;
  const bool _p5_host_and_dev_are_null = (_p5_buffer->host == NULL) && (_p5_buffer->dev == 0);
@@ -2329,14 +2330,18 @@ static int __pipeline_hls(buffer_t *_p5_buffer, buffer_t *_p4_buffer, buffer_t *
         int32_t _1619 = _output_2_min_0 + _output_2_extent_0;
         int32_t _1620 = _1619 + -256;
         int32_t _1621 = min(_1618, _1620);
-        hls::stream<PackedStencil<uint8_t, 1, 1> > _interpolated_3_stencil_update_stream;
+
+        uint8_t* in0_data = (uint8_t*) mmap(NULL, bufs[0].stride * bufs[0].height * bufs[0].depth,
+                                            PROT_WRITE, MAP_SHARED, hwacc, bufs[0].mmap_offset);
+        if(in0_data == MAP_FAILED){
+          printf("mmap 0 failed!\n");
+          return(0);
+        }
         // produce interpolated$3.stencil_update.stream
         for (int _interpolated_3_scan_update_y = 0; _interpolated_3_scan_update_y < 0 + 263; _interpolated_3_scan_update_y++)
         {
          for (int _interpolated_3_scan_update_x = 0; _interpolated_3_scan_update_x < 0 + 263; _interpolated_3_scan_update_x++)
          {
-          Stencil<uint8_t, 1, 1> _interpolated_3_stencil;
-          // produce interpolated$3.stencil
           int32_t _1622 = _1621 + _interpolated_3_scan_update_x;
           int32_t _1623 = _1622 - _17;
           int32_t _1624 = _1614 + _interpolated_3_scan_update_y;
@@ -2433,20 +2438,24 @@ static int __pipeline_hls(buffer_t *_p5_buffer, buffer_t *_p4_buffer, buffer_t *
           uint16_t _1715 = _1714 >> 8;
           uint8_t _1716 = (uint8_t)(_1715);
           uint8_t _1717 = _1716;
-          _interpolated_3_stencil(0, 0) = _1717;
-          // consume interpolated$3.stencil
-          _interpolated_3_stencil_update_stream.write(_interpolated_3_stencil);
+          in0_data[_interpolated_3_scan_update_y*bufs[0].stride + _interpolated_3_scan_update_x] = _1717;
           (void)0;
          } // for _interpolated_3_scan_update_x
         } // for _interpolated_3_scan_update_y
         // consume interpolated$3.stencil_update.stream
-        hls::stream<PackedStencil<uint8_t, 1, 1> > _interpolated_4_stencil_update_stream;
+        munmap((void*)in0_data, bufs[0].stride * bufs[0].height * bufs[0].depth);
+
+        uint8_t *in1_data = (uint8_t*) mmap(NULL, bufs[1].stride * bufs[1].height * bufs[1].depth,
+                               PROT_WRITE, MAP_SHARED, hwacc, bufs[1].mmap_offset);
+        if(in1_data == MAP_FAILED){
+          printf("mmap 1 failed!\n");
+          return(0);
+        }
         // produce interpolated$4.stencil_update.stream
         for (int _interpolated_4_scan_update_y = 0; _interpolated_4_scan_update_y < 0 + 263; _interpolated_4_scan_update_y++)
         {
          for (int _interpolated_4_scan_update_x = 0; _interpolated_4_scan_update_x < 0 + 326; _interpolated_4_scan_update_x++)
          {
-          Stencil<uint8_t, 1, 1> _interpolated_4_stencil;
           // produce interpolated$4.stencil
           int32_t _1718 = _1621 + _interpolated_4_scan_update_x;
           int32_t _1719 = _1718 - _17;
@@ -2544,25 +2553,26 @@ static int __pipeline_hls(buffer_t *_p5_buffer, buffer_t *_p4_buffer, buffer_t *
           uint16_t _1811 = _1810 >> 8;
           uint8_t _1812 = (uint8_t)(_1811);
           uint8_t _1813 = _1812;
-          _interpolated_4_stencil(0, 0) = _1813;
-          // consume interpolated$4.stencil
-          _interpolated_4_stencil_update_stream.write(_interpolated_4_stencil);
+          in1_data[_interpolated_4_scan_update_y*bufs[1].stride + _interpolated_4_scan_update_x] = _1813;
           (void)0;
          } // for _interpolated_4_scan_update_x
         } // for _interpolated_4_scan_update_y
+        munmap((void*)in1_data, bufs[1].stride * bufs[1].height * bufs[1].depth);
         // consume interpolated$4.stencil_update.stream
-        hls::stream<PackedStencil<uint8_t, 1, 1> > _hw_output_2_stencil_stream;
-        // produce _hls_target.hw_output$2.stencil.stream
-        p_hls_target_hw_output_2_stencil_stream(_hw_output_2_stencil_stream, _interpolated_3_stencil_update_stream, _interpolated_4_stencil_update_stream);
+        ioctl(hwacc, PROCESS_IMAGE, (long unsigned int)bufs);
+        ioctl(hwacc, PEND_PROCESSED, NULL);
         // consume _hls_target.hw_output$2.stencil.stream
+
+        uint8_t *out_data = (uint8_t*) mmap(NULL, bufs[2].stride * bufs[2].height * bufs[2].depth,
+                                            PROT_READ, MAP_SHARED, hwacc, bufs[2].mmap_offset);
+        if(out_data == MAP_FAILED){
+          printf("mmap 2 failed!\n");
+          return(0);
+        }
         for (int _output_2_s0_y_y_in = 0; _output_2_s0_y_y_in < 0 + 256; _output_2_s0_y_y_in++)
         {
          for (int _output_2_s0_x_x_in = 0; _output_2_s0_x_x_in < 0 + 256; _output_2_s0_x_x_in++)
          {
-          Stencil<uint8_t, 1, 1> _hw_output_2_stencil;
-          // produce hw_output$2.stencil
-          _hw_output_2_stencil = _hw_output_2_stencil_stream.read();
-          (void)0;
           // consume hw_output$2.stencil
           int32_t _14127 = _1621 + _output_2_s0_x_x_in;
           int32_t _14128 = _1614 + _output_2_s0_y_y_in;
@@ -2571,10 +2581,11 @@ static int __pipeline_hls(buffer_t *_p5_buffer, buffer_t *_p4_buffer, buffer_t *
           int32_t _14131 = _output_2_min_1 * _output_2_stride_1;
           int32_t _14132 = _output_2_min_0 + _14131;
           int32_t _14133 = _14130 - _14132;
-          uint8_t _14134 = _hw_output_2_stencil(0, 0);
+          uint8_t _14134 = out_data[_output_2_s0_y_y_in*bufs[2].stride + _output_2_s0_x_x_in];
           _output_2[_14133] = _14134;
          } // for _output_2_s0_x_x_in
         } // for _output_2_s0_y_y_in
+        munmap((void*)out_data, bufs[2].stride * bufs[2].height * bufs[2].depth);
        } // for _output_2_s0_x_xo
       } // for _output_2_s0_y_yo
       halide_free(NULL, _constant_exterior_5);
@@ -2587,6 +2598,7 @@ static int __pipeline_hls(buffer_t *_p5_buffer, buffer_t *_p4_buffer, buffer_t *
    } // alloc _constant_exterior_7
   } // alloc _constant_exterior_5
  } // if _153
+ close(hwacc);
  return 0;
 }
 
