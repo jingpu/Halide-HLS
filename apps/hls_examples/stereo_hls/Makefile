@@ -20,6 +20,18 @@ run: run.cpp pipeline_native.o pipeline_hls.cpp hls_target.cpp
 out.png: run
 	./run ../../images/left0224.png ../../images/left-remap.png ../../images/right0224.png ../../images/right-remap.png
 
+pipeline_zynq.o: pipeline_zynq.c
+	$(CXX) -c $(CXXFLAGS) -g -Wall -Werror $^ -o $@  $(PNGFLAGS)
+
+run_zynq.o: run_zynq.cpp
+	$(CXX) -c $(CXXFLAGS) -g -Wall -Werror $^ -o $@  $(PNGFLAGS)
+
+run_zynq: run_zynq.o pipeline_zynq.o pipeline_native.o
+	$(CXX) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
+
+out_zynq.png: run_zynq
+	./run_zynq ../../images/left0224.png ../../images/left-remap.png ../../images/right0224.png ../../images/right-remap.png
+
 clean:
 	rm -f pipeline run out.png
 	rm -f pipeline_native.h pipeline_native.o

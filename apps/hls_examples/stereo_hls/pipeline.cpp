@@ -93,6 +93,8 @@ public:
         output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
         output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
         output.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
+        output.compile_to_header("pipeline_zynq.h", args, "pipeline_zynq");
+        //output.compile_to_c("pipeline_zynq.c", args, "pipeline_zynq");
     }
 
 private:
