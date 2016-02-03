@@ -21,7 +21,7 @@ out.png: run
 	./run ../../images/left0224.png ../../images/left-remap.png ../../images/right0224.png ../../images/right-remap.png
 
 pipeline_zynq.o: pipeline_zynq.c
-	$(CXX) -c $(CXXFLAGS) -g -Wall -Werror $^ -o $@  $(PNGFLAGS)
+	$(CXX) -c -O2 $(CXXFLAGS) -g -Wall -Werror $^ -o $@  $(PNGFLAGS)
 
 run_zynq.o: run_zynq.cpp
 	$(CXX) -c $(CXXFLAGS) -g -Wall -Werror $^ -o $@  $(PNGFLAGS)

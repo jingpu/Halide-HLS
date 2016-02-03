@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdint.h>
 
+#include <sys/time.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
@@ -165,6 +166,9 @@ static int __pipeline_hls(buffer_t *_p5_buffer, buffer_t *_p4_buffer, buffer_t *
     return(0);
   }
 
+  struct timeval t1, t2;
+  double elapsedTime = 0.0;
+
   // Allocate input and output buffers
   Buffer bufs[3];
   bufs[0].width = 263;
@@ -197,6 +201,25 @@ static int __pipeline_hls(buffer_t *_p5_buffer, buffer_t *_p4_buffer, buffer_t *
   ok = ioctl(hwacc, GET_BUFFER, (long unsigned int)(bufs + 2));
   if(ok < 0){
     printf("Failed to allocate buffer 2!\n");
+    return(0);
+  }
+  uint8_t* in0_data = (uint8_t*) mmap(NULL, bufs[0].stride * bufs[0].height * bufs[0].depth,
+                                      PROT_WRITE, MAP_SHARED, hwacc, bufs[0].mmap_offset);
+  if(in0_data == MAP_FAILED){
+    printf("mmap 0 failed!\n");
+    return(0);
+  }
+
+  uint8_t *in1_data = (uint8_t*) mmap(NULL, bufs[1].stride * bufs[1].height * bufs[1].depth,
+                                      PROT_WRITE, MAP_SHARED, hwacc, bufs[1].mmap_offset);
+  if(in1_data == MAP_FAILED){
+    printf("mmap 1 failed!\n");
+    return(0);
+  }
+  uint8_t *out_data = (uint8_t*) mmap(NULL, bufs[2].stride * bufs[2].height * bufs[2].depth,
+                                      PROT_READ, MAP_SHARED, hwacc, bufs[2].mmap_offset);
+  if(out_data == MAP_FAILED){
+    printf("mmap 2 failed!\n");
     return(0);
   }
 
@@ -2330,13 +2353,6 @@ static int __pipeline_hls(buffer_t *_p5_buffer, buffer_t *_p4_buffer, buffer_t *
         int32_t _1619 = _output_2_min_0 + _output_2_extent_0;
         int32_t _1620 = _1619 + -256;
         int32_t _1621 = min(_1618, _1620);
-
-        uint8_t* in0_data = (uint8_t*) mmap(NULL, bufs[0].stride * bufs[0].height * bufs[0].depth,
-                                            PROT_WRITE, MAP_SHARED, hwacc, bufs[0].mmap_offset);
-        if(in0_data == MAP_FAILED){
-          printf("mmap 0 failed!\n");
-          return(0);
-        }
         // produce interpolated$3.stencil_update.stream
         for (int _interpolated_3_scan_update_y = 0; _interpolated_3_scan_update_y < 0 + 263; _interpolated_3_scan_update_y++)
         {
@@ -2443,14 +2459,6 @@ static int __pipeline_hls(buffer_t *_p5_buffer, buffer_t *_p4_buffer, buffer_t *
          } // for _interpolated_3_scan_update_x
         } // for _interpolated_3_scan_update_y
         // consume interpolated$3.stencil_update.stream
-        munmap((void*)in0_data, bufs[0].stride * bufs[0].height * bufs[0].depth);
-
-        uint8_t *in1_data = (uint8_t*) mmap(NULL, bufs[1].stride * bufs[1].height * bufs[1].depth,
-                               PROT_WRITE, MAP_SHARED, hwacc, bufs[1].mmap_offset);
-        if(in1_data == MAP_FAILED){
-          printf("mmap 1 failed!\n");
-          return(0);
-        }
         // produce interpolated$4.stencil_update.stream
         for (int _interpolated_4_scan_update_y = 0; _interpolated_4_scan_update_y < 0 + 263; _interpolated_4_scan_update_y++)
         {
@@ -2557,18 +2565,16 @@ static int __pipeline_hls(buffer_t *_p5_buffer, buffer_t *_p4_buffer, buffer_t *
           (void)0;
          } // for _interpolated_4_scan_update_x
         } // for _interpolated_4_scan_update_y
-        munmap((void*)in1_data, bufs[1].stride * bufs[1].height * bufs[1].depth);
         // consume interpolated$4.stencil_update.stream
+        gettimeofday(&t1, NULL);
+
         ioctl(hwacc, PROCESS_IMAGE, (long unsigned int)bufs);
         ioctl(hwacc, PEND_PROCESSED, NULL);
-        // consume _hls_target.hw_output$2.stencil.stream
 
-        uint8_t *out_data = (uint8_t*) mmap(NULL, bufs[2].stride * bufs[2].height * bufs[2].depth,
-                                            PROT_READ, MAP_SHARED, hwacc, bufs[2].mmap_offset);
-        if(out_data == MAP_FAILED){
-          printf("mmap 2 failed!\n");
-          return(0);
-        }
+        gettimeofday(&t2, NULL);
+        elapsedTime += (t2.tv_sec - t1.tv_sec) * 1000.0;
+        elapsedTime += (t2.tv_usec - t1.tv_usec) / 1000.0;
+        // consume _hls_target.hw_output$2.stencil.stream
         for (int _output_2_s0_y_y_in = 0; _output_2_s0_y_y_in < 0 + 256; _output_2_s0_y_y_in++)
         {
          for (int _output_2_s0_x_x_in = 0; _output_2_s0_x_x_in < 0 + 256; _output_2_s0_x_x_in++)
@@ -2585,7 +2591,6 @@ static int __pipeline_hls(buffer_t *_p5_buffer, buffer_t *_p4_buffer, buffer_t *
           _output_2[_14133] = _14134;
          } // for _output_2_s0_x_x_in
         } // for _output_2_s0_y_y_in
-        munmap((void*)out_data, bufs[2].stride * bufs[2].height * bufs[2].depth);
        } // for _output_2_s0_x_xo
       } // for _output_2_s0_y_yo
       halide_free(NULL, _constant_exterior_5);
@@ -2598,7 +2603,14 @@ static int __pipeline_hls(buffer_t *_p5_buffer, buffer_t *_p4_buffer, buffer_t *
    } // alloc _constant_exterior_7
   } // alloc _constant_exterior_5
  } // if _153
+ munmap((void*)in0_data, bufs[0].stride * bufs[0].height * bufs[0].depth);
+ munmap((void*)in1_data, bufs[1].stride * bufs[1].height * bufs[1].depth);
+ munmap((void*)out_data, bufs[2].stride * bufs[2].height * bufs[2].depth);
+ ioctl(hwacc, FREE_IMAGE, (long unsigned int)(bufs));
+ ioctl(hwacc, FREE_IMAGE, (long unsigned int)(bufs + 1));
+ ioctl(hwacc, FREE_IMAGE, (long unsigned int)(bufs + 2));
  close(hwacc);
+ printf("each accelerator run takes %f ms.\n", elapsedTime);
  return 0;
 }
 

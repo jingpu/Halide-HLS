@@ -77,15 +77,15 @@ public:
 
         output.tile(x, y, xo, yo, x_in, y_in, 256, 256);
 
-        right_padded.compute_root().vectorize(_0, 8);
-        left_padded.compute_root().vectorize(_0, 8);
-        right_remap_padded.compute_root().vectorize(_0, 8);
-        left_remap_padded.compute_root().vectorize(_0, 8);
+        right_padded.compute_root();//.vectorize(_0, 8);
+        left_padded.compute_root();//.vectorize(_0, 8);
+        right_remap_padded.compute_root();//.vectorize(_0, 8);
+        left_remap_padded.compute_root();//.vectorize(_0, 8);
 
         right_remapped.store_at(output, xo).compute_at(output, x_in);
         left_remapped.store_at(output, xo).compute_at(output, x_in);
-        right_remapped.vectorize(x, 8);
-        left_remapped.vectorize(x, 8);
+        //right_remapped.vectorize(x, 8);
+        //left_remapped.vectorize(x, 8);
 
         SAD.compute_at(output, x_in);
         SAD.unroll(c);
@@ -132,7 +132,7 @@ public:
 
 // Optimize for hls code generation
 // We change the algorithm to generated reduction tree for unrolling argmin
-class MyPipelineOpt {
+qclass MyPipelineOpt {
 public:
 ImageParam left, right, left_remap, right_remap;
 Func left_padded, right_padded, left_remap_padded, right_remap_padded;
@@ -195,7 +195,7 @@ MyPipelineOpt()
 
 void compile_cpu() {
     std::cout << "\ncompiling cpu code..." << std::endl;
-    output.print_loop_nest();
+    //output.print_loop_nest();
 
     //output.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
     output.compile_to_header("pipeline_native.h", args, "pipeline_native");
