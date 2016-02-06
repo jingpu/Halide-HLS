@@ -182,10 +182,10 @@ static int __pipeline_hls(buffer_t *_p2_input_buffer, buffer_t *_output_2_buffer
   bufs[1].depth = 1;
   bufs[1].stride = 256;
 
-  bufs[2].width = 256;
-  bufs[2].height = 256;
-  bufs[2].depth = 1;
-  bufs[2].stride = 256;
+  bufs[2].width = 128;
+  bufs[2].height =128;
+  bufs[2].depth = 64;
+  bufs[2].stride = 128;
 
   int ok = ioctl(hwacc, GET_BUFFER, (long unsigned int)bufs);
   if(ok < 0){
@@ -538,43 +538,23 @@ static int __pipeline_hls(buffer_t *_p2_input_buffer, buffer_t *_output_2_buffer
      // consume input2_shuffled.stencil_update.stream
      gettimeofday(&t1, NULL);
 
-     ioctl(hwacc, PROCESS_IMAGE, (long unsigned int)bufs);
+     Buffer sliced_bufs[3];
+     sliced_bufs[0] = bufs[0];
+     sliced_bufs[1] = bufs[1];
+     ok = slice_buffer(&bufs[2], &sliced_bufs[2],
+                       _output_shuffled_s0_x_grid_xo * 32,
+                       _output_shuffled_s0_y_grid_yo * 32, 32, 32);
+     if (ok < 0) {
+       printf("slide_buffer failed.\n");
+       return 0;
+     }
+
+     ioctl(hwacc, PROCESS_IMAGE, (long unsigned int)sliced_bufs);
      ioctl(hwacc, PEND_PROCESSED, NULL);
 
      gettimeofday(&t2, NULL);
      elapsedTime += (t2.tv_sec - t1.tv_sec) * 1000.0;
      elapsedTime += (t2.tv_usec - t1.tv_usec) / 1000.0;
-
-     // consume _hls_target.hw_output$2.stencil.stream
-     for (int _output_shuffled_s0_y_grid_y_grid = 0; _output_shuffled_s0_y_grid_y_grid < 0 + 32; _output_shuffled_s0_y_grid_y_grid++)
-     {
-      for (int _output_shuffled_s0_x_grid_x_grid = 0; _output_shuffled_s0_x_grid_x_grid < 0 + 32; _output_shuffled_s0_x_grid_x_grid++)
-      {
-       (void)0;
-       // consume hw_output$2.stencil
-       for (int _output_shuffled_s0_y_in = 0; _output_shuffled_s0_y_in < 0 + 8; _output_shuffled_s0_y_in++)
-       {
-        for (int _output_shuffled_s0_x_in = 0; _output_shuffled_s0_x_in < 0 + 8; _output_shuffled_s0_x_in++)
-        {
-         int32_t _462 = _output_shuffled_s0_y_in * 8;
-         int32_t _463 = _output_shuffled_s0_x_in + _462;
-         int32_t _464 = _output_shuffled_s0_x_grid_xo * 32;
-         int32_t _465 = _464 + _output_shuffled_s0_x_grid_x_grid;
-         int32_t _466 = _465 * 64;
-         int32_t _467 = _463 + _466;
-         int32_t _468 = _output_shuffled_s0_y_grid_yo * 32;
-         int32_t _469 = _468 + _output_shuffled_s0_y_grid_y_grid;
-         int32_t _470 = _469 * 8192;
-         int32_t _471 = _467 + _470;
-         uint8_t _472 = out_data[_output_shuffled_s0_x_in +
-                                 _output_shuffled_s0_y_in * 8 +
-                                 _output_shuffled_s0_x_grid_x_grid * 64 +
-                                 _output_shuffled_s0_y_grid_y_grid * 2048];
-         _output_shuffled[_471] = _472;
-        } // for _output_shuffled_s0_x_in
-       } // for _output_shuffled_s0_y_in
-      } // for _output_shuffled_s0_x_grid_x_grid
-     } // for _output_shuffled_s0_y_grid_y_grid
     } // for _output_shuffled_s0_x_grid_xo
    } // for _output_shuffled_s0_y_grid_yo
    // consume output_shuffled
@@ -622,7 +602,7 @@ static int __pipeline_hls(buffer_t *_p2_input_buffer, buffer_t *_output_2_buffer
        int32_t _499 = _497 + _498;
        int32_t _500 = _output_2_s0_y_yo * 8192;
        int32_t _501 = _499 + _500;
-       uint8_t _502 = _output_shuffled[_501];
+       uint8_t _502 = out_data[_501];
        _output_2[_495] = _502;
       } // for _output_2_s0_x_x_in
      } // for _output_2_s0_y_y_in

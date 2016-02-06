@@ -54,7 +54,7 @@ int main(int argc, char **argv) {
       printf("passed.\n");
     }
 
-    printf("\nstart timeing code...\n");
+    printf("\nstart timing code...\n");
 
     // Timing code. Timing doesn't include copying the input data to
     // the gpu or copying the output back.
