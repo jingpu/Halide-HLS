@@ -122,6 +122,7 @@ public:
     RDom r;
     Func clamped;
     Func input_shuffled, input2_shuffled, output_shuffled;
+    Func input_buf, input2_buf, out_buf;
     Func histogram, downsampled;
     Func blurx, blury, blurz;
     Func output, hw_output;
@@ -142,8 +143,10 @@ public:
         input_shuffled(x_in, y_in, x_grid, y_grid)
             = clamped(x_grid*s_sigma + x_in - s_sigma/2, y_grid*s_sigma + y_in - s_sigma/2);
 
+        input_buf(x_in, y_in, x_grid, y_grid) = input_shuffled(x_in, y_in, x_grid, y_grid);
+
         // Construct the bilateral grid
-        Expr val = input_shuffled(r.x, r.y, x, y);
+        Expr val = input_buf(r.x, r.y, x, y);
         val = clamp(val, 0, 255);
         Expr zi = cast<int>((val + r_sigma/2) / r_sigma);
         histogram(x, y, z, c) = cast<uint16_t>(0);
@@ -172,7 +175,9 @@ public:
         // shuffle the input
         input2_shuffled(x_in, y_in, x_grid, y_grid)
             = input(x_grid*s_sigma + x_in, y_grid*s_sigma + y_in);
-        Expr sample_val = cast<uint16_t>(input2_shuffled(x_in, y_in, x_grid, y_grid));
+        input2_buf(x_in, y_in, x_grid, y_grid) = input2_shuffled(x_in, y_in, x_grid, y_grid);
+
+        Expr sample_val = cast<uint16_t>(input2_buf(x_in, y_in, x_grid, y_grid));
         zi = cast<int>(sample_val / r_sigma);
         Expr zf = cast<uint16_t>((sample_val % r_sigma) * (65536 / r_sigma));
         Expr xf = cast<uint16_t>(x_in * (65536 / s_sigma));
@@ -200,8 +205,18 @@ public:
         output(x, y) = output_shuffled(x%s_sigma, y%s_sigma, x/s_sigma, y/s_sigma);
 
         // The comment constraints and schedules.
-        output.bound(x, 0, 1024);
-        output.bound(y, 0, 1024);
+        output.bound(x, 0, 1024).bound(y, 0, 1024);
+
+        // Arguments
+        args = {input};
+    }
+
+    void compile_cpu() {
+        std::cout << "\ncompiling cpu code..." << std::endl;
+        input_shuffled.vectorize(x_in);
+        input2_shuffled.vectorize(x_in);
+        output.vectorize(x_in);
+
         output.tile(x, y, xo, yo, x_in, y_in, 8, 8);
 
         output_shuffled.compute_root();
@@ -214,20 +229,8 @@ public:
         histogram.store_at(output_shuffled, xo).compute_at(output_shuffled, x_grid).reorder(c, z, x, y).unroll(c).unroll(z);
         histogram.update().reorder(c, r.x, r.y, x, y).unroll(c);
 
-        //clamped.store_at(output_shuffled, xo).compute_at(output_shuffled, x_grid);
-        //clamped.compute_root();
         input_shuffled.store_at(output_shuffled, xo).compute_at(output_shuffled, x_grid);
         input2_shuffled.store_at(output_shuffled, xo).compute_at(output_shuffled, x_grid);
-
-        // Arguments
-        args = {input};
-    }
-
-    void compile_cpu() {
-        std::cout << "\ncompiling cpu code..." << std::endl;
-        input_shuffled.vectorize(x_in);
-        input2_shuffled.vectorize(x_in);
-        output.vectorize(x_in);
 
         //output.print_loop_nest();
 
@@ -240,10 +243,29 @@ public:
     void compile_hls() {
         std::cout << "\ncompiling HLS code..." << std::endl;
 
-        hw_output.store_at(output_shuffled, xo).compute_at(output_shuffled, x_grid);
-        hw_output.accelerate({input_shuffled, input2_shuffled});
+        output.tile(x, y, xo, yo, x_in, y_in, 8, 8);
 
-        //output.print_loop_nest();
+        output_shuffled.compute_root();
+        output_shuffled.tile(x_grid, y_grid, xo, yo, x_grid, y_grid, 32, 32);
+
+        hw_output.store_at(output_shuffled, xo).compute_at(output_shuffled, x_grid);
+        hw_output.accelerate({input_buf, input2_buf});
+
+        input_buf.linebuffer();
+        input2_buf.linebuffer();
+        blury.linebuffer().reorder(x, y, z, c);
+        blurx.linebuffer().reorder(x, y, z, c);
+        blurz.linebuffer().reorder(z, x, y, c);
+        histogram.linebuffer().reorder(c, z, x, y).unroll(c).unroll(z);
+        histogram.update().reorder(c, r.x, r.y, x, y).unroll(c);
+
+        //input_shuffled.store_at(output_shuffled, xo).compute_at(output_shuffled, x_grid);
+        //input2_shuffled.store_at(output_shuffled, xo).compute_at(output_shuffled, x_grid);
+        input_shuffled.compute_at(output_shuffled, xo);
+        //input_shuffled.compute_at(output_shuffled, xo);
+        input2_shuffled.compute_root();
+
+        output.print_loop_nest();
 
         output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
         output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
