@@ -27,24 +27,28 @@ string CodeGen_HLS_Base::print_stencil_type(Stencil_Type stencil_type) {
 
     switch(stencil_type.type) {
     case Stencil_Type::StencilContainerType::Stencil :
-        oss << "Stencil<";
+        oss << "Stencil<" << print_type(stencil_type.elemType);
+
+        for(const auto &range : stencil_type.bounds) {
+            internal_assert(is_one(simplify(range.min == 0)));
+            oss << ", " << range.extent;
+        }
+        oss << ">";
         break;
     case Stencil_Type::StencilContainerType::Stream :
-        oss << "hls::stream<PackedStencil<";
+        oss << "hls::stream<PackedStencil<"
+            << print_type(stencil_type.elemType);
+
+        // skip the even element in the bounds, since those denote storage bounds
+        for(size_t i = 0; i < stencil_type.bounds.size(); i += 2) {
+            const Range &range = stencil_type.bounds[i];
+            internal_assert(is_one(simplify(range.min == 0)));
+            oss << ", " << range.extent;
+        }
+        oss << ">>";
         break;
     default: internal_error;
     }
-
-    oss << print_type(stencil_type.elemType);
-    for(const auto &range : stencil_type.bounds) {
-        internal_assert(is_one(simplify(range.min == 0)));
-        oss << ", " << range.extent;
-    }
-    oss << ">";
-
-    if(stencil_type.type == Stencil_Type::StencilContainerType::Stream)
-        oss << " >";
-
     return oss.str();
 }
 

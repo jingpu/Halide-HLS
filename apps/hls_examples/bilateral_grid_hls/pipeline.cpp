@@ -122,19 +122,21 @@ public:
     RDom r;
     Func clamped;
     Func input_shuffled, input2_shuffled, output_shuffled;
-    Func input_buf, input2_buf, out_buf;
+    Func input_buf, input2_buf, output_buf;
     Func histogram, downsampled;
     Func blurx, blury, blurz;
-    Func output, hw_output;
+    Func output;
     std::vector<Argument> args;
 
     MyPipelineOpt()
         : input(UInt(8), 2), r(0, s_sigma, 0, s_sigma),
-          input_shuffled("input_shuffled"), input2_shuffled("input2_shuffled"),
-          output_shuffled("output_shuffled"),
+          input_shuffled("kb_input_shuffled"), input2_shuffled("kb_input2_shuffled"),
+          output_shuffled("kb_output_shuffled"),
+          input_buf("slice_input_shuffled"), input2_buf("slice_input2_shuffled"),
+          output_buf("slice_output_shuffled"),
           histogram("histogram"), downsampled("downsampled"),
           blurx("blurx"), blury("blury"), blurz("blurz"),
-          output("output"), hw_output("hw_output")
+          output("output")
     {
         // Add a boundary condition
         clamped = BoundaryConditions::repeat_edge(input);
@@ -198,8 +200,8 @@ public:
 
         // Normalize
         Expr norm_val = clamp(value * 64 / weight, 0, 255);
-        hw_output(x_in, y_in, x_grid, y_grid) = cast<uint8_t>(select(weight == 0, 0, norm_val));
-        output_shuffled(x_in, y_in, x_grid, y_grid) = hw_output(x_in, y_in, x_grid, y_grid);
+        output_buf(x_in, y_in, x_grid, y_grid) = cast<uint8_t>(select(weight == 0, 0, norm_val));
+        output_shuffled(x_in, y_in, x_grid, y_grid) = output_buf(x_in, y_in, x_grid, y_grid);
 
         // shuffle the output
         output(x, y) = output_shuffled(x%s_sigma, y%s_sigma, x/s_sigma, y/s_sigma);
@@ -245,11 +247,14 @@ public:
 
         output.tile(x, y, xo, yo, x_in, y_in, 8, 8);
 
+        input_shuffled.compute_at(output_shuffled, xo);
+        input2_shuffled.compute_root();
         output_shuffled.compute_root();
+
         output_shuffled.tile(x_grid, y_grid, xo, yo, x_grid, y_grid, 32, 32);
 
-        hw_output.store_at(output_shuffled, xo).compute_at(output_shuffled, x_grid);
-        hw_output.accelerate({input_buf, input2_buf});
+        output_buf.store_at(output_shuffled, xo).compute_at(output_shuffled, x_grid);
+        output_buf.accelerate({input_buf, input2_buf});
 
         input_buf.linebuffer();
         input2_buf.linebuffer();
@@ -259,17 +264,14 @@ public:
         histogram.linebuffer().reorder(c, z, x, y).unroll(c).unroll(z);
         histogram.update().reorder(c, r.x, r.y, x, y).unroll(c);
 
-        //input_shuffled.store_at(output_shuffled, xo).compute_at(output_shuffled, x_grid);
-        //input2_shuffled.store_at(output_shuffled, xo).compute_at(output_shuffled, x_grid);
-        input_shuffled.compute_at(output_shuffled, xo);
-        //input_shuffled.compute_at(output_shuffled, xo);
-        input2_shuffled.compute_root();
 
-        output.print_loop_nest();
+        //output.print_loop_nest();
 
         output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
         output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
         output.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
+        output.compile_to_zynq_c("pipeline_zynq.c", args, "pipeline_zynq");
+        output.compile_to_header("pipeline_zynq.h", args, "pipeline_zynq");
     }
 };
 

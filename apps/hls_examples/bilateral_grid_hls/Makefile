@@ -36,4 +36,5 @@ clean:
 	rm -f pipeline run out.png
 	rm -f pipeline_native.h pipeline_native.o
 	rm -f pipeline_hls.h pipeline_hls.cpp
+	rm -f pipeline_zynq.h pipeline_zynq.c
 	rm -f hls_target.h hls_target.cpp

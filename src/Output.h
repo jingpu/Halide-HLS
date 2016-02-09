@@ -48,6 +48,7 @@ EXPORT void compile_module_to_c(const Module &module,
 // @}
 
 EXPORT void compile_module_to_hls_source(const Module &module, std::string filename = "");
+EXPORT void compile_module_to_zynq_c_source(const Module &module, std::string filename = "");
 
 /** Output the module to HTML. The default filename is the name of the
  * module with the extension .html. */

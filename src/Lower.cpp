@@ -49,6 +49,7 @@
 #include "UnifyDuplicateLets.h"
 #include "UniquifyVariableNames.h"
 #include "UnrollLoops.h"
+#include "UpdateKBufferSlices.h"
 #include "VaryingAttributes.h"
 #include "VectorizeLoops.h"
 
@@ -152,6 +153,8 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
             s = group_hw_pipeline(s, dag);
             s = replace_image_param(s, dag);
         }
+
+        s = update_kbuffer_slices(s);
 
         debug(2) << "Lowering after HLS optimization:\n" << s << '\n';
     }
