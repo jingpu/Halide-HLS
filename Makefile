@@ -246,6 +246,7 @@ SOURCE_FILES = \
   CodeGen_PTX_Dev.cpp \
   CodeGen_Renderscript_Dev.cpp \
   CodeGen_X86.cpp \
+  CodeGen_Zynq_C.cpp \
   CSE.cpp \
   Debug.cpp \
   DebugToFile.cpp \
@@ -326,6 +327,7 @@ SOURCE_FILES = \
   UnifyDuplicateLets.cpp \
   UniquifyVariableNames.cpp \
   UnrollLoops.cpp \
+  UpdateKBufferSlices.cpp \
   Util.cpp \
   Var.cpp \
   VaryingAttributes.cpp \

@@ -1,5 +1,6 @@
 #include "CodeGen_C.h"
 #include "CodeGen_HLS_Testbench.h"
+#include "CodeGen_Zynq_C.h"
 #include "StmtToHtml.h"
 #include "Output.h"
 #include "LLVM_Headers.h"
@@ -110,10 +111,18 @@ void compile_module_to_c_source(const Module &module, std::string filename) {
 }
 
 void compile_module_to_hls_source(const Module &module, std::string filename) {
-    if (filename.empty()) filename = module.name() + ".c";
+    if (filename.empty()) filename = module.name() + ".cpp";
 
     std::ofstream tb_file(filename.c_str());
     Internal::CodeGen_HLS_Testbench cg(tb_file);
+    cg.compile(module);
+}
+
+void compile_module_to_zynq_c_source(const Module &module, std::string filename) {
+    if (filename.empty()) filename = module.name() + ".c";
+
+    std::ofstream file(filename.c_str());
+    Internal::CodeGen_Zynq_C cg(file);
     cg.compile(module);
 }
 

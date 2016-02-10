@@ -84,7 +84,8 @@ void linebuffer_1D(stream<PackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_
                    stream<PackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream) {
 #pragma HLS INLINE
  LB_1D_pass:for(size_t idx_0 = 0; idx_0 < IMG_EXTENT_0; idx_0 += EXTENT_0) {
-#pragma HLS PIPELINE rewind
+        //#pragma HLS PIPELINE rewind // rewind causes a internal error in Vivado HLS 2015.4
+#pragma HLS PIPELINE
         out_stream.write(in_stream.read());
     }
 }
@@ -325,7 +326,8 @@ template <size_t IMG_EXTENT_0, size_t IMG_EXTENT_1=1, size_t IMG_EXTENT_2=1, siz
 void linebuffer(stream<PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, IN_EXTENT_2, IN_EXTENT_3> > &in_stream,
 		stream<PackedStencil<T, OUT_EXTENT_0, OUT_EXTENT_1, OUT_EXTENT_2, OUT_EXTENT_3> > &out_stream) {
     static_assert(OUT_EXTENT_3 == IN_EXTENT_3, "dont not support 4D line buffer yet.");
-#pragma HLS INLINE
+#pragma HLS INLINE off
+#pragma HLS DATAFLOW
     linebuffer_4D<IMG_EXTENT_0, IMG_EXTENT_1, IMG_EXTENT_2, IMG_EXTENT_3>(in_stream, out_stream);
 }
 
