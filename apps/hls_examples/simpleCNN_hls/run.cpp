@@ -18,12 +18,13 @@ const unsigned char gaussian2d[5][5] = {
 
 
 int main(int argc, char **argv) {
-    Image<uint8_t> in(800, 800, 3);
-    Image<uint8_t> weight(5, 5, 3, 2);
+    Image<uint8_t> in(3, 256, 256);
+    Image<uint8_t> weight(64, 3, 3, 3);
     uint8_t bias = 0;
 
-    Image<uint8_t> out_native(in.width(), in.height(), weight.extent(3));
-    Image<uint8_t> out_hls(in.width(), in.height(), weight.extent(3));
+    Image<uint8_t> out_native(weight.width(), in.height(), in.channels());
+    Image<uint8_t> out_hls(weight.width(), in.height(), in.channels());
+
 
     for (int y = 0; y < in.height(); y++) {
         for (int x = 0; x < in.width(); x++) {
@@ -33,11 +34,11 @@ int main(int argc, char **argv) {
         }
     }
 
-    for (int z =0; z< weight.extent(3); z++) {
-        for (int c = 0; c < in.channels(); c++) {
-            for (int y = 0; y < 5; y++) {
-                for (int x = 0; x < 5; x++) {
-                    weight(x, y, c, z) = gaussian2d[y][x] +z+c;
+    for (int y = 0; y < 3; y++) {
+        for (int x = 0; x < 3; x++) {
+             for (int z =0; z< weight.height(); z++) {
+                for (int c = 0; c < weight.width(); c++) {
+                    weight(c, z, x, y) = gaussian2d[y][x] +z+c;
                 }
             }
         }
