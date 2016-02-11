@@ -15,7 +15,7 @@ class MyPipeline {
 public:
   ImageParam input;
   std::vector<Argument> args;
-  
+
   Func padded, paddedc;
   Func sobel3_x, sobel3_y;
   Func x2_grad, y2_grad, xy_grad;
@@ -120,7 +120,7 @@ public:
     std::cout << "\ncompiling HLS code..." << std::endl;
 
     hw_output.store_at(output, xo).compute_at(output, xi);
-    hw_output.accelerate({padded});
+    hw_output.accelerate({padded}, output, xi, xo);
     padded.linebuffer();
     harris.linebuffer();
 
@@ -133,13 +133,13 @@ public:
 private:
   Func gblur(Func in) {
     Func local_sum, res;
-    local_sum(x,y) = (in(x-1,y-1)*5  + in(x-1,y+1)*5  + 
+    local_sum(x,y) = (in(x-1,y-1)*5  + in(x-1,y+1)*5  +
 		      in(x+1,y-1)*5  + in(x+1,y+1)*5  +
 		      in(  x,y-1)*12 + in(x-1,  y)*12 +
-		      in(x+1,  y)*12 + in(  x,y+1)*12 + 
+		      in(x+1,  y)*12 + in(  x,y+1)*12 +
 		      in(  x,  y)*30);
     res(x,y) = cast<int32_t>(local_sum(x,y) >> 8 );
-    
+
     return res;
   }
 };

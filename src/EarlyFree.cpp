@@ -170,7 +170,7 @@ class InjectEarlyFrees : public IRMutator {
     using IRMutator::visit;
 
     void visit(const Allocate *alloc) {
-        if (starts_with(alloc->name, "kb_")) {
+        if (alloc->free_function == "_kernel_buffer") {
             // do late free for kernel buffers
             // TODO kernel buffer can be freed earlier than this
             // specifically, the early free need to be delayed until wait DMA call finishes
@@ -178,7 +178,7 @@ class InjectEarlyFrees : public IRMutator {
             alloc = stmt.as<Allocate>();
             internal_assert(alloc);
             stmt = Allocate::make(alloc->name, alloc->type, alloc->extents, alloc->condition,
-                                  Block::make(alloc->body, Free::make(alloc->name)), alloc->new_expr);
+                                  Block::make(alloc->body, Free::make(alloc->name)), alloc->new_expr, alloc->free_function);
             return;
         }
         IRMutator::visit(alloc);
@@ -195,7 +195,7 @@ class InjectEarlyFrees : public IRMutator {
             stmt = inject_marker.mutate(stmt);
         } else {
             stmt = Allocate::make(alloc->name, alloc->type, alloc->extents, alloc->condition,
-                                  Block::make(alloc->body, Free::make(alloc->name)), alloc->new_expr);
+                                  Block::make(alloc->body, Free::make(alloc->name)), alloc->new_expr, alloc->free_function);
         }
 
     }

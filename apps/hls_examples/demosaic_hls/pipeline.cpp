@@ -75,7 +75,7 @@ public:
     void compile_hls() {
         std::cout << "\ncompiling HLS code..." << std::endl;
 
-        hw_output.accelerate({padded});
+        hw_output.accelerate({padded}, output, xi, xo);
         hw_output.store_at(output, xo).compute_at(output, xi).unroll(c);
         padded.linebuffer();
 

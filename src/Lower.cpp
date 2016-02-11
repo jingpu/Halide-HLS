@@ -154,7 +154,7 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
             s = replace_image_param(s, dag);
         }
 
-        s = update_kbuffer_slices(s);
+        s = update_kbuffer_slices(s, env);
 
         debug(2) << "Lowering after HLS optimization:\n" << s << '\n';
     }

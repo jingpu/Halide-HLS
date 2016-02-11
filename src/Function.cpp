@@ -660,33 +660,36 @@ ostream &operator <<(ostream &stream, const Function &function) {
     return stream;
 }
 
-void Function::insert_buffer(Function &buffered) {
+
+Function Function::insert_buffer_before(const string &name) {
+    Function buffer(name);
     // TODO this implementation needs to be reviewed regarding the reference counting
     // TODO check assumptions
 
     // before insert:   pre -> cur -> next
-    // after insert:    pre -> buffered -> cur -> next
+    // after insert:    pre -> buffer -> cur -> next
     debug(3) << "before insertion\n"
-             << *this << "\n" << buffered << "\n\n";
+             << *this << "\n"
+             << buffer << "\n\n";
 
-    // buffered will repliaced the function contents of this function, but keeps
+    // buffer will repliaced the function contents of this function, but keeps
     // its original name and reference count.
-    string buffered_name = buffered.name();
-    RefCount buffered_refcount = buffered.contents.ptr->ref_count;
+    RefCount buffer_refcount = buffer.contents.ptr->ref_count;
 
-    *buffered.contents.ptr = *contents.ptr;
-    buffered.contents.ptr->name = buffered_name;
-    buffered.contents.ptr->ref_count = buffered_refcount;
+    // make a deep copy of the function contents
+    *buffer.contents.ptr = *contents.ptr;
+    buffer.contents.ptr->name = name;
+    buffer.contents.ptr->ref_count = buffer_refcount;
 
-    // reset and initialize the schedule of buffered function
-    buffered.contents.ptr->schedule = Schedule();
-    for (size_t i = 0; i < buffered.args().size(); i++) {
-        Dim d = {buffered.args()[i], ForType::Serial, DeviceAPI::Parent, true};
-        buffered.contents.ptr->schedule.dims().push_back(d);
-        buffered.contents.ptr->schedule.storage_dims().push_back(buffered.args()[i]);
+    // reset and initialize the schedule of buffer function
+    buffer.contents.ptr->schedule = Schedule();
+    for (size_t i = 0; i < buffer.args().size(); i++) {
+        Dim d = {buffer.args()[i], ForType::Serial, DeviceAPI::Parent, true};
+        buffer.contents.ptr->schedule.dims().push_back(d);
+        buffer.contents.ptr->schedule.storage_dims().push_back(buffer.args()[i]);
     }
     Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::Parent, true};
-    buffered.contents.ptr->schedule.dims().push_back(d);
+    buffer.contents.ptr->schedule.dims().push_back(d);
 
     // make a copy of the current schedule
     Schedule cur_schedule = this->schedule();
@@ -700,20 +703,73 @@ void Function::insert_buffer(Function &buffered) {
     contents.ptr->frozen = false;
     contents.ptr->output_buffers.clear();
 
-    // Refer this function value to the buffered function,
-    // i.e. cur_func = buffered_func.
+    // Refer this function value to the buffer function,
+    // i.e. cur_func = buffer_func.
     Func cur_func(*this);
-    Func buffered_func(buffered);
-    vector<Var> args(buffered.args().size());
-    for (size_t i = 0; i < buffered.args().size(); i++)
-        args[i] = Var(buffered.args()[i]);
-    cur_func(args) = buffered_func(args);
+    Func buffer_func(buffer);
+    vector<Var> args(buffer.args().size());
+    for (size_t i = 0; i < buffer.args().size(); i++)
+        args[i] = Var(buffer.args()[i]);
+    cur_func(args) = buffer_func(args);
 
     // restore the schedule
     this->schedule() = cur_schedule;
 
     debug(3) << "after insertion\n"
-             << *this << "\n" << buffered << "\n\n";
+             << *this << "\n"
+             << buffer << "\n\n";
+    return buffer;
+}
+
+Function Function::insert_buffer_after(const string &name) {
+    // TODO this implementation needs to be reviewed regarding the reference counting
+    // TODO check assumptions
+
+    // before insert:   pre -> cur -> next
+    // after insert:    pre -> cur -> buffered -> next
+    Function buffer = *this;
+    debug(3) << "before insertion\n"
+             << *this << "\n"
+            << buffer << "\n\n";
+
+    // allocate a new function content for this function,
+    // and do a deep copy of function content
+    contents.ptr = new FunctionContents();
+    *contents.ptr = *buffer.contents.ptr;
+
+    // TODO keep reference counts consistent
+    //buffered.contents.ptr->ref_count = buffered_refcount;
+
+    // update buffer function name
+    // NOTE we cannot really rename the buffer function name
+    // because Halide compiler results the function references
+    // in the downstream function expressions by name, so
+    // instead we give the name to the current function
+    contents.ptr->name = name;
+
+    // clear the function contents
+    buffer.contents.ptr->args.clear();
+    buffer.contents.ptr->values.clear();
+    buffer.contents.ptr->updates.clear();
+    buffer.contents.ptr->output_types.clear();
+    buffer.contents.ptr->schedule = Schedule();
+    buffer.contents.ptr->frozen = false;
+    buffer.contents.ptr->output_buffers.clear();
+
+
+    // Refer buffer function value to this function,
+    // i.e. buffer_func = cur_func.
+    Func cur_func(*this);
+    Func buffer_func(buffer);
+    vector<Var> args(cur_func.args().size());
+    for (size_t i = 0; i < cur_func.args().size(); i++)
+        args[i] = Var(cur_func.args()[i]);
+    buffer_func(args) = cur_func(args);
+
+    debug(3) << "after insertion\n"
+             << *this << "\n"
+             << buffer << "\n\n";
+    return buffer;
 }
 }
 }

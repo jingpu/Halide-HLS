@@ -49,7 +49,7 @@ public:
         // level
         output.split(x, xo, xi, 64);
         hw_output.store_at(output, xo).compute_at(output, xi);
-        hw_output.accelerate({A});
+        hw_output.accelerate({A}, output, xi, xo);
 
         A.linebuffer().fifo_depth(hw_output, 4).fifo_depth(C, 2);
         B.linebuffer();

@@ -396,9 +396,6 @@ class AddStreamOperationForFunction : public IRMutator {
             Region bounds;
             for (StencilDimSpecs dim: kernel.dims) {
                 bounds.push_back(Range(0, dim.size));
-                bounds.push_back(Range(dim.store_bound.min,
-                                       simplify(dim.store_bound.max - dim.store_bound.min + 1)));
-
             }
             stmt = Realize::make(stream_name, kernel.func.output_types(), bounds, const_true(), stream_pc);
         }
@@ -825,9 +822,6 @@ class LinebufferForFunction : public IRMutator {
             Region bounds;
             for (StencilDimSpecs dim: kernel.dims) {
                 bounds.push_back(Range(0, dim.step));
-                bounds.push_back(Range(dim.store_bound.min,
-                                       simplify(dim.store_bound.max - dim.store_bound.min + 1)));
-
             }
             stmt = Realize::make(kernel.name + ".stencil_update.stream", op->types, bounds, const_true(), new_pc);
         } else {

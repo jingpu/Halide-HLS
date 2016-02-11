@@ -4,58 +4,69 @@
 #include "IROperator.h"
 #include "Scope.h"
 #include "Debug.h"
+#include "Bounds.h"
 
 namespace Halide {
 namespace Internal {
 
 using std::string;
+using std::vector;
+using std::map;
 
 
-class UpdateSliceForVar :public IRMutator {
-    const string &var_name;
+class UpdateSliceForFunc :public IRMutator {
+    const string &func_name;
     const Region &bounds;
     using IRMutator::visit;
 
     void visit(const Realize *op) {
-        if (starts_with(op->name, "slice_" + var_name)) {
-            debug(2) << "find slice " << op->name << "\n";
-            internal_assert(op->bounds.size() == 2*bounds.size());
-            Region new_bounds;
-            // TODO check the slice is within the range of kernel buffer,
-            // and check that lower dimensions are not sliced
-            for (size_t i = 0; i < bounds.size(); i++) {
-                new_bounds.push_back(op->bounds[2*i]);
-                Range new_range;
-                new_range.min = op->bounds[2*i + 1].min - bounds[i].min;
-                new_range.extent = op->bounds[2*i + 1].extent;
-                new_bounds.push_back(new_range);
+        // removes possible "__auto_insert__" prefix
+        string prefix = "__auto_insert__";
+        string var_name = op->name;
+        if (starts_with(var_name, prefix)) {
+            var_name = var_name.substr(prefix.size(), var_name.size() - prefix.size());
+        }
+        // removes possoble suffix ".stencil.stream" or ".stencil_update.stream"
+        size_t pos_suffix = var_name.rfind(".stencil");
+        var_name =  var_name.substr(0, pos_suffix);
+        if (ends_with(func_name, var_name)) {
+            debug(3) << "find buffer slice " << op->name << "\n";
+            Box b = box_provided(op->body, func_name);
+            merge_boxes(b, box_required(op->body, func_name));
+
+            vector<Expr> args({func_name, var_name});
+            internal_assert(b.size() == bounds.size());
+            for(size_t i = 0; i < b.size(); i++) {
+                args.push_back(b[i].min - bounds[i].min); // offset the min possible according to the realize bounds
+                args.push_back(b[i].max - b[i].min + 1);
             }
-            stmt = Realize::make(op->name, op->types, new_bounds,
-                                 op->condition, op->body);
+
+            Stmt slice_call = Evaluate::make(Call::make(Handle(), "slice_buffer", args, Call::Intrinsic));
+            stmt = Realize::make(op->name, op->types, op->bounds, op->condition,
+                                 Block::make(slice_call, op->body));
         } else {
             IRMutator::visit(op);
         }
     }
 public:
-    UpdateSliceForVar(const string &s, const Region &b)
-        : var_name(s), bounds(b) {}
+    UpdateSliceForFunc(const string &s, const Region &b)
+        : func_name(s), bounds(b) {}
 };
 
 class UpdateKBufferSlices : public IRMutator {
+    const map<string, Function> &env;
+
     using IRMutator::visit;
 
     void visit(const Realize *op) {
-        if (starts_with(op->name, "kb_")) {
-            string var_name = op->name.substr(3, op->name.size() - 3);
-            debug(2) << "find kernel buffer " << var_name << "\n";
-            for (size_t i = 0; i < op->bounds.size(); i++)
-                debug(3) << "  [" << op->bounds[i].min << ", "
-                         << op->bounds[i].extent << "]\n";
-
+        // Find the args for this function
+        map<string, Function>::const_iterator iter = env.find(op->name);
+        if (iter != env.end() &&
+            iter->second.schedule().is_kernel_buffer()) {
             // Recurses
             Stmt new_body = mutate(op->body);
             // then modifies the slice node in the body
-            new_body = UpdateSliceForVar(var_name, op->bounds).mutate(new_body);
+            new_body = UpdateSliceForFunc(op->name, op->bounds).mutate(new_body);
 
             stmt = Realize::make(op->name, op->types, op->bounds,
                                  op->condition, new_body);
@@ -64,11 +75,11 @@ class UpdateKBufferSlices : public IRMutator {
         }
     }
 public:
-    UpdateKBufferSlices() {}
+    UpdateKBufferSlices(const map<string, Function> &e) : env(e) {}
 };
 
-Stmt update_kbuffer_slices(Stmt s) {
-    s = UpdateKBufferSlices().mutate(s);
+Stmt update_kbuffer_slices(Stmt s, const map<string, Function> &env) {
+    s = UpdateKBufferSlices(env).mutate(s);
     return s;
 }
 

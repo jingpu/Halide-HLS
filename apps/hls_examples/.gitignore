@@ -4,6 +4,8 @@ hls_target.cpp
 hls_target.h
 pipeline_native.cpp
 pipeline_native.h
+pipeline_zynq.c
+pipeline_zynq.h
 pipeline
 run
 dump

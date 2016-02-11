@@ -22,7 +22,7 @@ public:
 
     MyPipeline() : input(UInt(8), 3, "input"), weight(UInt(8), 4, "weight"),
                    conv1("conv1"), output("output"), hw_output("hw_output") {
-        
+
         // define the algorithm
         clamped = BoundaryConditions::repeat_edge(input);
         conv1 = convolve(clamped);
@@ -54,7 +54,7 @@ public:
         std::cout << "\ncompiling cpu code..." << std::endl;
 
         clamped.store_at(output, xo).compute_at(output, xi);
-        
+
         output.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
         output.compile_to_header("pipeline_native.h", args, "pipeline_native");
         output.compile_to_object("pipeline_native.o", args, "pipeline_native");
@@ -66,12 +66,13 @@ public:
         // HLS schedule: make a hw pipeline producing 'hw_output', taking
         // inputs of 'clamped', buffering intermediates at (output, xo) loop
         // level
-        hw_output.accelerate({clamped});
         hw_output.store_at(output, xo).compute_at(output, xi);
-        
-        clamped.linebuffer();
+        hw_output.accelerate({clamped}, output, xi, xo);
+
+
+        clamped.store_at(output, xo).compute_at(output, xi);
         conv1.linebuffer();
-  
+
         //output.print_loop_nest();
         output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
         output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
@@ -93,25 +94,21 @@ private:
         return res;
     }
 
-
-private:
     Func relu(Func in) {
         Func res;
         res(c, x, y) = max(0, in(c, x, y));
-        
+
         return res;
    }
 
-
-private:
    Func maxPool(Func in) {
         Func res;
         RDom r(0, 2, 0, 2);
         res(c, x, y) = maximum(in(c, x+r.x, y+r.y));
-         
+
         return res;
    }
-}; 
+};
 
 int main(int argc, char **argv) {
     MyPipeline p1;

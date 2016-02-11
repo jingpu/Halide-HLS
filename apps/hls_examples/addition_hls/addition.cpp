@@ -36,9 +36,6 @@ public:
 
         // Unroll across color; bound this to 3 channels
         sum.bound(c, 0, 3);
-        padded1.store_at(sum, xo).compute_at(sum, xi);
-        padded2.store_at(sum, xo).compute_at(sum, xi);
-        hw_sum.store_at(sum, xo).compute_at(sum, xi).unroll(c);
 
         args = {input1, input2};
     }
@@ -54,8 +51,12 @@ public:
     {
         std::cout << "\ncompiling HLS code..." << std::endl;
 
-        hw_sum.accelerate({padded1, padded2});
+        padded1.compute_root();
+        padded2.compute_root();
+        hw_sum.store_at(sum, xo).compute_at(sum, xi).unroll(c);
+        hw_sum.accelerate({padded1, padded2}, sum, xi, xo);
 
+        //sum.print_loop_nest();
         sum.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
         sum.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
         sum.compile_to_header("pipeline_hls.h", args, "pipeline_hls");

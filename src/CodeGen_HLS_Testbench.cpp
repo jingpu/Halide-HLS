@@ -134,6 +134,16 @@ void CodeGen_HLS_Testbench::visit(const ProducerConsumer *op) {
         CodeGen_HLS_Base::visit(op);
     }
 }
-
+void CodeGen_HLS_Testbench::visit(const Allocate *op) {
+    if (op->free_function == "_kernel_buffer") {
+        // We only treat kernel buffer function differently in Zynq runtime.
+        // Here, we just resets the new_expr and free_function
+        // for this allocate node
+        Stmt alloc = Allocate::make(op->name, op->type, op->extents, op->condition, op->body);
+        alloc.accept(this);
+    } else {
+        CodeGen_HLS_Base::visit(op);
+    }
+}
 }
 }

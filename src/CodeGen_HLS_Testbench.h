@@ -26,6 +26,7 @@ public:
 protected:
     using CodeGen_HLS_Base::visit;
     void visit(const ProducerConsumer *);
+    void visit(const Allocate *);
 
 private:
     CodeGen_HLS_Target cg_target;

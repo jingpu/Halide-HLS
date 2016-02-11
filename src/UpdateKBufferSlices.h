@@ -7,6 +7,8 @@
  * of kernel buffer slices.
  */
 
+#include <map>
+
 #include "IR.h"
 
 namespace Halide {
@@ -15,7 +17,7 @@ namespace Internal {
 /** Update the min positions of the storage domains of kernel buffer
  * slices given the min of kernel buffer allocations
  */
-Stmt update_kbuffer_slices(Stmt s);
+Stmt update_kbuffer_slices(Stmt s, const std::map<std::string, Function> &env);
 
 }
 }

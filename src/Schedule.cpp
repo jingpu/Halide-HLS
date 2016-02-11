@@ -27,10 +27,13 @@ struct ScheduleContents {
     std::set<std::string> accelerate_inputs;
     std::string accelerate_exit;
     std::map<std::string, int> fifo_depths;   // key is the name of the consumer
+    bool is_kernel_buffer;
+    bool is_kernel_buffer_slice;
 
     ScheduleContents()
         : memoized(false), touched(false), allow_race_conditions(false),
-          is_hw_kernel(false), is_accelerated(false), is_linebuffered(false) {};
+          is_hw_kernel(false), is_accelerated(false), is_linebuffered(false),
+          is_kernel_buffer(false), is_kernel_buffer_slice(false) {};
 };
 
 
@@ -157,6 +160,22 @@ bool Schedule::is_linebuffered() const {
 
 bool &Schedule::is_linebuffered() {
     return contents.ptr->is_linebuffered;
+}
+
+bool Schedule::is_kernel_buffer() const {
+    return contents.ptr->is_kernel_buffer;
+}
+
+bool &Schedule::is_kernel_buffer() {
+    return contents.ptr->is_kernel_buffer;
+}
+
+bool Schedule::is_kernel_buffer_slice() const {
+    return contents.ptr->is_kernel_buffer_slice;
+}
+
+bool &Schedule::is_kernel_buffer_slice() {
+    return contents.ptr->is_kernel_buffer_slice;
 }
 
 std::set<std::string> Schedule::accelerate_inputs() const{

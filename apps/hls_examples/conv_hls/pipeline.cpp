@@ -66,11 +66,11 @@ public:
         // HLS schedule: make a hw pipeline producing 'hw_output', taking
         // inputs of 'clamped', buffering intermediates at (output, xo) loop
         // level
-        hw_output.accelerate({clamped});  // define the inputs and the output
+        hw_output.accelerate({clamped}, output, xi, xo);  // define the inputs and the output
         hw_output.store_at(output, xo);   // define the tile size processed by the pipeline
         hw_output.compute_at(output, xi); // define the throughput of the pipeline
 
-        clamped.linebuffer();  // line-buffer the inputs is required
+        clamped.compute_root(); // prepare the input for the whole image
         conv1.linebuffer();    // line-buffer an intermediate stage is optional
 
         //output.print_loop_nest();

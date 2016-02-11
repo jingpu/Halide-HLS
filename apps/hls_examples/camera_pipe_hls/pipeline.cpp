@@ -322,7 +322,7 @@ public:
         corrected.compute_at(processed, x_in);
 
         // hardware pipeline from denoised to demosaiced
-        demosaiced.accelerate({denoised});
+        demosaiced.accelerate({denoised}, processed, x_grid, tx);
         denoised.linebuffer();
         deinterleaved.linebuffer().unroll(c);
 

@@ -152,7 +152,7 @@ void CodeGen_Zynq_C::compile(const LoweredFunc &f) {
 }
 
 void CodeGen_Zynq_C::visit(const Allocate *op) {
-    if (starts_with(op->name, "kb_")) {
+    if (op->free_function == "_kernel_buffer") {
         open_scope();
         /* IR:
            allocate kb_var[uint8 * 8 * 8 * 128 * 128]
@@ -237,7 +237,11 @@ void CodeGen_Zynq_C::visit(const Allocate *op) {
 }
 
 void CodeGen_Zynq_C::visit(const Free *op) {
-    if (starts_with(op->name, "kb_")){
+    string free_function;
+    if (heap_allocations.contains(op->name)) {
+        free_function = allocations.get(op->name).free_function;
+    }
+    if (free_function == "_kernel_buffer"){
         /* IR:
            free kb_var
 
@@ -271,103 +275,99 @@ void CodeGen_Zynq_C::visit(const Call *op) {
 }
 
 void CodeGen_Zynq_C::visit(const Realize *op) {
-    if (starts_with(op->name, "slice_")) {
-        /* IR:
-           realize slice_var.stencil.stream([0, 8], [0, 8], [0, 8], [0, 8], [0, 1], [(xo * 32), 32], [0, 1], [(yo * 32), 32])
+    // TODO add assertions
 
-           C code:
-           Buffer slice_var;
-           status_slice_var = slice_buffer(&kbuf, &slice_var, xo * 32, yo * 32, 32, 32);
-           if (status_slice_var < 0) {
-            printf("Failed slicing buffer for var.\n");
-            return 0;
-           }
+    /* IR:
+       realize slice_var.stencil.stream([0, 8], [0, 8], [0, 1], [0, 1]) {
+         slice_buffer("var", "slice_var", 0, 8, 0, 8, (xo * 32), 32, (yo * 32), 32)
+         ...
+       }
+
+       C code:
+       Buffer slice_var;
+       status_slice_var = slice_buffer(&kbuf, &slice_var, xo * 32, yo * 32, 32, 32);
+       if (status_slice_var < 0) {
+       printf("Failed slicing buffer for var.\n");
+       return 0;
+       }
+    */
+    // check that there is a call of slice_buffer in the body
+    const Block *block = op->body.as<Block>();
+    internal_assert(block);
+    const Evaluate *eva = block->first.as<Evaluate>();
+    internal_assert(eva);
+    const Call *slice_call = eva->value.as<Call>();
+    internal_assert(slice_call && slice_call->name == "slice_buffer");
+    open_scope();
+
+    internal_assert(slice_call->args.size() >= 6);
+    const StringImm *var_name = slice_call->args[0].as<StringImm>();
+    const StringImm *slice_var_name = slice_call->args[1].as<StringImm>();
+    internal_assert(var_name && slice_var_name);
+
+    string kbuf_name = "kbuf_" + var_name->value;
+    string slice_name = "slice_" + slice_var_name->value;
+    buffer_slices.push_back(slice_name);
+    string slice_status_name = "status_" + slice_name;
+    string width, height, x_offset, y_offset;
+    // TODO check the lower demesion matches the buffer depth
+    // TODO static check that the slice is within the bounds of kernel buffer
+    size_t arg_length = slice_call->args.size();
+    x_offset = print_expr(slice_call->args[arg_length-4]);
+    width = print_expr(slice_call->args[arg_length-3]);
+    y_offset = print_expr(slice_call->args[arg_length-2]);
+    height = print_expr(slice_call->args[arg_length-1]);
+
+    do_indent();
+    stream << "Buffer " << print_name(slice_name) << ";\n";
+    do_indent();
+    stream << "int " << print_name(slice_status_name) << " = _slice_buffer(&"
+           << print_name(kbuf_name) << ", &" << print_name(slice_name) << ", "
+           << x_offset << ", " << y_offset << ", "
+           << width << ", " << height << ");\n";
+    do_indent();
+    stream << "if ("<< print_name(slice_status_name) << " < 0)";
+    open_scope();
+    do_indent();
+    stream << "printf(\"Failed to slice kernel buffer for " << var_name
+           << ".\\n\");\n";
+    close_scope("");
+
+    const ProducerConsumer *pc = block->rest.as<ProducerConsumer>();
+    internal_assert(pc && !pc->update.defined());
+
+    if (starts_with(pc->name, "_hls_target.")) {
+        // reachs the HW boundary
+        /* C code:
+           Buffer kbufs[3];
+           kbufs[0] = kbuf_in0;
+           kbufs[1] = kbuf_in1;
+           kbufs[2] = kbuf_out;
+           ioctl(hwacc, PROCESS_IMAGE, (long unsigned int)kbufs);
+           ioctl(hwacc, PEND_PROCESSED, NULL);
         */
-        open_scope();
-        // removes prefix "slice_" and suffix ".stencil.stream"
-        size_t pos_suffix = op->name.rfind(".stencil");
-        string var_name = "kb_" + op->name.substr(6, pos_suffix - 6);
-        string kbuf_name = "kbuf_" + var_name;
-        string slice_name = "slice_" + var_name;
-        buffer_slices.push_back(slice_name);
-        string slice_status_name = "status_" + slice_name;
-        string width, height, x_offset, y_offset;
-        // TODO check the lower demesion matches the buffer depth
-        // TODO static check that the slice is within the bounds of kernel buffer
-        size_t nDims = op->bounds.size();
-        x_offset = print_expr(op->bounds[nDims-3].min);
-        width = print_expr(op->bounds[nDims-3].extent);
-        y_offset = print_expr(op->bounds[nDims-1].min);
-        height = print_expr(op->bounds[nDims-1].extent);
-
+        // TODO check the order of buffer slices is consistent with
+        // the order of DMA ports in the driver
         do_indent();
-        stream << "Buffer " << print_name(slice_name) << ";\n";
-        do_indent();
-        stream << "int " << print_name(slice_status_name) << " = _slice_buffer(&"
-               << print_name(kbuf_name) << ", &" << print_name(slice_name) << ", "
-               << x_offset << ", " << y_offset << ", "
-               << width << ", " << height << ");\n";
-        do_indent();
-        stream << "if ("<< print_name(slice_status_name) << " < 0)";
-        open_scope();
-        do_indent();
-        stream << "printf(\"Failed to slice kernel buffer for " << var_name
-               << ".\\n\");\n";
-        close_scope("");
-
-        const ProducerConsumer *pc = op->body.as<ProducerConsumer>();
-        internal_assert(pc && !pc->update.defined());
-
-        if (starts_with(pc->name, "_hls_target.")) {
-            // reachs the HW boundary
-            /* C code:
-               Buffer kbufs[3];
-               kbufs[0] = kbuf_in0;
-               kbufs[1] = kbuf_in1;
-               kbufs[2] = kbuf_out;
-               ioctl(hwacc, PROCESS_IMAGE, (long unsigned int)kbufs);
-               ioctl(hwacc, PEND_PROCESSED, NULL);
-            */
-            // TODO check the order of buffer slices is consistent with
-            // the order of DMA ports in the driver
+        stream << "Buffer _kbufs[" << buffer_slices.size() << "];\n";
+        for (size_t i = 0; i < buffer_slices.size(); i++) {
             do_indent();
-            stream << "Buffer _kbufs[" << buffer_slices.size() << "];\n";
-            for (size_t i = 0; i < buffer_slices.size(); i++) {
-                do_indent();
-                stream << "_kbufs[" << i << "] = " << print_name(buffer_slices[i]) << ";\n";
-            }
-            do_indent();
-            stream << "ioctl(hwacc, PROCESS_IMAGE, (long unsigned int)_kbufs);\n";
-            do_indent();
-            stream << "ioctl(hwacc, PEND_PROCESSED, NULL);\n";
-
-            buffer_slices.clear();
-        } else {
-            // skip traverse produce node, since the node is generating
-            // input streams
-            pc->consume.accept(this);
+            stream << "_kbufs[" << i << "] = " << print_name(buffer_slices[i]) << ";\n";
         }
-        close_scope(slice_name);
+        do_indent();
+        stream << "ioctl(hwacc, PROCESS_IMAGE, (long unsigned int)_kbufs);\n";
+        do_indent();
+        stream << "ioctl(hwacc, PEND_PROCESSED, NULL);\n";
+
+        buffer_slices.clear();
     } else {
-        CodeGen_C::visit(op);
+        // skip traverse produce node, since the node is generating
+        // input streams
+        pc->consume.accept(this);
     }
+    close_scope(slice_name);
 }
 
-void CodeGen_Zynq_C::visit(const ProducerConsumer *op) {
-    if (starts_with(op->name, "_hls_target.")) {
-
-        do_indent();
-        stream << "// produce " << op->name << '\n';
-        do_indent();
-        stream << "// start DMA here\n";
-        do_indent();
-        stream << "// consume " << op->name << '\n';
-        print_stmt(op->consume);
-    } else {
-        CodeGen_C::visit(op);
-    }
-
-}
 
 }
 }

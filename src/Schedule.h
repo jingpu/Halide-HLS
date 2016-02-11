@@ -212,6 +212,12 @@ public:
     bool &is_accelerated();
     // @}
 
+
+    bool is_kernel_buffer() const;
+    bool &is_kernel_buffer();
+    bool is_kernel_buffer_slice() const;
+    bool &is_kernel_buffer_slice();
+
     /** The input functions of the hardware accelerator pipeline. */
     // @{
     std::set<std::string> accelerate_inputs() const;

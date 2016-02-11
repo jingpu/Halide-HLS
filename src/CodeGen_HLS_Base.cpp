@@ -39,8 +39,7 @@ string CodeGen_HLS_Base::print_stencil_type(Stencil_Type stencil_type) {
         oss << "hls::stream<PackedStencil<"
             << print_type(stencil_type.elemType);
 
-        // skip the even element in the bounds, since those denote storage bounds
-        for(size_t i = 0; i < stencil_type.bounds.size(); i += 2) {
+        for(size_t i = 0; i < stencil_type.bounds.size(); i++) {
             const Range &range = stencil_type.bounds[i];
             internal_assert(is_one(simplify(range.min == 0)));
             oss << ", " << range.extent;
@@ -76,7 +75,11 @@ string CodeGen_HLS_Base::print_stencil_pragma(const string &name) {
 }
 
 void CodeGen_HLS_Base::visit(const Call *op) {
-    if (op->name == "linebuffer") {
+    if (op->name == "slice_buffer") {
+        // skips. this intrinsic call only used in Zynq codegen
+        id = "0"; // skip evaluation
+        return;
+    } else if (op->name == "linebuffer") {
         //IR: linebuffer(buffered.stencil_update.stream, buffered.stencil.stream, extent_0[, extent_1, ...])
         //C: linebuffer<extent_0[, extent_1, ...]>(buffered.stencil_update.stream, buffered.stencil.stream)
         internal_assert(op->args.size() >= 3);

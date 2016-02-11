@@ -91,7 +91,7 @@ public:
         SAD.unroll(c);
         SAD.update(0).vectorize(c, 8).unroll(win.x).unroll(win.y);
 
-        output.print_loop_nest();
+        //output.print_loop_nest();
 
         output.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
         output.compile_to_header("pipeline_native.h", args, "pipeline_native");
@@ -109,9 +109,9 @@ public:
 
         output.tile(x, y, xo, yo, x_in, y_in, 256, 256);
         hw_output.store_at(output, xo).compute_at(output, x_in);
-        hw_output.accelerate({right_remapped, left_remapped});
-        right_remapped.linebuffer();
-        left_remapped.linebuffer();
+        hw_output.accelerate({right_remapped, left_remapped}, output, x_in, xo);
+        right_remapped.store_at(output, xo).compute_at(output, x_in);
+        left_remapped.store_at(output, xo).compute_at(output, x_in);
 
         RVar so("so"), si("si");
         //offset.update(0).unroll(search.x, 16); // the unrolling doesn's generate code that balances the computation, creating a long critical path
@@ -132,7 +132,7 @@ public:
 
 // Optimize for hls code generation
 // We change the algorithm to generated reduction tree for unrolling argmin
-qclass MyPipelineOpt {
+class MyPipelineOpt {
 public:
 ImageParam left, right, left_remap, right_remap;
 Func left_padded, right_padded, left_remap_padded, right_remap_padded;
@@ -178,10 +178,12 @@ MyPipelineOpt()
     output(x, y) = hw_output(x, y);
 
     // The comment constraints and schedules.
-    output.tile(x, y, xo, yo, x_in, y_in, 256, 256);
 
-    right_remapped.store_at(output, xo).compute_at(output, x_in);
-    left_remapped.store_at(output, xo).compute_at(output, x_in);
+
+    //right_remapped.store_at(output, xo).compute_at(output, x_in);
+    //left_remapped.store_at(output, xo).compute_at(output, x_in);
+    right_remapped.compute_root();
+    left_remapped.compute_root();
 
     right_padded.compute_root();
     left_padded.compute_root();
@@ -212,8 +214,10 @@ void compile_hls() {
     offset_l1.unroll(c);
     offset_l1.update(0).unroll(search_l1.x);
 
-    hw_output.store_at(output, xo).compute_at(output, x_in);
-    hw_output.accelerate({right_remapped, left_remapped});
+    //hw_output.store_at(output, xo).compute_at(output, x_in);
+    hw_output.compute_root();
+    hw_output.tile(x, y, xo, yo, x_in, y_in, 256, 256);
+    hw_output.accelerate({right_remapped, left_remapped}, hw_output, x_in, xo);
 
     //output.print_loop_nest();
 

@@ -37,7 +37,6 @@ protected:
 
     using CodeGen_C::visit;
 
-    void visit(const ProducerConsumer *);
     void visit(const Allocate *);
     void visit(const Free *);
     void visit(const Call *);
