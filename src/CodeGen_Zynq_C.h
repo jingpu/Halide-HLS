@@ -23,23 +23,13 @@ public:
      * stream (e.g. a file, or std::cout) */
     CodeGen_Zynq_C(std::ostream &dest);
 
-    void compile(const Module &module) {
-        CodeGen_C::compile(module);
-    }
-
 protected:
     std::vector<std::string> buffer_slices;
-
-    virtual void compile(const LoweredFunc &f);
-    virtual void compile(const Buffer &buffer) {
-        CodeGen_C::compile(buffer);
-    }
 
     using CodeGen_C::visit;
 
     void visit(const Allocate *);
     void visit(const Free *);
-    void visit(const Call *);
     void visit(const Realize *);
 };
 

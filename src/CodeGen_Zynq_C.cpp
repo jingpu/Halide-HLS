@@ -22,9 +22,7 @@ using std::to_string;
 
 namespace {
 const string zynq_headers =
-    "#include <sys/time.h>\n"
     "#include <fcntl.h>\n"
-    "#include <unistd.h>\n"
     "#include <sys/ioctl.h>\n"
     "#include <sys/mman.h>\n"
     "#include \"buffer.h\"\n"
@@ -48,14 +46,6 @@ const string slice_buffer_func =
     " return 0;\n"
     "}\n";
 
-const string open_device_stmt =
-    " // Open the hardware device\n"
-    " int hwacc = open(\"/dev/hwacc0\", O_RDWR);\n"
-    " if(hwacc == -1){\n"
-    "  printf(\"Failed to open hardware device!\\n\");\n"
-    "  return(0);\n"
-    " }\n";
-
 const string extern_calls_prototypes =
     "int32_t halide_error_bad_elem_size(void *, const char *, const char *, int32_t, int32_t);\n"
     "int32_t halide_error_access_out_of_bounds(void *, const char *, int32_t, int32_t, int32_t, int32_t, int32_t);\n"
@@ -69,86 +59,6 @@ CodeGen_Zynq_C::CodeGen_Zynq_C(ostream &dest)
     : CodeGen_C(dest, false, "", zynq_headers) {
     stream  << extern_calls_prototypes
             << slice_buffer_func;
-}
-
-
-// added open and close device statements
-void CodeGen_Zynq_C::compile(const LoweredFunc &f) {
-    // Use CodeGen_C implementation for headers and external functions
-    if (is_header || f.linkage == LoweredFunc::External) {
-        CodeGen_C::compile(f);
-        return;
-    }
-
-    internal_assert(emitted.count(f.name) == 0)
-        << "Function '" << f.name << "'  has already been emitted.\n";
-    emitted.insert(f.name);
-
-    const std::vector<Argument> &args = f.args;
-
-    have_user_context = false;
-    for (size_t i = 0; i < args.size(); i++) {
-        // TODO: check that its type is void *?
-        have_user_context |= (args[i].name == "__user_context");
-    }
-
-    // Emit prototypes for any extern calls used.
-    // TODO call ExternCallPrototypes e(stream, emitted) in CodeGen_C
-
-    // Emit the function prototype
-    // the function isn't public, mark it static.
-    stream << "static ";
-    stream << "int " << f.name << "(";
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer()) {
-            stream << "buffer_t *"
-                   << print_name(args[i].name)
-                   << "_buffer";
-        } else {
-            stream << "const "
-                   << print_type(args[i].type)
-                   << " "
-                   << print_name(args[i].name);
-        }
-
-        if (i < args.size()-1) stream << ", ";
-    }
-
-    stream << ") HALIDE_FUNCTION_ATTRS {\n";
-    indent += 1;
-
-    // Unpack the buffer_t's
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer()) {
-            push_buffer(args[i].type, args[i].name);
-        }
-    }
-
-    // open device
-    do_indent();
-    stream << open_device_stmt;
-
-    // Emit the body
-    print(f.body);
-
-    // close device
-    do_indent();
-    stream << "close(hwacc);\n";
-
-    // Return success.
-    do_indent();
-    stream << "return 0;\n";
-
-    indent -= 1;
-    stream << "}\n";
-
-    // Done with the buffer_t's, pop the associated symbols.
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer()) {
-            pop_buffer(args[i].name);
-        }
-    }
-
 }
 
 void CodeGen_Zynq_C::visit(const Allocate *op) {
@@ -263,12 +173,6 @@ void CodeGen_Zynq_C::visit(const Free *op) {
 
         heap_allocations.pop(op->name);
         allocations.pop(op->name);
-    } else {
-        CodeGen_C::visit(op);
-    }
-}
-void CodeGen_Zynq_C::visit(const Call *op) {
-    if (op->name == "linebuffer") {
     } else {
         CodeGen_C::visit(op);
     }

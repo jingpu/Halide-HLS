@@ -515,6 +515,8 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     // Get all the arguments/global images referenced in this function.
     vector<Argument> public_args = args;
 
+
+
     // If the target specifies user context but it's not in the args
     // vector, add it at the start (the jit path puts it in there
     // explicitly).
@@ -538,6 +540,11 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
                                            Argument::OutputBuffer,
                                            buf.type(), buf.dimensions()));
         }
+    }
+
+    // Adds an argument of the device handler if HLS feature is enable
+    if (target.has_feature(Target::HLS)) {
+        public_args.push_back(Argument("__hwacc", Argument::InputScalar, Int(32), 0));
     }
 
     // Create a module with all the global images in it.

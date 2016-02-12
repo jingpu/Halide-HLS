@@ -75,6 +75,8 @@ struct Target {
 
         Metal, ///< Enable the (Apple) Metal runtime.
 
+        HLS,  /// Enable Halide to HLS feature.
+
         FeatureEnd
     };
 

@@ -3,6 +3,8 @@
 #include <cassert>
 #include <math.h>
 
+#include <fcntl.h>
+#include <unistd.h>
 #include "pipeline_zynq.h"
 #include "pipeline_native.h"
 
@@ -18,10 +20,16 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    int hwacc = open("/dev/hwacc0", O_RDWR);
+    if(hwacc == -1) {
+        printf("Failed to open hardware device!\\n");
+        return(0);
+    }
+
+
     Image<uint8_t> input = load_image(argv[1]);
     Image<uint8_t> out_native(1024, 1024, 1);
     Image<uint8_t> out_zynq(1024, 1024, 1);
-
 
     printf("start.\n");
 
@@ -31,7 +39,7 @@ int main(int argc, char **argv) {
     //out_native = load_image("out_native.png");
     //printf("cpu program results loaded.\n");
 
-    pipeline_zynq(input, out_zynq);
+    pipeline_zynq(input, out_zynq, hwacc);
     save_image(out_zynq, "out_zynq.png");
     printf("accelerator program results saved.\n");
 
@@ -49,6 +57,7 @@ int main(int argc, char **argv) {
     }
     if (!pass) {
       printf("failed.\n");
+      close(hwacc);
       return 1;
     } else {
       printf("passed.\n");
@@ -66,9 +75,10 @@ int main(int argc, char **argv) {
     // Timing code. Timing doesn't include copying the input data to
     // the gpu or copying the output back.
     double min_t2 = benchmark(1, 10, [&]() {
-        pipeline_zynq(input, out_zynq);
+        pipeline_zynq(input, out_zynq, hwacc);
       });
     printf("accelerator program runtime: %g\n", min_t2 * 1e3);
 
+    close(hwacc);
     return 0;
 }
