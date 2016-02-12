@@ -11,7 +11,7 @@ all: out.png
 pipeline: pipeline.cpp
 	$(CXX) $(CXXFLAGS) -g -Wall $^ $(LDFLAGS) $(LIB_HALIDE) -o $@ -lpthread -ldl -lz -ltinfo
 
-pipeline_hls.cpp pipeline_native.o: pipeline
+pipeline_hls.cpp pipeline_native.o pipeline_zynq.c: pipeline
 	HL_DEBUG_CODEGEN=0 ./pipeline
 
 run: run.cpp pipeline_native.o pipeline_hls.cpp hls_target.cpp
