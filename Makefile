@@ -247,6 +247,7 @@ SOURCE_FILES = \
   CodeGen_Renderscript_Dev.cpp \
   CodeGen_X86.cpp \
   CodeGen_Zynq_C.cpp \
+  CodeGen_Zynq_LLVM.cpp \
   CSE.cpp \
   Debug.cpp \
   DebugToFile.cpp \
@@ -512,7 +513,8 @@ RUNTIME_CPP_COMPONENTS = \
   windows_io \
   windows_opencl \
   windows_thread_pool \
-  write_debug_image
+  write_debug_image \
+  zynq_driver
 
 RUNTIME_LL_COMPONENTS = \
   aarch64 \

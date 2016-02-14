@@ -20,6 +20,7 @@
 #include "CodeGen_ARM.h"
 #include "CodeGen_MIPS.h"
 #include "CodeGen_PNaCl.h"
+#include "CodeGen_Zynq_LLVM.h"
 
 #if !(__cplusplus > 199711L || _MSC_VER >= 1800)
 
@@ -249,6 +250,20 @@ void CodeGen_LLVM::set_context(llvm::LLVMContext &context) {
 
 CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
                                            llvm::LLVMContext &context) {
+    if (target.has_feature(Target::HLS)) {
+        user_assert(!target.features_any_of({Target::CUDA,
+                        Target::OpenCL,
+                        Target::OpenGL,
+                        Target::OpenGLCompute,
+                        Target::Renderscript,
+                        Target::Metal})) << "HLS feature cannot be enabled with GPU features.\n";
+        user_assert(target.arch == Target::ARM &&
+                    target.os == Target::Linux &&
+                    target.bits == 32)
+            << "Zynq runtime only suport 32bit ARM Linux.\n";
+        return make_codegen<CodeGen_Zynq_LLVM>(target, context);
+    }
+
     // The awkward mapping from targets to code generators
     if (target.features_any_of({Target::CUDA,
                                 Target::OpenCL,

@@ -3,11 +3,7 @@
 
 #include "CodeGen_Zynq_C.h"
 #include "CodeGen_Internal.h"
-#include "Substitute.h"
 #include "IROperator.h"
-#include "Param.h"
-#include "Var.h"
-#include "Lerp.h"
 #include "Simplify.h"
 
 namespace Halide {
@@ -46,26 +42,18 @@ const string slice_buffer_func =
     " return 0;\n"
     "}\n";
 
-const string extern_calls_prototypes =
-    "int32_t halide_error_bad_elem_size(void *, const char *, const char *, int32_t, int32_t);\n"
-    "int32_t halide_error_access_out_of_bounds(void *, const char *, int32_t, int32_t, int32_t, int32_t, int32_t);\n"
-    "int32_t halide_error_constraint_violated(void *, const char *, int32_t, const char *, int32_t);\n"
-    "int32_t halide_error_buffer_allocation_too_large(void *, const char *, int64_t, int64_t);\n"
-    "int32_t halide_error_buffer_extents_too_large(void *, const char *, int64_t, int64_t);\n"
-    "int32_t halide_error_explicit_bounds_too_small(void *, const char *, const char *, int32_t, int32_t, int32_t, int32_t);\n";
 }
 
 CodeGen_Zynq_C::CodeGen_Zynq_C(ostream &dest)
     : CodeGen_C(dest, false, "", zynq_headers) {
-    stream  << extern_calls_prototypes
-            << slice_buffer_func;
+    stream  << slice_buffer_func;
 }
 
 void CodeGen_Zynq_C::visit(const Allocate *op) {
     if (op->free_function == "_kernel_buffer") {
         open_scope();
         /* IR:
-           allocate kb_var[uint8 * 8 * 8 * 128 * 128]
+           allocate kb_var[uint8 * 8 * 8 * 128 * 128] custom_new{"_kernel_buffer"}custom_delete{ _kernel_buffer(); }
 
            C code:
            Buffer kbuf_var;

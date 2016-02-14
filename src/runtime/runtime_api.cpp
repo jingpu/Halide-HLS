@@ -6,6 +6,7 @@
 #include "HalideRuntimeRenderscript.h"
 #include "HalideRuntimeMetal.h"
 #include "runtime_internal.h"
+#include "HalideRuntimeZynq.h"
 
 // This runtime module will contain extern declarations of the Halide
 // API and the types it uses. It's useful for compiling modules that
@@ -124,5 +125,9 @@ __attribute__((used)) void *runtime_api_functions[] = {
     (void *)&halide_trace,
     (void *)&halide_uint64_to_string,
     (void *)&halide_use_jit_module,
+    (void *)&slice_buffer,
+    (void *)&ioctl,
+    (void *)&mmap,
+    (void *)&munmap,
 };
 }
