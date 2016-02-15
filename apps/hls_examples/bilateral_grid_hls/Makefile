@@ -21,7 +21,7 @@ out.png: run
 	./run ../../images/gray.png out.png
 
 pipeline_zynq.o: pipeline_zynq.c
-	$(CXX) -c -O2 $(CXXFLAGS) -g -Wall -Werror $^ -o $@  $(PNGFLAGS)
+	$(CXX) -c -O2 $(CXXFLAGS) -g -Wall -Werror $^ -o $@
 
 run_zynq.o: run_zynq.cpp
 	$(CXX) -c $(CXXFLAGS) -g -Wall -Werror $^ -o $@  $(PNGFLAGS)

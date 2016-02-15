@@ -486,6 +486,7 @@ static int __pipeline_hls(buffer_t *_p1_buffer, buffer_t *_output_2_buffer) HALI
       printf("mmap 2 failed!\n");
       return(0);
     }
+    gettimeofday(&t1, NULL);
     // produce output_shuffled
     for (int _output_shuffled_s0_y_grid_yo = 0; _output_shuffled_s0_y_grid_yo < 0 + 4; _output_shuffled_s0_y_grid_yo++)
     {
@@ -562,7 +563,6 @@ static int __pipeline_hls(buffer_t *_p1_buffer, buffer_t *_output_2_buffer) HALI
          } // for _input_shuffled_s0_y_in
         } // for _input_shuffled_s0_x_grid
        } // for _input_shuffled_s0_y_grid
-       gettimeofday(&t1, NULL);
 
        int ok_slice = 0;
        Buffer sliced_bufs[3];
@@ -583,9 +583,6 @@ static int __pipeline_hls(buffer_t *_p1_buffer, buffer_t *_output_2_buffer) HALI
        ioctl(hwacc, PROCESS_IMAGE, (long unsigned int)sliced_bufs);
        ioctl(hwacc, PEND_PROCESSED, NULL);
 
-       gettimeofday(&t2, NULL);
-       elapsedTime += (t2.tv_sec - t1.tv_sec) * 1000.0;
-       elapsedTime += (t2.tv_usec - t1.tv_usec) / 1000.0;
 
        //halide_free(NULL, _input_shuffled);
        munmap((void*)_input_shuffled, buf_input_shuffled.stride * buf_input_shuffled.height * buf_input_shuffled.depth);
@@ -593,6 +590,9 @@ static int __pipeline_hls(buffer_t *_p1_buffer, buffer_t *_output_2_buffer) HALI
       } // alloc _input_shuffled
      } // for _output_shuffled_s0_x_grid_xo
     } // for _output_shuffled_s0_y_grid_yo
+    gettimeofday(&t2, NULL);
+    elapsedTime += (t2.tv_sec - t1.tv_sec) * 1000.0;
+    elapsedTime += (t2.tv_usec - t1.tv_usec) / 1000.0;
     //halide_free(NULL, _input2_shuffled);
     munmap((void*)_input2_shuffled, buf_input2_shuffled.stride * buf_input2_shuffled.height * buf_input2_shuffled.depth);
     ioctl(hwacc, FREE_IMAGE, (long unsigned int)(&buf_input2_shuffled));

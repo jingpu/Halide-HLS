@@ -262,17 +262,20 @@ public:
         output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
         output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
         output.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
-
+        /*
         std::vector<Target::Feature> features({Target::HLS, Target::NoAsserts,
                     Target::NoBoundsQuery});
+        */
+        std::vector<Target::Feature> features({Target::HLS});
         Target target(Target::Linux, Target::ARM, 32, features);
 
         output.compile_to_lowered_stmt("pipeline_zynq.ir.html", args, HTML, target);
+        output.compile_to_zynq_c("pipeline_zynq.c", args, "pipeline_zynq", target);
+        output.compile_to_header("pipeline_zynq.h", args, "pipeline_zynq", target);
+
         Module module = output.compile_to_module(args, "pipeline_zynq", target);
         compile_module_to_llvm_assembly(module, "pipeline_zynq.ll");
         compile_module_to_object(module, "pipeline_zynq.o");
-        output.compile_to_zynq_c("pipeline_zynq.c", args, "pipeline_zynq", target);
-        output.compile_to_header("pipeline_zynq.h", args, "pipeline_zynq", target);
     }
 };
 
