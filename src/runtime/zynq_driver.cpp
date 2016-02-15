@@ -12,21 +12,55 @@
 
 #endif
 
-extern "C" int slice_buffer(Buffer* src, Buffer* des, unsigned int x, unsigned int y, unsigned int width, unsigned int height) {
+extern "C" {
+
+// forward declarations of some POSIX APIs
+extern int ioctl(int fd, unsigned long cmd, ...);
+extern void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
+extern int munmap(void *addr, size_t length);
+
+WEAK int halide_slice_kbuf(kbuf_t* src, kbuf_t* des, int x, int y, int width, int height) {
     /*
- if (width == 0 || height == 0) {
-  printf("slice_buffer failed: width and height of slide should be non-zero.\n");
-  return -1;
- }
- if (x + width > src->width || y + height > src->height) {
-  printf("slice_buffer failed: slice is out of range.\n");
-  return -1;
- }
+      if (width == 0 || height == 0) {
+      printf("slice_buffer failed: width and height of slide should be non-zero.\n");
+      return -1;
+      }
+      if (x + width > src->width || y + height > src->height) {
+      printf("slice_buffer failed: slice is out of range.\n");
+      return -1;
+      }
     */
- *des = *src; // copy depth, stride, data, etc.
- des->width = width;
- des->height = height;
- des->phys_addr += src->depth * (y * src->stride + x);
- des->mmap_offset += src->depth * (y * src->stride + x);
- return 0;
+    *des = *src; // copy depth, stride, data, etc.
+    des->width = width;
+    des->height = height;
+    des->phys_addr += src->depth * (y * src->stride + x);
+    des->mmap_offset += src->depth * (y * src->stride + x);
+    return 0;
+}
+
+
+WEAK int halide_alloc_kbuf(int fd, kbuf_t* ptr) {
+    return ioctl(fd, GET_BUFFER, (long unsigned int)ptr);
+}
+
+WEAK int halide_free_kbuf(int fd, kbuf_t* ptr) {
+    return ioctl(fd, FREE_IMAGE, (long unsigned int)ptr);
+}
+
+WEAK int halide_process_image(int fd, kbuf_t* ptr) {
+    return ioctl(fd, PROCESS_IMAGE, (long unsigned int)ptr);
+}
+
+WEAK int halide_pend_processed(int fd) {
+    return ioctl(fd, PEND_PROCESSED, NULL);
+}
+
+WEAK void *halide_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset) {
+    return mmap(addr, length, prot, flags, fd, offset);
+}
+
+WEAK int halide_munmap(void *addr, size_t length) {
+    return munmap(addr, length);
+}
+
 }

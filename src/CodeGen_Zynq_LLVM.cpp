@@ -17,12 +17,6 @@ using std::ostringstream;
 using std::to_string;
 
 namespace{
-
-const int FLAG_GET_BUFFER = 1000; // Get an unused buffer
-const int FLAG_GRAB_IMAGE = 1001; // Acquire image from camera
-const int FLAG_FREE_IMAGE = 1002; // Release buffer
-const int FLAG_PROCESS_IMAGE = 1003; // Push to stencil path
-const int FLAG_PEND_PROCESSED = 1004; // Retreive from stencil path
 const int FLAG_PROT_WRITE = PROT_WRITE;
 const int FLAG_MAP_SHARED = MAP_SHARED;
 }
@@ -46,11 +40,7 @@ void CodeGen_Zynq_LLVM::visit(const Allocate *op) {
            kbuf_var.height =128;
            kbuf_var.depth = 64;
            kbuf_var.stride = 128;
-           int get_kbuf_status = ioctl(__hwacc, GET_BUFFER, (long unsigned int)&kbuf_var);
-           if(get_kbuf_status < 0) {
-            printf("Failed to allocate kernel buffer for var.\n");
-            return 0;
-           }
+           halide_alloc_kbuf(__hwacc, &kbuf_var);
            uint8_t *_var = (uint8_t*) mmap(NULL,
                          kbuf_var.stride * kbuf_var.height * kbuf_var.depth,
                          PROT_WRITE, MAP_SHARED, __hwacc, kbuf_var.mmap_offset);
@@ -78,16 +68,16 @@ void CodeGen_Zynq_LLVM::visit(const Allocate *op) {
         allocation.destructor = NULL;
         allocation.destructor_function = NULL;
 
-        // alloca struct.Buffer
+        // alloca struct.kbuf_t
         llvm::Value *val_width, *val_height, *val_depth;
         val_width = codegen(width);
         val_height = codegen(height);
         val_depth = codegen(depth);
 
-        llvm::StructType *kbuf_type = module->getTypeByName("struct.Buffer");
-        internal_assert(kbuf_type) << "Did not find Buffer in initial module";
-        llvm::Value *size = llvm::ConstantInt::get(i32, 1);
-        llvm::Value *kbuf_ptr = builder->CreateAlloca(kbuf_type, size, kbuf_name);
+        llvm::StructType *kbuf_type = module->getTypeByName("struct.kbuf_t");
+        internal_assert(kbuf_type) << "Did not find kbuf_t in initial module";
+        llvm::Constant *one = llvm::ConstantInt::get(i32, 1);
+        llvm::Value *kbuf_ptr = builder->CreateAlloca(kbuf_type, one, kbuf_name);
         sym_push(kbuf_name, kbuf_ptr);
 
         llvm::Value *field_width_ptr =
@@ -128,22 +118,21 @@ void CodeGen_Zynq_LLVM::visit(const Allocate *op) {
         builder->CreateStore(val_width, field_stride_ptr);
 
         /*
-          create ioctl() call to allocate a kernel buffer
+          create call to allocate a kernel buffer
 
           C code:
-          ioctl(__hwacc, GET_BUFFER, (long unsigned int)&kbuf_var);
+          halide_alloc_kbuf(__hwacc, &kbuf_var);
         */
-        vector<llvm::Value *> ioctl_args(3);
-        ioctl_args[0] = sym_get("__hwacc", true);
-        ioctl_args[1] = codegen(FLAG_GET_BUFFER);
-        ioctl_args[2] = builder->CreatePointerCast(kbuf_ptr, i32);
+        vector<llvm::Value *> alloc_args(2);
+        alloc_args[0] = sym_get("__hwacc", true);
+        alloc_args[1] = kbuf_ptr;
 
-        llvm::Function *ioctl_fn = module->getFunction("ioctl");
-        internal_assert(ioctl_fn) << "Did not find ioctl() in initial module";
-        llvm::CallInst *ioctl_call = builder->CreateCall(ioctl_fn, ioctl_args);
+        llvm::Function *alloc_fn = module->getFunction("halide_alloc_kbuf");
+        internal_assert(alloc_fn) << "Did not find halide_alloc_kbuf in initial module";
+        llvm::CallInst *alloc_call = builder->CreateCall(alloc_fn, alloc_args);
 
         // check return value is greater than or equal to zero
-        llvm::Value *check = builder->CreateICmpSGE(ioctl_call, llvm::ConstantInt::get(i32, 0));
+        llvm::Value *check = builder->CreateICmpSGE(alloc_call, llvm::ConstantInt::get(i32, 0));
         create_assertion(check, Call::make(Int(32), "halide_error_out_of_memory",
                                            std::vector<Expr>(), Call::Extern));
 
@@ -172,7 +161,7 @@ void CodeGen_Zynq_LLVM::visit(const Allocate *op) {
                                                 8);
         mmap_args[5] = builder->CreateLoad(field_mmap_offset_ptr);
 
-        llvm::Function *mmap_fn = module->getFunction("mmap");
+        llvm::Function *mmap_fn = module->getFunction("halide_mmap");
         internal_assert(mmap_fn) << "Did not find mmap() in initial module";
         llvm::CallInst *mmap_call = builder->CreateCall(mmap_fn, mmap_args);
 
@@ -185,7 +174,7 @@ void CodeGen_Zynq_LLVM::visit(const Allocate *op) {
                                            std::vector<Expr>(), Call::Extern));
 
         // store "munmap" as free_function in allocations
-        string free_function = "munmap";
+        string free_function = "halide_munmap";
         llvm::Function *free_fn = module->getFunction(free_function);
         internal_assert(free_fn) << "Could not find " << free_function << " in module.\n";
         allocation.destructor = NULL;
@@ -207,13 +196,13 @@ void CodeGen_Zynq_LLVM::visit(const Allocate *op) {
 
 void CodeGen_Zynq_LLVM::visit(const Free *op) {
     Allocation alloc = allocations.get(op->name);
-    if (alloc.destructor_function->getName() == "munmap"){
+    if (alloc.destructor_function->getName() == "halide_munmap"){
         /* IR:
            free kb_var
 
            C code:
            munmap((void*)_var, allocation_bytes);
-           ioctl(__hwacc, FREE_IMAGE, (long unsi gned int)&kbuf_var);
+           halide_free_kbuf(__hwacc, &kbuf_var);
         */
         string kbuf_name = "kbuf_" + op->name;
         llvm::Value *kbuf_ptr = sym_get(kbuf_name, true);
@@ -221,18 +210,17 @@ void CodeGen_Zynq_LLVM::visit(const Free *op) {
         vector<llvm::Value *> munmap_args(2);
         munmap_args[0] = alloc.ptr;
         munmap_args[1] = codegen(alloc.constant_bytes);
-        llvm::Function *munmap_fn = module->getFunction("munmap");
+        llvm::Function *munmap_fn = module->getFunction("halide_munmap");
         internal_assert(munmap_fn) << "Could not find munmap in module.\n";
         builder->CreateCall(munmap_fn, munmap_args);
 
-        vector<llvm::Value *> ioctl_args(3);
+        vector<llvm::Value *> free_args(2);
         internal_assert(sym_exists("__hwacc"));
-        ioctl_args[0] = sym_get("__hwacc", true);
-        ioctl_args[1] = codegen(FLAG_FREE_IMAGE);
-        ioctl_args[2] = builder->CreatePointerCast(kbuf_ptr, i32);
-        llvm::Function *ioctl_fn = module->getFunction("ioctl");
-        internal_assert(ioctl_fn) << "Did not find ioctl() in initial module";
-        builder->CreateCall(ioctl_fn, ioctl_args);
+        free_args[0] = sym_get("__hwacc", true);
+        free_args[1] = kbuf_ptr;
+        llvm::Function *free_fn = module->getFunction("halide_free_kbuf");
+        internal_assert(free_fn) << "Did not find halide_free_kbuf in initial module";
+        builder->CreateCall(free_fn, free_args);
 
         sym_pop(kbuf_name);
         allocations.pop(op->name);
@@ -272,10 +260,10 @@ void CodeGen_Zynq_LLVM::visit(const Realize *op) {
     string slice_name = "slice_" + slice_var_name->value;
 
     llvm::Value *kbuf_ptr = sym_get(kbuf_name, true);
-    llvm::StructType *kbuf_type = module->getTypeByName("struct.Buffer");
+    llvm::StructType *kbuf_type = module->getTypeByName("struct.kbuf_t");
     internal_assert(kbuf_type) << "Did not find Buffer in initial module";
-    llvm::Value *size = llvm::ConstantInt::get(i32, 1);
-    llvm::Value *slice_ptr = builder->CreateAlloca(kbuf_type, size, slice_name);
+    llvm::Constant *one = llvm::ConstantInt::get(i32, 1);
+    llvm::Value *slice_ptr = builder->CreateAlloca(kbuf_type, one, slice_name);
     buffer_slices.push_back(slice_ptr);
 
     llvm::Value *width, *height, *x_offset, *y_offset;
@@ -288,8 +276,8 @@ void CodeGen_Zynq_LLVM::visit(const Realize *op) {
     height = codegen(slice_call->args[arg_length-1]);
 
     vector<llvm::Value *> slice_args({kbuf_ptr, slice_ptr, x_offset, y_offset, width, height});
-    llvm::Function *slice_fn = module->getFunction("slice_buffer");
-    internal_assert(slice_fn) << "Could not find slice_buffer in module.\n";
+    llvm::Function *slice_fn = module->getFunction("halide_slice_kbuf");
+    internal_assert(slice_fn) << "Could not find halide_slice_kbuf in module.\n";
     builder->CreateCall(slice_fn, slice_args);
 
     const ProducerConsumer *pc = block->rest.as<ProducerConsumer>();
@@ -302,8 +290,8 @@ void CodeGen_Zynq_LLVM::visit(const Realize *op) {
            kbufs[0] = kbuf_in0;
            kbufs[1] = kbuf_in1;
            kbufs[2] = kbuf_out;
-           ioctl(__hwacc, PROCESS_IMAGE, (long unsigned int)kbufs);
-           ioctl(__hwacc, PEND_PROCESSED, NULL);
+           halide_process_image(__hwacc, kbufs);
+           halide_pend_processed(__hwacc);
         */
         // TODO check the order of buffer slices is consistent with
         // the order of DMA ports in the driver
@@ -318,20 +306,16 @@ void CodeGen_Zynq_LLVM::visit(const Realize *op) {
             builder->CreateMemCpy(elem_ptr, slice_ptr, size_of_kbuf, 0);
         }
 
-        // ioctl(__hwacc, PROCESS_IMAGE, (long unsigned int)kbufs);
-        vector<llvm::Value *> ioctl_args(3);
-        internal_assert(sym_exists("__hwacc"));
-        ioctl_args[0] = sym_get("__hwacc", true);
-        ioctl_args[1] = codegen(FLAG_PROCESS_IMAGE);
-        ioctl_args[2] = builder->CreatePointerCast(slice_set, i32);
-        llvm::Function *ioctl_fn = module->getFunction("ioctl");
-        internal_assert(ioctl_fn) << "Did not find ioctl() in initial module";
-        builder->CreateCall(ioctl_fn, ioctl_args);
+        llvm::Value *fd = sym_get("__hwacc", true);
+        vector<llvm::Value *> process_args({fd, slice_set});
+        llvm::Function *process_fn = module->getFunction("halide_process_image");
+        internal_assert(process_fn) << "Did not find halide_process_image in initial module";
+        builder->CreateCall(process_fn, process_args);
 
-        // ioctl(__hwacc, PEND_PROCESSED, NULL);
-        ioctl_args[1] = codegen(FLAG_PEND_PROCESSED);
-        ioctl_args[2] = llvm::ConstantPointerNull::get(llvm::PointerType::get(i32, 0));
-        builder->CreateCall(ioctl_fn, ioctl_args);
+        vector<llvm::Value *> pend_args({fd});
+        llvm::Function *pend_fn = module->getFunction("halide_pend_processed");
+        internal_assert(pend_fn) << "Did not find halide_pend_processed in initial module";
+        builder->CreateCall(pend_fn, pend_args);
 
         buffer_slices.clear();
     } else {

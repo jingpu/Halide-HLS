@@ -120,6 +120,7 @@ DECLARE_CPP_INITMOD(renderscript)
 DECLARE_CPP_INITMOD(profiler)
 DECLARE_CPP_INITMOD(profiler_inlined)
 DECLARE_CPP_INITMOD(runtime_api)
+DECLARE_CPP_INITMOD(zynq_driver)
 #ifdef WITH_METAL
 DECLARE_CPP_INITMOD(metal)
 #ifdef WITH_ARM
@@ -734,6 +735,10 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
 
     if (module_type == ModuleAOT && t.has_feature(Target::Matlab)) {
         modules.push_back(get_initmod_matlab(c, bits_64, debug));
+    }
+
+    if (module_type == ModuleAOT && t.has_feature(Target::HLS) ) {
+        modules.push_back(get_initmod_zynq_driver(c, bits_64, debug));
     }
 
     if (module_type == ModuleAOTNoRuntime ||

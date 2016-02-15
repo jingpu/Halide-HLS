@@ -125,9 +125,12 @@ __attribute__((used)) void *runtime_api_functions[] = {
     (void *)&halide_trace,
     (void *)&halide_uint64_to_string,
     (void *)&halide_use_jit_module,
-    (void *)&slice_buffer,
-    (void *)&ioctl,
-    (void *)&mmap,
-    (void *)&munmap,
+    (void *)&halide_slice_kbuf,
+    (void *)&halide_alloc_kbuf,
+    (void *)&halide_free_kbuf,
+    (void *)&halide_process_image,
+    (void *)&halide_pend_processed,
+    (void *)&halide_mmap,
+    (void *)&halide_munmap,
 };
 }
