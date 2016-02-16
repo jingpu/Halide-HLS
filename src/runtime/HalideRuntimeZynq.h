@@ -30,7 +30,7 @@ extern int halide_slice_kbuf(kbuf_t* src, kbuf_t* des, int x, int y, int width, 
 extern int halide_alloc_kbuf(int fd, kbuf_t* ptr);
 extern int halide_free_kbuf(int fd, kbuf_t* ptr);
 extern int halide_process_image(int fd, kbuf_t* ptr);
-extern int halide_pend_processed(int fd);
+extern int halide_pend_processed(int fd, int id);
 
 /* system calls */
 typedef int32_t off_t; // FIXME this is not actually correct

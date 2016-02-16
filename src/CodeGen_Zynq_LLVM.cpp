@@ -316,9 +316,9 @@ void CodeGen_Zynq_LLVM::visit(const Realize *op) {
         vector<llvm::Value *> process_args({fd, slice_set});
         llvm::Function *process_fn = module->getFunction("halide_process_image");
         internal_assert(process_fn) << "Did not find halide_process_image in initial module";
-        builder->CreateCall(process_fn, process_args);
+        llvm::Value *process_id = builder->CreateCall(process_fn, process_args);
 
-        vector<llvm::Value *> pend_args({fd});
+        vector<llvm::Value *> pend_args({fd, process_id});
         llvm::Function *pend_fn = module->getFunction("halide_pend_processed");
         internal_assert(pend_fn) << "Did not find halide_pend_processed in initial module";
         builder->CreateCall(pend_fn, pend_args);

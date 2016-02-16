@@ -63,8 +63,8 @@ const string runtime_zynq_driver =
     "static int halide_process_image(int fd, kbuf_t* ptr) {\n"
     " return ioctl(fd, PROCESS_IMAGE, (long unsigned int)ptr);\n"
     "}\n"
-    "static int halide_pend_processed(int fd) {\n"
-    " return ioctl(fd, PEND_PROCESSED, NULL);\n"
+    "static int halide_pend_processed(int fd, int id) {\n"
+    " return ioctl(fd, PEND_PROCESSED, (long unsigned int)id);\n"
     "}\n";
 }
 
@@ -278,9 +278,9 @@ void CodeGen_Zynq_C::visit(const Realize *op) {
             stream << "_kbufs[" << i << "] = " << print_name(buffer_slices[i]) << ";\n";
         }
         do_indent();
-        stream << "halide_process_image(__hwacc, _kbufs);\n";
+        stream << "int _process_id = halide_process_image(__hwacc, _kbufs);\n";
         do_indent();
-        stream << "halide_pend_processed(__hwacc);\n";
+        stream << "halide_pend_processed(__hwacc, _process_id);\n";
 
         buffer_slices.clear();
     } else {

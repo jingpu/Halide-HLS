@@ -56,9 +56,9 @@ WEAK int halide_process_image(int fd, kbuf_t* ptr) {
     return ioctl(fd, PROCESS_IMAGE, (long unsigned int)ptr);
 }
 
-WEAK int halide_pend_processed(int fd) {
+WEAK int halide_pend_processed(int fd, int id) {
     debug(0) << "pending processing to finish...\n";
-    return ioctl(fd, PEND_PROCESSED, NULL);
+    return ioctl(fd, PEND_PROCESSED, (long unsigned int)id);
 }
 
 WEAK void *halide_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset) {

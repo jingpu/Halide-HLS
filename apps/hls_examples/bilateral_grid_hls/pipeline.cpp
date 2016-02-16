@@ -263,9 +263,9 @@ public:
         output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
         output.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
 
-        std::vector<Target::Feature> features({Target::HLS, Target::NoAsserts,
-                    Target::NoBoundsQuery, Target::Debug});
-        //std::vector<Target::Feature> features({Target::HLS});
+        //std::vector<Target::Feature> features({Target::HLS, Target::NoAsserts,
+        //           Target::NoBoundsQuery});
+        std::vector<Target::Feature> features({Target::HLS, Target::Debug});
         Target target(Target::Linux, Target::ARM, 32, features);
 
 
