@@ -30,8 +30,6 @@ public:
 
 protected:
     using Closure::visit;
-    void visit(const Realize *op);
-    void visit(const Call *op);
 
 };
 
@@ -61,34 +59,6 @@ vector<HLS_Argument> HLS_Closure::arguments(const Scope<CodeGen_HLS_Base::Stenci
     return res;
 }
 
-void HLS_Closure::visit(const Realize *op) {
-    for (size_t i = 0; i < op->bounds.size(); i++) {
-        op->bounds[i].min.accept(this);
-        op->bounds[i].extent.accept(this);
-    }
-    op->condition.accept(this);
-    ignore.push(op->name, 0);
-    op->body.accept(this);
-    ignore.pop(op->name);
-}
-
-
-void HLS_Closure::visit(const Call *op) {
-    // consider call to stencil and stencil_update
-    if (op->call_type == Call::Intrinsic &&
-        (ends_with(op->name, ".stencil") || ends_with(op->name, ".stencil_update"))) {
-        debug(3) << "visit call " << op->name << ": ";
-        if(!ignore.contains(op->name)) {
-            debug(3) << "adding to closure.\n";
-            vars[op->name] = Type();
-        } else {
-            debug(3) << "not adding to closure.\n";
-        }
-    }
-    Closure::visit(op);
-}
-
-
 namespace {
 const string hls_headers =
     "#include <hls_stream.h>\n"
@@ -107,12 +77,22 @@ CodeGen_HLS_Testbench::~CodeGen_HLS_Testbench() {
 
 void CodeGen_HLS_Testbench::visit(const ProducerConsumer *op) {
     if (starts_with(op->name, "_hls_target.")) {
+        // steps over the start_hwacc() call
+        const Block *block = op->produce.as<Block>();
+        internal_assert(block);
+        const Evaluate *eva = block->first.as<Evaluate>();
+        internal_assert(eva);
+        const Call *start_call = eva->value.as<Call>();
+        internal_assert(start_call && start_call->name == "start_hwacc");
+
+        Stmt hw_body = block->rest;
+
         debug(1) << "compute the closure for " << op->name << '\n';
-        HLS_Closure c(op->produce);
+        HLS_Closure c(hw_body);
         vector<HLS_Argument> args = c.arguments(stencils);
 
         // generate HLS target code using the child code generator
-        cg_target.add_kernel(op->produce, op->name, args);
+        cg_target.add_kernel(hw_body, op->name, args);
 
         do_indent();
         stream << "// produce " << op->name << '\n';
@@ -145,5 +125,17 @@ void CodeGen_HLS_Testbench::visit(const Allocate *op) {
         CodeGen_HLS_Base::visit(op);
     }
 }
+
+void CodeGen_HLS_Testbench::visit(const Call *op) {
+    if (op->name == "slice_kbuf" ||
+        op->name == "create_kbuf") {
+        // skips. this intrinsic call only used in Zynq codegen
+        id = "0"; // skip evaluation
+        return;
+    } else {
+        CodeGen_HLS_Base::visit(op);
+    }
+}
+
 }
 }

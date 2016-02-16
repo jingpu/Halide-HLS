@@ -75,11 +75,7 @@ string CodeGen_HLS_Base::print_stencil_pragma(const string &name) {
 }
 
 void CodeGen_HLS_Base::visit(const Call *op) {
-    if (op->name == "slice_buffer") {
-        // skips. this intrinsic call only used in Zynq codegen
-        id = "0"; // skip evaluation
-        return;
-    } else if (op->name == "linebuffer") {
+    if (op->name == "linebuffer") {
         //IR: linebuffer(buffered.stencil_update.stream, buffered.stencil.stream, extent_0[, extent_1, ...])
         //C: linebuffer<extent_0[, extent_1, ...]>(buffered.stencil_update.stream, buffered.stencil.stream)
         internal_assert(op->args.size() >= 3);

@@ -34,16 +34,20 @@ class UpdateSliceForFunc :public IRMutator {
             Box b = box_provided(op->body, func_name);
             merge_boxes(b, box_required(op->body, func_name));
 
-            vector<Expr> args({func_name, var_name});
+            Expr kernel_buffer = Variable::make(Handle(), "kbuf_" + func_name);
+            Expr slice_buffer = Variable::make(Handle(), "slice_" + var_name);
+            vector<Expr> args({kernel_buffer, slice_buffer});
             internal_assert(b.size() == bounds.size());
             for(size_t i = 0; i < b.size(); i++) {
                 args.push_back(b[i].min - bounds[i].min); // offset the min possible according to the realize bounds
                 args.push_back(b[i].max - b[i].min + 1);
             }
 
-            Stmt slice_call = Evaluate::make(Call::make(Handle(), "slice_buffer", args, Call::Intrinsic));
+            Stmt slice_call = Evaluate::make(Call::make(Handle(), "slice_kbuf", args, Call::Intrinsic));
+            Stmt create_kbuf_call = Evaluate::make(Call::make(Handle(), "create_kbuf", {slice_buffer}, Call::Intrinsic));
             stmt = Realize::make(op->name, op->types, op->bounds, op->condition,
-                                 Block::make(slice_call, op->body));
+                                 Block::make(create_kbuf_call,
+                                             Block::make(slice_call, op->body)));
         } else {
             IRMutator::visit(op);
         }

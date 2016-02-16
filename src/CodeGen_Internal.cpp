@@ -90,6 +90,42 @@ void Closure::visit(const Variable *op) {
     }
 }
 
+void Closure::visit(const Realize *op) {
+    for (size_t i = 0; i < op->bounds.size(); i++) {
+        op->bounds[i].min.accept(this);
+        op->bounds[i].extent.accept(this);
+    }
+    op->condition.accept(this);
+    ignore.push(op->name, 0);
+    op->body.accept(this);
+    ignore.pop(op->name);
+}
+
+void Closure::visit(const Call *op) {
+    if (op->name == "create_kbuf") {
+        // adds the variable to ignore list
+        debug(3) << "visit call " << op->name << ": ";
+        internal_assert(op->args.size() == 1);
+        const Variable *var = op->args[0].as<Variable>();
+        internal_assert(var);
+        internal_assert(!ignore.contains(var->name))
+            << "kbuf_t " << var->name << " is already created.\n";
+        debug(3) << "adding " << var->name << " to closure.\n";
+        ignore.push(var->name, 0);
+    } else if (op->call_type == Call::Intrinsic &&
+        (ends_with(op->name, ".stencil") || ends_with(op->name, ".stencil_update"))) {
+        // consider call to stencil and stencil_update
+        debug(3) << "visit call " << op->name << ": ";
+        if(!ignore.contains(op->name)) {
+            debug(3) << "adding to closure.\n";
+            vars[op->name] = Type();
+        } else {
+            debug(3) << "not adding to closure.\n";
+        }
+    }
+    IRVisitor::visit(op);
+}
+
 Closure::Closure(Stmt s, const string &loop_variable, llvm::StructType *buffer_t) : buffer_t(buffer_t) {
     ignore.push(loop_variable, 0);
     s.accept(this);

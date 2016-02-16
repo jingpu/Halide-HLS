@@ -11,7 +11,7 @@ all: out.png
 pipeline: pipeline.cpp
 	$(CXX) $(CXXFLAGS) -g -Wall $^ $(LDFLAGS) $(LIB_HALIDE) -o $@ -lpthread -ldl -lz -ltinfo
 
-pipeline_hls.cpp pipeline_native.o pipeline_zynq.c: pipeline
+pipeline_hls.cpp pipeline_native.o pipeline_zynq.c pipeline_zynq.o: pipeline
 	HL_DEBUG_CODEGEN=0 ./pipeline
 
 run: run.cpp pipeline_native.o pipeline_hls.cpp hls_target.cpp
@@ -20,8 +20,8 @@ run: run.cpp pipeline_native.o pipeline_hls.cpp hls_target.cpp
 out.png: run
 	./run ../../images/gray.png out.png
 
-pipeline_zynq.o: pipeline_zynq.c
-	$(CXX) -c -O2 $(CXXFLAGS) -g -Wall -Werror $^ -o $@
+#pipeline_zynq.o: pipeline_zynq.c
+#	$(CXX) -c -O2 $(CXXFLAGS) -g -Wall -Werror $^ -o $@
 
 run_zynq.o: run_zynq.cpp
 	$(CXX) -c $(CXXFLAGS) -g -Wall -Werror $^ -o $@  $(PNGFLAGS)
@@ -30,7 +30,7 @@ run_zynq: run_zynq.o pipeline_zynq.o pipeline_native.o
 	$(CXX) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
 
 out_zynq.png: run_zynq
-	./run_zynq ../../images/gray.png out_zynq.png
+	HL_NUM_THREADS=2 ./run_zynq ../../images/gray.png out_zynq.png
 
 clean:
 	rm -f pipeline run out.png

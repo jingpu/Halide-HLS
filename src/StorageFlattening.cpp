@@ -196,7 +196,8 @@ private:
                 // for function that has been scheduled to store in kernel buffer,
                 // we overwrite new_expr and free_function in order to notify codegen
                 // TODO better way to pass information to codegen
-                new_expr = Expr("_kernel_buffer");
+                Expr kernel_buffer = Variable::make(Handle(), "kbuf_" + buffer_name);
+                new_expr = Call::make(Handle(), "create_kbuf", {kernel_buffer}, Call::Intrinsic);
                 free_function = "_kernel_buffer";
             }
             stmt = Allocate::make(buffer_name, t, extents, condition, stmt, new_expr, free_function);

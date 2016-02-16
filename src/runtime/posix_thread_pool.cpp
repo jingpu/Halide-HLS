@@ -1,6 +1,7 @@
 #include "runtime_internal.h"
 
 #include "HalideRuntime.h"
+#include "printer.h"
 
 // TODO: This code currently doesn't work on OS X (Darwin) as we do
 // not initialize the pthread_mutex_t using PTHREAD_MUTEX_INITIALIZER
@@ -217,7 +218,8 @@ WEAK int default_do_par_for(void *user_context, halide_task f,
                 halide_num_threads = atoi(threads_str);
             } else {
                 halide_num_threads = halide_host_cpu_count();
-                // halide_printf(user_context, "HL_NUM_THREADS not defined. Defaulting to %d threads.\n", halide_num_threads);
+                debug(user_context) << "HL_NUM_THREADS not defined. Defaulting to "
+                                    << halide_num_threads << " threads.\n";
             }
         }
         if (halide_num_threads > MAX_THREADS) {
@@ -226,7 +228,7 @@ WEAK int default_do_par_for(void *user_context, halide_task f,
             halide_num_threads = 1;
         }
         for (int i = 0; i < halide_num_threads-1; i++) {
-            //fprintf(stderr, "Creating thread %d\n", i);
+            debug(user_context) << "Creating thread " << i << "\n";
             pthread_create(halide_work_queue.threads + i, NULL, halide_worker_thread, NULL);
         }
         // Everyone starts on the a team.
@@ -345,12 +347,12 @@ WEAK void halide_shutdown_thread_pool() {
 
     // Wait until they leave
     for (int i = 0; i < halide_num_threads-1; i++) {
-        //fprintf(stderr, "Waiting for thread %d to exit\n", i);
+        debug(0) << "Waiting for thread " << i << " to exit\n";
         void *retval;
         pthread_join(halide_work_queue.threads[i], &retval);
     }
 
-    //fprintf(stderr, "All threads have quit. Destroying mutex and condition variable.\n");
+    debug(0) << "All threads have quit. Destroying mutex and condition variable.\n";
     // Tidy up
     pthread_mutex_destroy(&halide_work_queue.mutex);
     // Reinitialize in case we call another do_par_for

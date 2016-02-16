@@ -1,4 +1,5 @@
 #include "HalideRuntimeZynq.h"
+#include "printer.h"
 
 #ifndef _IOCTL_CMDS_H_
 #define _IOCTL_CMDS_H_
@@ -20,6 +21,7 @@ extern void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t 
 extern int munmap(void *addr, size_t length);
 
 WEAK int halide_slice_kbuf(kbuf_t* src, kbuf_t* des, int x, int y, int width, int height) {
+    debug(0) << "slicing kbuf...\n";
     /*
       if (width == 0 || height == 0) {
       printf("slice_buffer failed: width and height of slide should be non-zero.\n");
@@ -40,18 +42,22 @@ WEAK int halide_slice_kbuf(kbuf_t* src, kbuf_t* des, int x, int y, int width, in
 
 
 WEAK int halide_alloc_kbuf(int fd, kbuf_t* ptr) {
+    debug(0) << "allocating kbuf...\n";
     return ioctl(fd, GET_BUFFER, (long unsigned int)ptr);
 }
 
 WEAK int halide_free_kbuf(int fd, kbuf_t* ptr) {
+    debug(0) << "freeing kbuf.\n";
     return ioctl(fd, FREE_IMAGE, (long unsigned int)ptr);
 }
 
 WEAK int halide_process_image(int fd, kbuf_t* ptr) {
+    debug(0) << "start processing image.\n";
     return ioctl(fd, PROCESS_IMAGE, (long unsigned int)ptr);
 }
 
 WEAK int halide_pend_processed(int fd) {
+    debug(0) << "pending processing to finish...\n";
     return ioctl(fd, PEND_PROCESSED, NULL);
 }
 

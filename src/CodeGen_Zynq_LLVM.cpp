@@ -234,36 +234,42 @@ void CodeGen_Zynq_LLVM::visit(const Realize *op) {
     // TODO add assertions
 
     /* IR:
-       realize slice_var.stencil.stream([0, 8], [0, 8], [0, 1], [0, 1]) {
-         slice_buffer("var", "slice_var", 0, 8, 0, 8, (xo * 32), 32, (yo * 32), 32)
+       realize var.stencil.stream([0, 8], [0, 8], [0, 1], [0, 1]) {
+         create_kbuf(slice_var)
+         slice_kbuf(kbuf_var, slice_var, 0, 8, 0, 8, (xo * 32), 32, (yo * 32), 32)
          ...
        }
 
        C code:
        Buffer slice_var;
-       status_slice_var = slice_buffer(&kbuf, &slice_var, xo * 32, yo * 32, 32, 32);
+       slice_kbuf(&kbuf_var, &slice_var, xo * 32, yo * 32, 32, 32);
     */
     // check that there is a call of slice_buffer in the body
-    const Block *block = op->body.as<Block>();
-    internal_assert(block);
-    const Evaluate *eva = block->first.as<Evaluate>();
-    internal_assert(eva);
-    const Call *slice_call = eva->value.as<Call>();
-    internal_assert(slice_call && slice_call->name == "slice_buffer");
+    const Block *block_1 = op->body.as<Block>();
+    internal_assert(block_1);
+    const Evaluate *eva_1 = block_1->first.as<Evaluate>();
+    internal_assert(eva_1);
+    const Call *create_kbuf_call = eva_1->value.as<Call>();
+    internal_assert(create_kbuf_call && create_kbuf_call->name == "create_kbuf");
+
+    const Block *block_2 = block_1->rest.as<Block>();
+    internal_assert(block_2);
+    const Evaluate *eva_2 = block_2->first.as<Evaluate>();
+    internal_assert(eva_2);
+    const Call *slice_call = eva_2->value.as<Call>();
+    internal_assert(slice_call && slice_call->name == "slice_kbuf");
 
     internal_assert(slice_call->args.size() >= 6);
-    const StringImm *var_name = slice_call->args[0].as<StringImm>();
-    const StringImm *slice_var_name = slice_call->args[1].as<StringImm>();
-    internal_assert(var_name && slice_var_name);
 
-    string kbuf_name = "kbuf_" + var_name->value;
-    string slice_name = "slice_" + slice_var_name->value;
+    const Variable *kbuf_var = slice_call->args[0].as<Variable>();
+    const Variable *slice_var = slice_call->args[1].as<Variable>();
+    internal_assert(kbuf_var && slice_var);
 
-    llvm::Value *kbuf_ptr = sym_get(kbuf_name, true);
+    llvm::Value *kbuf_ptr = sym_get(kbuf_var->name, true);
     llvm::StructType *kbuf_type = module->getTypeByName("struct.kbuf_t");
     internal_assert(kbuf_type) << "Did not find Buffer in initial module";
     llvm::Constant *one = llvm::ConstantInt::get(i32, 1);
-    llvm::Value *slice_ptr = builder->CreateAlloca(kbuf_type, one, slice_name);
+    llvm::Value *slice_ptr = builder->CreateAlloca(kbuf_type, one, slice_var->name);
     buffer_slices.push_back(slice_ptr);
 
     llvm::Value *width, *height, *x_offset, *y_offset;
@@ -280,7 +286,7 @@ void CodeGen_Zynq_LLVM::visit(const Realize *op) {
     internal_assert(slice_fn) << "Could not find halide_slice_kbuf in module.\n";
     builder->CreateCall(slice_fn, slice_args);
 
-    const ProducerConsumer *pc = block->rest.as<ProducerConsumer>();
+    const ProducerConsumer *pc = block_2->rest.as<ProducerConsumer>();
     internal_assert(pc && !pc->update.defined());
 
     if (starts_with(pc->name, "_hls_target.")) {

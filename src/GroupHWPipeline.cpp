@@ -92,7 +92,12 @@ class InsertHWPipeline : public IRMutator {
                 << "unexpected output kernel stream name: " << op->name << "\n";
 
             internal_assert(!op->update.defined());
-            stmt = ProducerConsumer::make( "_hls_target." + op->name, pipeline_body, Stmt(), op->consume);
+
+            // insert a "start_hwacc" call to include the device
+            // handler "__hwacc" in the closure
+            Expr fd_hwacc = Variable::make(Int(32), "__hwacc");
+            Stmt hw_call = Evaluate::make(Call::make(Handle(), "start_hwacc", {fd_hwacc}, Call::Intrinsic));
+            stmt = ProducerConsumer::make( "_hls_target." + op->name, Block::make(hw_call, pipeline_body), Stmt(), op->consume);
         } else {
             IRMutator::visit(op);
         }

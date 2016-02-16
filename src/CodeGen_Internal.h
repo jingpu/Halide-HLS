@@ -35,6 +35,8 @@ protected:
     void visit(const Store *op);
     void visit(const Allocate *op);
     void visit(const Variable *op);
+    void visit(const Realize *op);
+    void visit(const Call *op);
 
     llvm::StructType *buffer_t;
 

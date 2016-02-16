@@ -243,7 +243,8 @@ public:
     void compile_hls() {
         std::cout << "\ncompiling HLS code..." << std::endl;
 
-        input_shuffled.compute_at(output_shuffled, xo);
+        //input_shuffled.compute_at(output_shuffled, xo);
+        input_shuffled.compute_root();
         input2_shuffled.compute_root();
         output_shuffled.compute_root();
 
@@ -256,22 +257,28 @@ public:
         histogram.linebuffer().reorder(c, z, x, y).unroll(c).unroll(z);
         histogram.update().reorder(c, r.x, r.y, x, y).unroll(c);
 
-
         //output.print_loop_nest();
 
         output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
         output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
         output.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
-        /*
+
         std::vector<Target::Feature> features({Target::HLS, Target::NoAsserts,
-                    Target::NoBoundsQuery});
-        */
-        std::vector<Target::Feature> features({Target::HLS});
+                    Target::NoBoundsQuery, Target::Debug});
+        //std::vector<Target::Feature> features({Target::HLS});
         Target target(Target::Linux, Target::ARM, 32, features);
+
 
         output.compile_to_lowered_stmt("pipeline_zynq.ir.html", args, HTML, target);
         output.compile_to_zynq_c("pipeline_zynq.c", args, "pipeline_zynq", target);
         output.compile_to_header("pipeline_zynq.h", args, "pipeline_zynq", target);
+
+        input_shuffled.vectorize(x_in, 8);
+        input2_shuffled.vectorize(x_in, 8);
+        output.vectorize(x, 8);
+
+        Var tile_index;
+        output_shuffled.fuse(xo, yo, xo).parallel(xo);
 
         Module module = output.compile_to_module(args, "pipeline_zynq", target);
         compile_module_to_llvm_assembly(module, "pipeline_zynq.ll");
