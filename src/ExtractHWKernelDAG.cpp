@@ -327,7 +327,7 @@ class BuildDAGForFunction : public IRVisitor {
         // scan loops are loops between store level (exclusive) and
         // the compute level (inclusive) of the accelerated function
         if (is_scan_loops) {
-            debug(0) << "added loop " << op->name << " to scan loops.\n";
+            debug(3) << "added loop " << op->name << " to scan loops.\n";
             scan_loops.push_back(op->name);
             loop_mins[op->name] = op->min;
             loop_maxes[op->name] = simplify(op->min + op->extent - 1);
@@ -370,7 +370,7 @@ class BuildDAGForFunction : public IRVisitor {
             k.dims = dims;
             dag.kernels[k.name] = k;
 
-            debug(0) << k << "\n";
+            debug(3) << k << "\n";
 
             // Figure out how much of each func in the pipeline we're producing
             // do this from output of the pipeline to inputs
@@ -403,7 +403,7 @@ class BuildDAGForFunction : public IRVisitor {
                     }
                 }
                 if (in_dag) {
-                    debug(0) << "func " << stage.name << " stage " << stage.stage
+                    debug(3) << "func " << stage.name << " stage " << stage.stage
                              << " is a hw kernel.\n";
                     HWKernel cur_kernel(cur_func, stage.name);
 
@@ -417,11 +417,11 @@ class BuildDAGForFunction : public IRVisitor {
                         store_level == cur_func.schedule().store_level()) {
                         // it is a linebuffered kernel
                         cur_kernel.is_inlined = false;
-                        debug(0) << "[buffered]\n";
+                        debug(3) << "[buffered]\n";
                     } else {
                         // It is a function "inlined" into a buffered kernel
                         cur_kernel.is_inlined = true;
-                        debug(0) << "[inlined]\n";
+                        debug(3) << "[inlined]\n";
                     }
 
                     // merge the bounds of consumers if they are inlined into the same buffered kernel
@@ -531,7 +531,7 @@ class BuildDAGForFunction : public IRVisitor {
                         }
                     }
 
-                    debug(0) << cur_kernel << "\n\n";
+                    debug(3) << cur_kernel << "\n\n";
                     // update dag and hw_kernel_stages
                     dag.kernels[cur_kernel.name] = cur_kernel;
                 }
@@ -554,11 +554,11 @@ public:
         dag.loop_vars = scan_loops;
         dag.input_kernels = func.schedule().accelerate_inputs(); // TODO we don't use it later
         calculate_input_streams(dag);
-
+        /*
         debug(0) << "after building producer pointers:" << "\n";
         for (const auto &p : dag.kernels)
             debug(0) << p.second << "\n";
-
+        */
         return dag;
     }
 };
@@ -574,8 +574,8 @@ Stmt extract_hw_kernel_dag(Stmt s, const map<string, Function> &env,
         Function func = p.second;
         if(!func.schedule().is_accelerated())
             continue;
-        debug(0) << "Found accelerate function " << func.name() << "\n";
-        debug(0) << func.schedule().store_level().func << " " << func.schedule().store_level().var << "\n";
+        debug(3) << "Found accelerate function " << func.name() << "\n";
+        debug(3) << func.schedule().store_level().func << " " << func.schedule().store_level().var << "\n";
         BuildDAGForFunction builder(func, env, inlined_stages);
         dags.push_back(builder.build(s));
     }
