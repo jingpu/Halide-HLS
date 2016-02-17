@@ -21,7 +21,7 @@ extern void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t 
 extern int munmap(void *addr, size_t length);
 
 WEAK int halide_slice_kbuf(kbuf_t* src, kbuf_t* des, int x, int y, int width, int height) {
-    debug(0) << "slicing kbuf...\n";
+    //debug(0) << "slicing kbuf...\n";
     /*
       if (width == 0 || height == 0) {
       printf("slice_buffer failed: width and height of slide should be non-zero.\n");
@@ -52,13 +52,17 @@ WEAK int halide_free_kbuf(int fd, kbuf_t* ptr) {
 }
 
 WEAK int halide_process_image(int fd, kbuf_t* ptr) {
-    debug(0) << "start processing image.\n";
-    return ioctl(fd, PROCESS_IMAGE, (long unsigned int)ptr);
+    debug(0) << "start processing image...\n";
+    int res = ioctl(fd, PROCESS_IMAGE, (long unsigned int)ptr);
+    debug(0) << "  process id " << res << " started.\n";
+    return res;
 }
 
 WEAK int halide_pend_processed(int fd, int id) {
-    debug(0) << "pending processing to finish...\n";
-    return ioctl(fd, PEND_PROCESSED, (long unsigned int)id);
+    debug(0) << "pending process id " << id << "...\n";
+    int res = ioctl(fd, PEND_PROCESSED, (long unsigned int)id);
+    debug(0) << "  process id " << id << " finished\n";
+    return res;
 }
 
 WEAK void *halide_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset) {
