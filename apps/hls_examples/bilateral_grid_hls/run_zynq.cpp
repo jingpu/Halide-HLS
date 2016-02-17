@@ -74,7 +74,7 @@ int main(int argc, char **argv) {
 
     // Timing code. Timing doesn't include copying the input data to
     // the gpu or copying the output back.
-    double min_t2 = benchmark(1, 10, [&]() {
+    double min_t2 = benchmark(5, 10, [&]() {
         pipeline_zynq(input, out_zynq, hwacc);
       });
     printf("accelerator program runtime: %g\n", min_t2 * 1e3);

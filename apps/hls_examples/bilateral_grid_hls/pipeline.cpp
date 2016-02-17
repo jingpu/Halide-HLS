@@ -242,13 +242,17 @@ public:
 
     void compile_hls() {
         std::cout << "\ncompiling HLS code..." << std::endl;
+        output.tile(x, y, xo, yo, x_in, y_in, 256, 256);
 
-        //input_shuffled.compute_at(output_shuffled, xo);
-        input_shuffled.compute_root();
-        input2_shuffled.compute_root();
-        output_shuffled.compute_root();
-
+        output_shuffled.compute_at(output, xo);
         output_shuffled.tile(x_grid, y_grid, xo, yo, x_grid, y_grid, 32, 32);
+
+        input_shuffled.compute_at(output_shuffled, xo);
+        input2_shuffled.compute_at(output_shuffled, xo);
+        //input_shuffled.compute_root();
+        //input2_shuffled.compute_root();
+        //output_shuffled.compute_root();
+
         output_shuffled.accelerate({input_shuffled, input2_shuffled}, output_shuffled, x_grid, xo);
 
         blury.linebuffer().reorder(x, y, z, c);
@@ -263,23 +267,22 @@ public:
         output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
         output.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
 
-        //std::vector<Target::Feature> features({Target::HLS, Target::NoAsserts,
-        //           Target::NoBoundsQuery});
-        std::vector<Target::Feature> features({Target::HLS, Target::Debug});
+        //std::vector<Target::Feature> features({Target::HLS, Target::NoAsserts, Target::NoBoundsQuery});
+        //std::vector<Target::Feature> features({Target::HLS, Target::Debug});
+        std::vector<Target::Feature> features({Target::HLS});
         Target target(Target::Linux, Target::ARM, 32, features);
 
-
-        output.compile_to_lowered_stmt("pipeline_zynq.ir.html", args, HTML, target);
         output.compile_to_zynq_c("pipeline_zynq.c", args, "pipeline_zynq", target);
         output.compile_to_header("pipeline_zynq.h", args, "pipeline_zynq", target);
 
+        // Vectorization and Parallelization Schedules
         input_shuffled.vectorize(x_in, 8);
         input2_shuffled.vectorize(x_in, 8);
-        output.vectorize(x, 8);
+        output.vectorize(x_in, 8);
 
-        Var tile_index;
-        output_shuffled.fuse(xo, yo, xo).parallel(xo);
+        output.fuse(xo, yo, xo).parallel(xo);
 
+        output.compile_to_lowered_stmt("pipeline_zynq.ir.html", args, HTML, target);
         Module module = output.compile_to_module(args, "pipeline_zynq", target);
         compile_module_to_llvm_assembly(module, "pipeline_zynq.ll");
         compile_module_to_object(module, "pipeline_zynq.o");
@@ -292,6 +295,5 @@ int main(int argc, char **argv) {
 
     MyPipelineOpt p2;
     p2.compile_hls();
-
     return 0;
 }

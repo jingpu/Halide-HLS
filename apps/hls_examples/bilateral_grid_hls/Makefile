@@ -30,7 +30,7 @@ run_zynq: run_zynq.o pipeline_zynq.o pipeline_native.o
 	$(CXX) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
 
 out_zynq.png: run_zynq
-	HL_NUM_THREADS=2 ./run_zynq ../../images/gray.png out_zynq.png
+	HL_NUM_THREADS=3 ./run_zynq ../../images/gray.png out_zynq.png
 
 clean:
 	rm -f pipeline run out.png
