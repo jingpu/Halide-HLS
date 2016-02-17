@@ -375,7 +375,12 @@ class PartitionLoops : public IRMutator {
     void visit(const For *op) {
         // We dont partition loops that contain accelerated functions
         if (contains_hw_functions(op)) {
-            stmt = op;
+            Stmt body = mutate(op->body);
+            if (body.same_as(op->body)) {
+                stmt = op;
+            } else {
+                stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+            }
             return;
         }
 
