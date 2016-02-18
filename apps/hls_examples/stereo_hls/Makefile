@@ -11,7 +11,7 @@ all: out.png
 pipeline: pipeline.cpp
 	$(CXX) $(CXXFLAGS) -Wall $^ $(LDFLAGS) $(LIB_HALIDE) -o $@ -lpthread -ldl -lz -ltinfo -g
 
-pipeline_hls.cpp pipeline_native.o: pipeline
+pipeline_hls.cpp pipeline_native.o pipeline_zynq.o: pipeline
 	HL_DEBUG_CODEGEN=0 ./pipeline
 
 run: run.cpp pipeline_native.o pipeline_hls.cpp hls_target.cpp
@@ -20,20 +20,22 @@ run: run.cpp pipeline_native.o pipeline_hls.cpp hls_target.cpp
 out.png: run
 	./run ../../images/left0224.png ../../images/left-remap.png ../../images/right0224.png ../../images/right-remap.png
 
-pipeline_zynq.o: pipeline_zynq.c
-	$(CXX) -c -O2 $(CXXFLAGS) -g -Wall -Werror $^ -o $@  $(PNGFLAGS)
+#pipeline_zynq.o: pipeline_zynq.c
+#	$(CXX) -c -O2 $(CXXFLAGS) -g -Wall -Werror $^ -o $@  $(PNGFLAGS)
 
 run_zynq.o: run_zynq.cpp
 	$(CXX) -c $(CXXFLAGS) -g -Wall -Werror $^ -o $@  $(PNGFLAGS)
 
-run_zynq: run_zynq.o pipeline_zynq.o pipeline_native.o
+run_zynq: pipeline_zynq.o pipeline_native.o run_zynq.o
 	$(CXX) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
 
 out_zynq.png: run_zynq
-	./run_zynq ../../images/left0224.png ../../images/left-remap.png ../../images/right0224.png ../../images/right-remap.png
+	HL_NUM_THREADS=3 ./run_zynq ../../images/left0224.png ../../images/left-remap.png ../../images/right0224.png ../../images/right-remap.png
 
 clean:
-	rm -f pipeline run out.png
+	rm -f pipeline run run_zynq
+	rm -f out.png out_zynq.png
+	rm -f *.o *.h
 	rm -f pipeline_native.h pipeline_native.o
 	rm -f pipeline_hls.h pipeline_hls.cpp
 	rm -f hls_target.h hls_target.cpp

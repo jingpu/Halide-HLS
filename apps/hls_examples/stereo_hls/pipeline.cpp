@@ -68,6 +68,10 @@ public:
         hw_output(x, y) = cast<uint8_t>(cast<uint16_t>(offset(x, y)[0]) * 255 / searchR);
         output(x, y) = hw_output(x, y);
 
+        // The comment constraints and schedules.
+        output.bound(x, 0, 720);
+        output.bound(y, 0, 405);
+
         // Arguments
         args = {right, left, right_remap, left_remap};
     }
@@ -178,17 +182,11 @@ MyPipelineOpt()
     output(x, y) = hw_output(x, y);
 
     // The comment constraints and schedules.
-
+    output.bound(x, 0, 720);
+    output.bound(y, 0, 405);
 
     //right_remapped.store_at(output, xo).compute_at(output, x_in);
     //left_remapped.store_at(output, xo).compute_at(output, x_in);
-    right_remapped.compute_root();
-    left_remapped.compute_root();
-
-    right_padded.compute_root();
-    left_padded.compute_root();
-    right_remap_padded.compute_root();
-    left_remap_padded.compute_root();
 
     // Arguments
     args = {right, left, right_remap, left_remap};
@@ -199,6 +197,14 @@ void compile_cpu() {
     std::cout << "\ncompiling cpu code..." << std::endl;
     //output.print_loop_nest();
 
+    right_remapped.compute_root();
+    left_remapped.compute_root();
+
+    right_padded.compute_root();
+    left_padded.compute_root();
+    right_remap_padded.compute_root();
+    left_remap_padded.compute_root();
+
     //output.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
     output.compile_to_header("pipeline_native.h", args, "pipeline_native");
     output.compile_to_object("pipeline_native.o", args, "pipeline_native");
@@ -206,6 +212,29 @@ void compile_cpu() {
 
 void compile_hls() {
     std::cout << "\ncompiling HLS code..." << std::endl;
+    output.tile(x, y, xo, yo, x_in, y_in, 256, 256);
+
+    hw_output.compute_at(output, xo);
+    //hw_output.compute_root();
+    hw_output.tile(x, y, xo, yo, x_in, y_in, 256, 256);
+
+    /*
+    right_remapped.compute_root();
+    left_remapped.compute_root();
+
+    right_padded.compute_root();
+    left_padded.compute_root();
+    right_remap_padded.compute_root();
+    left_remap_padded.compute_root();
+    */
+
+    right_remapped.compute_at(hw_output, xo);
+    left_remapped.compute_at(hw_output, xo);
+
+    right_padded.compute_at(hw_output, xo);
+    left_padded.compute_at(hw_output, xo);
+    right_remap_padded.compute_at(hw_output, xo);
+    left_remap_padded.compute_at(hw_output, xo);
 
     offset.update(0).unroll(search.x, 4);
     SAD.compute_at(offset_l1, Var::outermost());
@@ -214,16 +243,30 @@ void compile_hls() {
     offset_l1.unroll(c);
     offset_l1.update(0).unroll(search_l1.x);
 
-    //hw_output.store_at(output, xo).compute_at(output, x_in);
-    hw_output.compute_root();
-    hw_output.tile(x, y, xo, yo, x_in, y_in, 256, 256);
     hw_output.accelerate({right_remapped, left_remapped}, hw_output, x_in, xo);
-
-    //output.print_loop_nest();
 
     output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
     output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
     output.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
+
+    // Create the Zynq platform target
+    //std::vector<Target::Feature> features({Target::HLS, Target::NoAsserts, Target::NoBoundsQuery});
+    //std::vector<Target::Feature> features({Target::HLS, Target::Debug});
+    std::vector<Target::Feature> features({Target::HLS});
+    Target target(Target::Linux, Target::ARM, 32, features);
+    output.compile_to_lowered_stmt("pipeline_zynq.ir.html", args, HTML, target);
+    output.compile_to_zynq_c("pipeline_zynq.c", args, "pipeline_zynq", target);
+    output.compile_to_header("pipeline_zynq.h", args, "pipeline_zynq", target);
+
+    // Vectorization and Parallelization Schedules (only work with LLVM codegen)
+    output.vectorize(x_in, 8);
+    output.fuse(xo, yo, xo).parallel(xo);
+
+    //output.print_loop_nest();
+    //Module module = output.compile_to_module(args, "pipeline_zynq", target);
+    //compile_module_to_llvm_assembly(module, "pipeline_zynq.ll");
+    output.compile_to_object("pipeline_zynq.o", args, "pipeline_zynq", target);
+
 }
 };
 

@@ -3,6 +3,8 @@
 #include <cassert>
 #include <math.h>
 
+#include <fcntl.h>
+#include <unistd.h>
 #include "pipeline_zynq.h"
 #include "pipeline_native.h"
 
@@ -18,6 +20,12 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    int hwacc = open("/dev/hwacc0", O_RDWR);
+    if(hwacc == -1) {
+        printf("Failed to open hardware device!\n");
+        return(0);
+    }
+
     Image<uint8_t> left = load_image(argv[1]);
     Image<uint8_t> left_remap = load_image(argv[2]);
     Image<uint8_t> right = load_image(argv[3]);
@@ -31,11 +39,10 @@ int main(int argc, char **argv) {
     pipeline_native(right, left, right_remap, left_remap, out_native);
     save_image(out_native, "out_native.png");
     printf("cpu program results saved.\n");
-
     //out_native = load_image("out_native.png");
     //printf("cpu program results loaded.\n");
 
-    pipeline_zynq(right, left, right_remap, left_remap, out_zynq);
+    pipeline_zynq(right, left, right_remap, left_remap, out_zynq, hwacc);
     save_image(out_zynq, "out_zynq.png");
     printf("accelerator program results saved.\n");
 
@@ -52,13 +59,14 @@ int main(int argc, char **argv) {
 	}
     }
     if (!pass) {
+      close(hwacc);
       printf("failed.\n");
       return 1;
     } else {
       printf("passed.\n");
     }
 
-    printf("\nstart timeing code...\n");
+    printf("\nstart timing code...\n");
 
     // Timing code. Timing doesn't include copying the input data to
     // the gpu or copying the output back.
@@ -69,9 +77,11 @@ int main(int argc, char **argv) {
 
     // Timing code. Timing doesn't include copying the input data to
     // the gpu or copying the output back.
-    double min_t2 = benchmark(1, 10, [&]() {
-        pipeline_zynq(right, left, right_remap, left_remap, out_zynq);
+    double min_t2 = benchmark(3, 10, [&]() {
+        pipeline_zynq(right, left, right_remap, left_remap, out_zynq, hwacc);
       });
     printf("accelerator program runtime: %g\n", min_t2 * 1e3);
+
+    close(hwacc);
     return 0;
 }
