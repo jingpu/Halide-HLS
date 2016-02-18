@@ -12,6 +12,7 @@
 #include "Derivative.h"
 #include "Bounds.h"
 #include "ExprUsesVar.h"
+#include "Var.h"
 
 #include <algorithm>
 
@@ -302,6 +303,8 @@ class BuildDAGForFunction : public IRVisitor {
     Function func;
     const map<string, Function> &env;
     const vector<BoundsInference_Stage> &inlined_stages;
+    const LoopLevel &compute_level = func.schedule().compute_level();
+    const LoopLevel &store_level = func.schedule().store_level();
 
     HWKernelDAG dag;
     bool is_scan_loops;
@@ -311,13 +314,20 @@ class BuildDAGForFunction : public IRVisitor {
 
     using IRVisitor::visit;
 
-    void visit(const For *op) {
-        const LoopLevel &compute_level = func.schedule().compute_level();
-        const LoopLevel &store_level = func.schedule().store_level();
+    void visit(const ProducerConsumer *op) {
+        // match store level at PC node in case the looplevel is outermost
+        if (store_level.func == op->name &&
+            store_level.var == Var::outermost().name()) {
+            is_scan_loops = true;
+        }
+        IRVisitor::visit(op);
+    }
 
+    void visit(const For *op) {
         // scan loops are loops between store level (exclusive) and
         // the compute level (inclusive) of the accelerated function
         if (is_scan_loops) {
+            debug(3) << "added loop " << op->name << " to scan loops.\n";
             scan_loops.push_back(op->name);
             loop_mins[op->name] = op->min;
             loop_maxes[op->name] = simplify(op->min + op->extent - 1);
@@ -533,7 +543,9 @@ class BuildDAGForFunction : public IRVisitor {
 public:
     BuildDAGForFunction(Function f, const map<string, Function> &e,
                         const vector<BoundsInference_Stage> &s)
-        : func(f), env(e), inlined_stages(s) ,
+        : func(f), env(e), inlined_stages(s),
+          compute_level(f.schedule().compute_level()),
+          store_level(f.schedule().store_level()),
           is_scan_loops(false) {}
 
     HWKernelDAG build(Stmt s) {
@@ -563,6 +575,7 @@ Stmt extract_hw_kernel_dag(Stmt s, const map<string, Function> &env,
         if(!func.schedule().is_accelerated())
             continue;
         debug(3) << "Found accelerate function " << func.name() << "\n";
+        debug(3) << func.schedule().store_level().func << " " << func.schedule().store_level().var << "\n";
         BuildDAGForFunction builder(func, env, inlined_stages);
         dags.push_back(builder.build(s));
     }
