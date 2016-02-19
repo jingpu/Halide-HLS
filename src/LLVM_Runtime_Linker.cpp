@@ -108,6 +108,7 @@ DECLARE_CPP_INITMOD(gpu_device_selection)
 DECLARE_CPP_INITMOD(cache)
 DECLARE_CPP_INITMOD(nacl_host_cpu_count)
 DECLARE_CPP_INITMOD(to_string)
+DECLARE_CPP_INITMOD(mingw_math)
 DECLARE_CPP_INITMOD(module_jit_ref_count)
 DECLARE_CPP_INITMOD(module_aot_ref_count)
 DECLARE_CPP_INITMOD(device_interface)
@@ -175,6 +176,11 @@ DECLARE_LL_INITMOD(mips)
 #else
 DECLARE_NO_INITMOD(mips)
 #endif
+#ifdef WITH_POWERPC
+DECLARE_LL_INITMOD(powerpc)
+#else
+DECLARE_NO_INITMOD(powerpc)
+#endif
 
 namespace {
 
@@ -228,6 +234,12 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
         } else {
             return llvm::DataLayout("e-m:m-i8:8:32-i16:16:32-i64:64-n32:64-S128");
         }
+    } else if (target.arch == Target::POWERPC) {
+        if (target.bits == 32) {
+            return llvm::DataLayout("e-m:e-i32:32-n32");
+        } else {
+            return llvm::DataLayout("e-m:e-i64:64-n32:64");
+        }
     } else if (target.arch == Target::PNaCl) {
         return llvm::DataLayout("e-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-p:32:32:32-v128:32:32");
     } else {
@@ -257,7 +269,11 @@ llvm::Triple get_triple_for_target(Target target) {
             triple.setVendor(llvm::Triple::PC);
             triple.setOS(llvm::Triple::Win32);
             #if LLVM_VERSION >= 36
-            triple.setEnvironment(llvm::Triple::MSVC);
+            if (target.has_feature(Target::MinGW)) {
+                triple.setEnvironment(llvm::Triple::GNU);
+            } else {
+                triple.setEnvironment(llvm::Triple::MSVC);
+            }
             #endif
             if (target.has_feature(Target::JIT)) {
                 // Use ELF for jitting
@@ -337,6 +353,23 @@ llvm::Triple get_triple_for_target(Target target) {
         } else {
             user_error << "No mips support for this OS\n";
         }
+    } else if (target.arch == Target::POWERPC) {
+        #if (WITH_POWERPC)
+        // Only ppc*-unknown-linux-gnu are supported for the time being.
+        user_assert(target.os == Target::Linux) << "PowerPC target is Linux-only.\n";
+        triple.setVendor(llvm::Triple::UnknownVendor);
+        triple.setOS(llvm::Triple::Linux);
+        triple.setEnvironment(llvm::Triple::GNU);
+        if (target.bits == 32) {
+            triple.setArch(llvm::Triple::ppc);
+        } else {
+            // Currently POWERPC64 support is only little-endian.
+            user_assert(target.bits == 64) << "Target must be 32- or 64-bit.\n";
+            triple.setArch(llvm::Triple::ppc64le);
+        }
+        #else
+        user_error << "PowerPC llvm target not enabled in this build of Halide\n";
+        #endif
     } else if (target.arch == Target::PNaCl) {
         #if (WITH_NATIVE_CLIENT)
         triple.setArch(llvm::Triple::le32);
@@ -350,6 +383,16 @@ llvm::Triple get_triple_for_target(Target target) {
     }
 
     return triple;
+}
+
+namespace {
+uint32_t simple_string_hash(const string &s) {
+    uint32_t result = 0;
+    for (char c : s) {
+        result = result * 101 + c;
+    }
+    return result;
+}
 }
 
 // Link all modules together and with the result in modules[0], all
@@ -399,19 +442,26 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
     // used in the Halide-generated code must remain weak. This is
     // handled automatically by assuming any symbol starting with
     // "halide_" that is weak will be retained. There are a few
-    // compiler generated symbols for which this convention is not
-    // followed and these are in this array.
-    string retain[] = {"__stack_chk_guard",
-                       "__stack_chk_fail",
-                       ""};
+    // symbols for which this convention is not followed and these are
+    // in this array.
+    vector<string> retain = {"__stack_chk_guard",
+                             "__stack_chk_fail"};
 
+    if (t.has_feature(Target::MinGW)) {      
+        retain.insert(retain.end(),
+                             {"sincos", "sincosf",
+                              "asinh", "asinhf",
+                              "acosh", "acoshf",
+                              "atanh", "atanhf"});
+    }
+    
     // Enumerate the global variables.
     for (auto &gv : modules[0]->globals()) {
         // No variables are part of the public interface (even the ones labelled halide_)
-        llvm::GlobalValue::LinkageTypes t = gv.getLinkage();
-        if (t == llvm::GlobalValue::WeakAnyLinkage) {
+        llvm::GlobalValue::LinkageTypes linkage = gv.getLinkage();
+        if (linkage == llvm::GlobalValue::WeakAnyLinkage) {
             gv.setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
-        } else if (t == llvm::GlobalValue::WeakODRLinkage) {
+        } else if (linkage == llvm::GlobalValue::WeakODRLinkage) {
             gv.setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
         }
     }
@@ -419,8 +469,8 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
     // Enumerate the functions.
     for (auto &f : *modules[0]) {
         bool can_strip = true;
-        for (size_t i = 0; !retain[i].empty(); i++) {
-            if (f.getName() == retain[i]) {
+        for (const string &r : retain) {
+            if (f.getName() == r) {
                 can_strip = false;
             }
         }
@@ -430,11 +480,11 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
             << " for function " << (std::string)f.getName() << "\n";
         can_strip = can_strip && !is_halide_extern_c_sym;
 
+        llvm::GlobalValue::LinkageTypes linkage = f.getLinkage();
         if (can_strip) {
-            llvm::GlobalValue::LinkageTypes t = f.getLinkage();
-            if (t == llvm::GlobalValue::WeakAnyLinkage) {
+            if (linkage == llvm::GlobalValue::WeakAnyLinkage) {
                 f.setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
-            } else if (t == llvm::GlobalValue::WeakODRLinkage) {
+            } else if (linkage == llvm::GlobalValue::WeakODRLinkage) {
                 f.setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
             }
         }
@@ -601,6 +651,9 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_windows_io(c, bits_64, debug));
                 modules.push_back(get_initmod_windows_thread_pool(c, bits_64, debug));
                 modules.push_back(get_initmod_windows_get_symbol(c, bits_64, debug));
+                if (t.has_feature(Target::MinGW)) {
+                    modules.push_back(get_initmod_mingw_math(c, bits_64, debug));
+                }
             } else if (t.os == Target::IOS) {
                 modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
                 modules.push_back(get_initmod_ios_io(c, bits_64, debug));
@@ -620,8 +673,12 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             modules.push_back(get_initmod_destructors(c, bits_64, debug));
 
             // Math intrinsics vary slightly across platforms
-            if (t.os == Target::Windows && t.bits == 32) {
-                modules.push_back(get_initmod_win32_math_ll(c));
+            if (t.os == Target::Windows) {
+                if (t.bits == 32) {
+                    modules.push_back(get_initmod_win32_math_ll(c));
+                } else {
+                    modules.push_back(get_initmod_posix_math_ll(c));                
+                }
             } else if (t.arch == Target::PNaCl) {
                 modules.push_back(get_initmod_pnacl_math_ll(c));
             } else {
@@ -663,6 +720,9 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             }
             if (t.arch == Target::MIPS) {
                 modules.push_back(get_initmod_mips_ll(c));
+            }
+            if (t.arch == Target::POWERPC) {
+                modules.push_back(get_initmod_powerpc_ll(c));
             }
             if (t.has_feature(Target::SSE41)) {
                 modules.push_back(get_initmod_x86_sse41_ll(c));

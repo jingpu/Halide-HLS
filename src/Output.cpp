@@ -13,7 +13,8 @@ namespace Halide {
 
 void compile_module_to_object(const Module &module, std::string filename) {
     if (filename.empty()) {
-        if (module.target().os == Target::Windows) {
+        if (module.target().os == Target::Windows &&
+            !module.target().has_feature(Target::MinGW)) {
             filename = module.name() + ".obj";
         } else {
             filename = module.name() + ".o";
@@ -37,7 +38,8 @@ void compile_module_to_native(const Module &module,
                    std::string object_filename,
                    std::string assembly_filename) {
     if (object_filename.empty()) {
-        if (module.target().os == Target::Windows) {
+        if (module.target().os == Target::Windows &&
+            !module.target().has_feature(Target::MinGW)) {
             object_filename = module.name() + ".obj";
         } else {
             object_filename = module.name() + ".o";
