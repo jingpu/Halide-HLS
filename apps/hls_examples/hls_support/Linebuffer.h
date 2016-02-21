@@ -64,8 +64,10 @@ void linebuffer_1D_shift(stream<PackedStencil<T, IN_EXTENT_0, EXTENT_1, EXTENT_2
 
 template <size_t IMG_EXTENT_0, size_t EXTENT_1, size_t EXTENT_2, size_t EXTENT_3,
 	  size_t IN_EXTENT_0,  size_t OUT_EXTENT_0, typename T>
-void linebuffer_1D(stream<PackedStencil<T, IN_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &in_stream,
-		   stream<PackedStencil<T, OUT_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream) {
+class Linebuffer1D {
+public:
+static void call(stream<PackedStencil<T, IN_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &in_stream,
+                 stream<PackedStencil<T, OUT_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream) {
 #pragma HLS INLINE off
 #pragma HLS DATAFLOW
     static_assert(IMG_EXTENT_0 >= OUT_EXTENT_0, "image extent not is larger than output.");
@@ -75,19 +77,97 @@ void linebuffer_1D(stream<PackedStencil<T, IN_EXTENT_0, EXTENT_1, EXTENT_2, EXTE
 
     linebuffer_1D_shift<IMG_EXTENT_0>(in_stream, out_stream);
 }
+};
 
-// An overloaded (trivial) 1D line buffer, where all the input dimensions and
-// the output dimensions are the same size
+// A trivial bypass layer, where input dim 0 and output dim 0 are the same size
 template <size_t IMG_EXTENT_0,
           size_t EXTENT_0, size_t EXTENT_1, size_t EXTENT_2, size_t EXTENT_3, typename T>
-void linebuffer_1D(stream<PackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &in_stream,
+class Linebuffer1D<IMG_EXTENT_0,  EXTENT_1,  EXTENT_2,  EXTENT_3,
+                 EXTENT_0, EXTENT_0, T> {
+public:
+static void call(stream<PackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &in_stream,
                    stream<PackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream) {
 #pragma HLS INLINE
- LB_1D_pass:for(size_t idx_0 = 0; idx_0 < IMG_EXTENT_0; idx_0 += EXTENT_0) {
+    // TODO we are wasting register here. should do specialization at the caller
+    for(size_t idx_0 = 0; idx_0 < IMG_EXTENT_0; idx_0 += EXTENT_0) {
         //#pragma HLS PIPELINE rewind // rewind causes a internal error in Vivado HLS 2015.4
 #pragma HLS PIPELINE
         out_stream.write(in_stream.read());
     }
+}
+};
+
+// An serial-in-parallel-out 1D line buffer,
+// where output dim 0 and image dim 0 are the same, respectivcely.
+// TODO use shift register to implement this buffer.
+template <size_t IMG_EXTENT_0, size_t EXTENT_1, size_t EXTENT_2, size_t EXTENT_3,
+	  size_t IN_EXTENT_0, typename T>
+class Linebuffer1D<IMG_EXTENT_0, EXTENT_1,  EXTENT_2,  EXTENT_3,
+                 IN_EXTENT_0,  IMG_EXTENT_0, T> {
+public:
+static void call(stream<PackedStencil<T, IN_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &in_stream,
+                 stream<PackedStencil<T, IMG_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream) {
+#pragma HLS INLINE
+    static_assert(IMG_EXTENT_0 % IN_EXTENT_0 == 0, "output extent is not divisible by input.");
+    const size_t BUFFER_EXTENT_0 = IMG_EXTENT_0 / IN_EXTENT_0;
+
+    PackedStencil<T, IN_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> buffer[BUFFER_EXTENT_0];
+#pragma HLS ARRAY_PARTITION variable=buffer complete dim=0
+
+    for(size_t idx_0 = 0; idx_0 < BUFFER_EXTENT_0; idx_0++) {
+#pragma HLS PIPELINE
+        PackedStencil<T, IN_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> in = in_stream.read();
+        // TODO make it a shift register
+        buffer[idx_0] = in;
+
+        if (idx_0 == BUFFER_EXTENT_0 - 1) {
+            PackedStencil<T, IMG_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> out;
+            // convert the array of stencils to a longer packed stencil
+            for (size_t i = 0; i < BUFFER_EXTENT_0; i++)
+#pragma HLS UNROLL
+            for(size_t st_idx_3 = 0; st_idx_3 < EXTENT_3; st_idx_3++)
+#pragma HLS UNROLL
+            for(size_t st_idx_2 = 0; st_idx_2 < EXTENT_2; st_idx_2++)
+#pragma HLS UNROLL
+            for(size_t st_idx_1 = 0; st_idx_1 < EXTENT_1; st_idx_1++)
+#pragma HLS UNROLL
+            for(size_t st_idx_0 = 0; st_idx_0 < IN_EXTENT_0; st_idx_0++)
+#pragma HLS UNROLL
+                out(st_idx_0 + i*IN_EXTENT_0, st_idx_1, st_idx_2, st_idx_3)
+                    = buffer[i](st_idx_0, st_idx_1, st_idx_2, st_idx_3);
+
+            out_stream.write(out);
+        }
+    }
+}
+};
+
+// A trivial bypass layer, where input dim0, output dim 0 and image dim 0
+// are the same size. output dim0 is the same as image dim 0.
+// Therefore, It is more specialized than the serial-in-parallel-out
+// 1D line buffer specialization to avoid ambiguous instatiation.
+template <size_t EXTENT_0, size_t EXTENT_1, size_t EXTENT_2, size_t EXTENT_3, typename T>
+class Linebuffer1D<EXTENT_0,  EXTENT_1,  EXTENT_2,  EXTENT_3,
+                 EXTENT_0, EXTENT_0, T> {
+public:
+static void call(stream<PackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &in_stream,
+                 stream<PackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream) {
+#pragma HLS INLINE
+    // TODO we are wasting register here. should do specialization at the caller
+    out_stream.write(in_stream.read());
+}
+};
+
+// 1D linebuffer interface, which will call the class template Linebuffer1D.
+// Linebuffer1D class template has specializations for handling different
+// cases using optimized implementations
+template <size_t IMG_EXTENT_0, size_t EXTENT_1, size_t EXTENT_2, size_t EXTENT_3,
+	  size_t IN_EXTENT_0,  size_t OUT_EXTENT_0, typename T>
+void linebuffer_1D(stream<PackedStencil<T, IN_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &in_stream,
+		   stream<PackedStencil<T, OUT_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream) {
+#pragma HLS INLINE
+    Linebuffer1D<IMG_EXTENT_0,  EXTENT_1,  EXTENT_2,  EXTENT_3,
+                 IN_EXTENT_0,  OUT_EXTENT_0, T>::call(in_stream, out_stream);
 }
 
 
@@ -154,10 +234,12 @@ void linebuffer_2D_col(stream<PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, EXTENT_
 template <size_t IMG_EXTENT_0, size_t IMG_EXTENT_1, size_t EXTENT_2, size_t EXTENT_3,
 	  size_t IN_EXTENT_0, size_t IN_EXTENT_1,
 	  size_t OUT_EXTENT_0, size_t OUT_EXTENT_1, typename T>
-void linebuffer_2D(stream<PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, EXTENT_2, EXTENT_3> > &in_stream,
-                   stream<PackedStencil<T, OUT_EXTENT_0, OUT_EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream) {
+class Linebuffer2D {
+public:
+static void call(stream<PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, EXTENT_2, EXTENT_3> > &in_stream,
+                 stream<PackedStencil<T, OUT_EXTENT_0, OUT_EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream) {
     static_assert(IMG_EXTENT_1 >= OUT_EXTENT_1, "output extent is larger than image.");
-    static_assert(OUT_EXTENT_1 > IN_EXTENT_1, "input extent is larger than output."); // TODO handle this situation.
+    static_assert(OUT_EXTENT_1 >= IN_EXTENT_1, "input extent is larger than output."); // TODO handle this situation.
     static_assert(IMG_EXTENT_1 % IN_EXTENT_1 == 0, "image extent is not divisible by input."); // TODO handle this situation.
     static_assert(OUT_EXTENT_1 % IN_EXTENT_1 == 0, "output extent is not divisible by input."); // TODO handle this situation.
 #pragma HLS INLINE off
@@ -174,20 +256,122 @@ void linebuffer_2D(stream<PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, EXTENT_2, E
     // feed the column stencil stream to 1D line buffer
     const size_t NUM_OF_OUTPUT_1 = (IMG_EXTENT_1 - OUT_EXTENT_1) / IN_EXTENT_1 + 1;
  LB_2D_shift_reg:for (size_t n1 = 0; n1 < NUM_OF_OUTPUT_1; n1++) {
-	linebuffer_1D<IMG_EXTENT_0>(col_buf_stream, out_stream);
+        linebuffer_1D<IMG_EXTENT_0>(col_buf_stream, out_stream);
     }
 }
+};
 
-// An overloaded (trivial) 2D line buffer, where input dim 1 and output dim 1 are the same size
+
+// A trivial bypass layer, where input dim 1 and output dim 1 are the same size
 template <size_t IMG_EXTENT_0, size_t IMG_EXTENT_1,
           size_t IN_EXTENT_0, size_t OUT_EXTENT_0,
           size_t EXTENT_1, size_t EXTENT_2, size_t EXTENT_3, typename T>
-void linebuffer_2D(stream<PackedStencil<T, IN_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &in_stream,
-                   stream<PackedStencil<T, OUT_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream) {
+class Linebuffer2D<IMG_EXTENT_0,  IMG_EXTENT_1,  EXTENT_2,  EXTENT_3,
+                   IN_EXTENT_0,  EXTENT_1,  OUT_EXTENT_0,  EXTENT_1, T> {
+public:
+static void call(stream<PackedStencil<T, IN_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &in_stream,
+                 stream<PackedStencil<T, OUT_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream) {
 #pragma HLS INLINE
- LB_2D_pass:for(size_t idx_1 = 0; idx_1 < IMG_EXTENT_1; idx_1 += EXTENT_1) {
-	linebuffer_1D<IMG_EXTENT_0>(in_stream, out_stream);
+    for(size_t idx_1 = 0; idx_1 < IMG_EXTENT_1; idx_1 += EXTENT_1) {
+        linebuffer_1D<IMG_EXTENT_0>(in_stream, out_stream);
     }
+}
+};
+
+// A trivial bypass layer, where input dim 1, output dim 1 and image dim 1
+// are the same size
+template <size_t IMG_EXTENT_0, size_t EXTENT_1,
+          size_t IN_EXTENT_0, size_t OUT_EXTENT_0,
+          size_t EXTENT_2, size_t EXTENT_3, typename T>
+class Linebuffer2D<IMG_EXTENT_0,  EXTENT_1,  EXTENT_2,  EXTENT_3,
+                   IN_EXTENT_0,  EXTENT_1,  OUT_EXTENT_0,  EXTENT_1, T> {
+public:
+static void call(stream<PackedStencil<T, IN_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &in_stream,
+                 stream<PackedStencil<T, OUT_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream) {
+#pragma HLS INLINE
+    linebuffer_1D<IMG_EXTENT_0>(in_stream, out_stream);
+}
+};
+
+// An serial-in-parallel-out 2D line buffer,
+// where output dim 1/0 and image dim 1/0 are the same, respectivcely.
+template <size_t IMG_EXTENT_0, size_t IMG_EXTENT_1,
+          size_t IN_EXTENT_0, size_t IN_EXTENT_1,
+          size_t EXTENT_2, size_t EXTENT_3, typename T>
+class Linebuffer2D<IMG_EXTENT_0,  IMG_EXTENT_1,  EXTENT_2,  EXTENT_3,
+                   IN_EXTENT_0,  IN_EXTENT_1,  IMG_EXTENT_0,  IMG_EXTENT_1, T> {
+public:
+static void call(stream<PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, EXTENT_2, EXTENT_3> > &in_stream,
+                 stream<PackedStencil<T, IMG_EXTENT_0, IMG_EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream) {
+#pragma HLS INLINE
+    static_assert(IMG_EXTENT_1 % IN_EXTENT_1 == 0, "output extent is not divisible by input.");
+    static_assert(IMG_EXTENT_0 % IN_EXTENT_0 == 0, "output extent is not divisible by input.");
+    const size_t BUFFER_EXTENT_0 = IMG_EXTENT_0 / IN_EXTENT_0;
+    const size_t BUFFER_EXTENT_1 = IMG_EXTENT_1 / IN_EXTENT_1;
+
+    PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, EXTENT_2, EXTENT_3> buffer[BUFFER_EXTENT_1][BUFFER_EXTENT_0];
+#pragma HLS ARRAY_PARTITION variable=buffer complete dim=0
+
+    for(size_t idx_1 = 0; idx_1 < BUFFER_EXTENT_1; idx_1++) {
+        for(size_t idx_0 = 0; idx_0 < BUFFER_EXTENT_0; idx_0++) {
+#pragma HLS PIPELINE
+            PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, EXTENT_2, EXTENT_3> in = in_stream.read();
+            // TODO make it a shift register
+            buffer[idx_1][idx_0] = in;
+
+            if (idx_1 == BUFFER_EXTENT_1 - 1
+                && idx_0 == BUFFER_EXTENT_0 - 1) {
+                PackedStencil<T, IMG_EXTENT_0, IMG_EXTENT_1, EXTENT_2, EXTENT_3> out;
+                // convert the array of stencils to a longer packed stencil
+                for (size_t i = 0; i < BUFFER_EXTENT_1; i++)
+#pragma HLS UNROLL
+                for (size_t j = 0; j < BUFFER_EXTENT_0; j++)
+#pragma HLS UNROLL
+                for(size_t st_idx_3 = 0; st_idx_3 < EXTENT_3; st_idx_3++)
+#pragma HLS UNROLL
+                for(size_t st_idx_2 = 0; st_idx_2 < EXTENT_2; st_idx_2++)
+#pragma HLS UNROLL
+                for(size_t st_idx_1 = 0; st_idx_1 < IN_EXTENT_1; st_idx_1++)
+#pragma HLS UNROLL
+                for(size_t st_idx_0 = 0; st_idx_0 < IN_EXTENT_0; st_idx_0++)
+#pragma HLS UNROLL
+                    out(st_idx_0 + j*IN_EXTENT_0, st_idx_1 + i*IN_EXTENT_1, st_idx_2, st_idx_3)
+                        = buffer[i][j](st_idx_0, st_idx_1, st_idx_2, st_idx_3);
+
+                out_stream.write(out);
+            }
+        }
+    }
+}
+};
+
+// A trivial bypass layer, where input dim 1, output dim 1 and image dim 1
+// are the same size. output dim0 is the same as image dim 0.
+// Therefore, It is more specialized than the serial-in-parallel-out
+// 2D line buffer specialization to avoid ambiguous instatiation.
+template <size_t IMG_EXTENT_0, size_t EXTENT_1,
+          size_t IN_EXTENT_0, size_t EXTENT_2, size_t EXTENT_3, typename T>
+class Linebuffer2D<IMG_EXTENT_0,  EXTENT_1,  EXTENT_2,  EXTENT_3,
+                   IN_EXTENT_0,  EXTENT_1, IMG_EXTENT_0,  EXTENT_1, T> {
+public:
+static void call(stream<PackedStencil<T, IN_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &in_stream,
+                 stream<PackedStencil<T, IMG_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream) {
+#pragma HLS INLINE
+    linebuffer_1D<IMG_EXTENT_0>(in_stream, out_stream);
+}
+};
+
+// 2D linebuffer interface, which will call the class template Linebuffer2D.
+// Linebuffer2D class template has specializations for handling different
+// cases using optimized implementations
+template <size_t IMG_EXTENT_0, size_t IMG_EXTENT_1, size_t EXTENT_2, size_t EXTENT_3,
+	  size_t IN_EXTENT_0, size_t IN_EXTENT_1,
+	  size_t OUT_EXTENT_0, size_t OUT_EXTENT_1, typename T>
+void linebuffer_2D(stream<PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, EXTENT_2, EXTENT_3> > &in_stream,
+                   stream<PackedStencil<T, OUT_EXTENT_0, OUT_EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream) {
+#pragma HLS INLINE
+    Linebuffer2D<IMG_EXTENT_0,  IMG_EXTENT_1,  EXTENT_2,  EXTENT_3,
+                 IN_EXTENT_0,  IN_EXTENT_1,  OUT_EXTENT_0,  OUT_EXTENT_1, T>::call(in_stream, out_stream);
 }
 
 template <size_t IMG_EXTENT_0, size_t IMG_EXTENT_1, size_t IMG_EXTENT_2, size_t EXTENT_3,
