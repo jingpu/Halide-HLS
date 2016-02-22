@@ -92,14 +92,15 @@ void CodeGen_HLS_Testbench::visit(const ProducerConsumer *op) {
         vector<HLS_Argument> args = c.arguments(stencils);
 
         // generate HLS target code using the child code generator
-        cg_target.add_kernel(hw_body, op->name, args);
+        string ip_name = unique_name("hls_target");
+        cg_target.add_kernel(hw_body, ip_name, args);
 
         do_indent();
         stream << "// produce " << op->name << '\n';
 
         // emits the target function call
         do_indent();
-        stream << "p" << print_name(op->name) << "("; // avoid starting with '_'
+        stream << ip_name << "("; // avoid starting with '_'
         for(size_t i = 0; i < args.size(); i++) {
             stream << print_name(args[i].name);
             if(i != args.size() - 1)

@@ -138,19 +138,20 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::add_kernel(Stmt stmt,
                                                    const string &name,
                                                    const vector<HLS_Argument> &args) {
     // Emit the function prototype
-    stream << "void " << "p" << print_name(name) << "(\n";
+    stream << "void " << name << "(\n";
     for (size_t i = 0; i < args.size(); i++) {
+        string arg_name = "arg_" + std::to_string(i);
         if (args[i].is_stencil) {
             CodeGen_HLS_Base::Stencil_Type stype = args[i].stencil_type;
             stream << print_stencil_type(args[i].stencil_type) << " ";
             if (args[i].stencil_type.type == Stencil_Type::StencilContainerType::Stream) {
                 stream << "&";  // hls_stream needs to be passed by reference
             }
-            stream << print_name(args[i].name);
+            stream << arg_name;
             allocations.push(args[i].name, {args[i].stencil_type.elemType, "null"});
             stencils.push(args[i].name, args[i].stencil_type);
         } else {
-            stream << print_type(args[i].scalar_type) << " " << print_name(args[i].name);
+            stream << print_type(args[i].scalar_type) << " " << arg_name;
         }
 
         if (i < args.size()-1) stream << ",\n";
@@ -166,26 +167,43 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::add_kernel(Stmt stmt,
         stream << "#pragma HLS DATAFLOW\n"
                << "#pragma HLS INLINE region\n"
                << "#pragma HLS INTERFACE s_axilite port=return"
-               << " bundle=axilite" << print_name(name) << "\n";
+               << " bundle=config\n";
         for (size_t i = 0; i < args.size(); i++) {
+            string arg_name = "arg_" + std::to_string(i);
             if (args[i].is_stencil) {
                 if (ends_with(args[i].name, ".stream")) {
                     // stream arguments use AXI-stream interface
                     stream << "#pragma HLS INTERFACE axis "
-                           << "port=" << print_name(args[i].name) << "\n";
+                           << "port=" << arg_name << "\n";
                 } else {
                     // stencil arguments use AXI-lite interface
                     stream << "#pragma HLS INTERFACE s_axilite "
-                           << "port=" << print_name(args[i].name)
-                           << " bundle=axilite" << print_name(name) << "\n";
+                           << "port=" << arg_name
+                           << " bundle=config\n";
                     stream << "#pragma HLS ARRAY_PARTITION "
-                           << "variable=" << print_name(args[i].name) << ".value complete dim=0\n";
+                           << "variable=" << arg_name << ".value complete dim=0\n";
                 }
             } else {
                 // scalar arguments use AXI-lite interface
                 stream << "#pragma HLS INTERFACE s_axilite "
-                       << "port=" << print_name(args[i].name)
-                       << " bundle=axilite" << print_name(name) << "\n";
+                       << "port=" << arg_name << " bundle=config\n";
+            }
+        }
+        stream << "\n";
+
+        // create alias (references) of the arguments using the names in the IR
+        do_indent();
+        stream << "// alias the arguments\n";
+        for (size_t i = 0; i < args.size(); i++) {
+            string arg_name = "arg_" + std::to_string(i);
+            do_indent();
+            if (args[i].is_stencil) {
+                CodeGen_HLS_Base::Stencil_Type stype = args[i].stencil_type;
+                stream << print_stencil_type(args[i].stencil_type) << " &"
+                       << print_name(args[i].name) << " = " << arg_name << ";\n";
+            } else {
+                stream << print_type(args[i].scalar_type) << " &"
+                       << print_name(args[i].name) << " = " << arg_name << ";\n";
             }
         }
         stream << "\n";
