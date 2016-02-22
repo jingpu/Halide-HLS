@@ -44,7 +44,7 @@ string CodeGen_HLS_Base::print_stencil_type(Stencil_Type stencil_type) {
             internal_assert(is_one(simplify(range.min == 0)));
             oss << ", " << range.extent;
         }
-        oss << ">>";
+        oss << "> >";
         break;
     default: internal_error;
     }
