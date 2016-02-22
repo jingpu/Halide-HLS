@@ -9,13 +9,14 @@ include ../hls_support/Makefile.inc
 all: out.png
 
 pipeline: pipeline.cpp
-	$(CXX) $(CXXFLAGS) -Wall $^ $(LDFLAGS) $(LIB_HALIDE) -o $@ -lpthread -ldl -lz -ltinfo -g
+	$(CXX) $(CXXFLAGS) -Wall -g $^ $(LIB_HALIDE) -o $@ $(LDFLAGS) -ltinfo
 
 pipeline_hls.cpp pipeline_native.o: pipeline
 	HL_DEBUG_CODEGEN=0 ./pipeline 8 0 # 8-bit output
 
-run: run.cpp pipeline_native.o pipeline_hls.cpp hls_target.cpp
-	$(CXX) $(CXXFLAGS) $(HLS_CXXFLAGS) -g -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
+run: run.cpp pipeline_hls.cpp hls_target.cpp pipeline_native.o
+	$(CXX) $(CXXFLAGS) -O1 -DNDEBUG $(HLS_CXXFLAGS) -g -Wall -Werror $^ -lpthread -ldl $(PNGFLAGS) -o $@
+
 
 out.png: run
 	./run ../../images/bayer_raw.png 3700 2.0 50

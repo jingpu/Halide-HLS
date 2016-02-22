@@ -12,4 +12,4 @@ HLS_IFLAG += -I ${AUTOPILOT_ROOT}/include
 HLS_IFLAG += -I ../hls_support
 
 HLS_CXXFLAGS = $(HLS_IFLAG) -DC_TEST
-HLS_CXXFLAGS += -Wno-unknown-pragmas -Wno-unused-label
+HLS_CXXFLAGS += -Wno-unknown-pragmas -Wno-unused-label -Wno-uninitialized
