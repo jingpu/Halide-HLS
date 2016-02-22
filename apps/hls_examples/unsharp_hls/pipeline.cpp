@@ -92,11 +92,12 @@ public:
         hw_output.tile(x, y, xo, yo, xi, yi, 512, 512).reorder(c, xi, yi, xo, yo);
         in_bounded.compute_at(output, xo);
 
-        hw_output.accelerate({in_bounded}, hw_output, xi, xo);
+        std::vector<Func> hw_bounds = hw_output.accelerate({in_bounded}, xi, xo);
         gray.linebuffer().fifo_depth(ratio, 8);
         blur_y.linebuffer();
         ratio.linebuffer();
-        in_bounded.fifo_depth(hw_output, 3000);
+        hw_bounds[0].unroll(c);  // hw output bound
+        hw_bounds[1].fifo_depth(hw_bounds[0], 3000); // hw input bounds
 
         //output.print_loop_nest();
         output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);

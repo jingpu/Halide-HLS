@@ -48,10 +48,6 @@ public:
                                                   blue(x, y)));
         output(x, y, c) = hw_output(x, y, c);
 
-        // common schedule
-        output.tile(x, y, xo, yo, xi, yi, 256, 256);
-        output.reorder(c, xi, yi, xo, yo);
-
         // common constraints
         output.bound(c, 0, 3);
         // We can generate slightly better code if we know the output is a whole number of tiles.
@@ -66,6 +62,9 @@ public:
 
     void compile_cpu() {
         std::cout << "\ncompiling cpu code..." << std::endl;
+        output.tile(x, y, xo, yo, xi, yi, 256, 256);
+        output.reorder(c, xi, yi, xo, yo);
+
         //output.print_loop_nest();
         //output.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
         output.compile_to_header("pipeline_native.h", args, "pipeline_native");
@@ -75,9 +74,13 @@ public:
     void compile_hls() {
         std::cout << "\ncompiling HLS code..." << std::endl;
 
-        hw_output.accelerate({padded}, output, xi, xo);
-        hw_output.store_at(output, xo).compute_at(output, xi).unroll(c);
-        padded.linebuffer();
+        padded.compute_root();
+        hw_output.compute_root();
+        hw_output.tile(x, y, xo, yo, xi, yi, 256, 256);
+        hw_output.reorder(c, xi, yi, xo, yo);
+
+        std::vector<Func> hw_bounds = hw_output.accelerate({padded}, xi, xo);
+        hw_bounds[0].unroll(c);
 
         //output.print_loop_nest();
         output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);

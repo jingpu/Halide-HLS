@@ -76,6 +76,32 @@ public:
         // The comment constraints and schedules.
         output.bound(x, 0, 1024);
         output.bound(y, 0, 1024);
+
+        // Arguments
+        args = {input};
+    }
+
+    void compile_cpu() {
+        std::cout << "\ncompiling cpu code..." << std::endl;
+
+        // The CPU schedule for halide paper
+        blurz.compute_root().reorder(c, z, x, y).parallel(y).vectorize(x, 8).unroll(c);
+        histogram.compute_at(blurz, y);
+        histogram.update().reorder(c, r.x, r.y, x, y).unroll(c);
+        blurx.compute_root().reorder(c, x, y, z).parallel(z).vectorize(x, 8).unroll(c);
+        blury.compute_root().reorder(c, x, y, z).parallel(z).vectorize(x, 8).unroll(c);
+        output.compute_root().parallel(y).vectorize(x, 8);
+
+        //output.print_loop_nest();
+
+        output.compile_to_header("pipeline_native.h", args, "pipeline_native");
+        output.compile_to_object("pipeline_native.o", args, "pipeline_native");
+    }
+
+
+    void compile_hls() {
+        std::cout << "\ncompiling HLS code..." << std::endl;
+
         output.tile(x, y, xo, yo, x_in, y_in, 256, 256);
         output.tile(x_in, y_in, x_grid, y_grid, x_in, y_in, 8, 8);
 
@@ -89,31 +115,8 @@ public:
         clamped.store_at(output, xo).compute_at(output, x_grid);
         input2.store_at(output, xo).compute_at(output, x_grid);
 
-        // Arguments
-        args = {input};
-    }
-
-    void compile_cpu() {
-        std::cout << "\ncompiling cpu code..." << std::endl;
-        //output.print_loop_nest();
-
-        output.compile_to_header("pipeline_native.h", args, "pipeline_native");
-        output.compile_to_object("pipeline_native.o", args, "pipeline_native");
-
-        std::vector<Target::Feature> features({Target::NoAsserts,
-                    Target::NoBoundsQuery, Target::NoRuntime});
-        Target target(Target::Linux, Target::ARM, 32, features);
-        output.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML, target);
-        Module module = output.compile_to_module(args, "pipeline_native", target);
-        compile_module_to_llvm_assembly(module, "pipeline_native.ll");
-    }
-
-
-    void compile_hls() {
-        std::cout << "\ncompiling HLS code..." << std::endl;
-
-        hw_output.store_at(output, xo).compute_at(output, x_grid);
-        hw_output.accelerate({clamped, input2}, output, x_grid, xo);
+        hw_output.compute_at(output, xo);
+        hw_output.accelerate({clamped, input2}, x_grid, xo);
 
         //output.print_loop_nest();
 
@@ -253,7 +256,7 @@ public:
         //input2_shuffled.compute_root();
         //output_shuffled.compute_root();
 
-        output_shuffled.accelerate({input_shuffled, input2_shuffled}, output_shuffled, x_grid, xo);
+        output_shuffled.accelerate({input_shuffled, input2_shuffled}, x_grid, xo);
 
         blury.linebuffer().reorder(x, y, z, c);
         blurx.linebuffer().reorder(x, y, z, c);

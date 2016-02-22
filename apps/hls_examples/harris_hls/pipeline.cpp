@@ -82,7 +82,6 @@ public:
     }
 
     // schedule
-    output.tile(x, y, xo, yo, xi, yi, 256, 256);
 
 
     /*
@@ -107,6 +106,7 @@ public:
   void compile_cpu() {
     std::cout << "\ncompiling cpu code..." << std::endl;
 
+    output.tile(x, y, xo, yo, xi, yi, 256, 256);
     padded.store_at(output, xo).compute_at(output, xi);
     harris.store_at(output, xo).compute_at(output, xi);
 
@@ -119,9 +119,9 @@ public:
   void compile_hls() {
     std::cout << "\ncompiling HLS code..." << std::endl;
 
-    hw_output.store_at(output, xo).compute_at(output, xi);
-    hw_output.accelerate({padded}, output, xi, xo);
-    padded.linebuffer();
+    hw_output.compute_root();
+    hw_output.tile(x, y, xo, yo, xi, yi, 256, 256);
+    hw_output.accelerate({padded}, xi, xo);
     harris.linebuffer();
 
     //output.print_loop_nest();

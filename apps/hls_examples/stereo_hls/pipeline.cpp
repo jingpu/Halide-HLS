@@ -111,9 +111,9 @@ public:
         right_remap_padded.compute_root();
         left_remap_padded.compute_root();
 
-        output.tile(x, y, xo, yo, x_in, y_in, 256, 256);
-        hw_output.store_at(output, xo).compute_at(output, x_in);
-        hw_output.accelerate({right_remapped, left_remapped}, output, x_in, xo);
+        hw_output.compute_root();
+        hw_output.tile(x, y, xo, yo, x_in, y_in, 256, 256);
+        hw_output.accelerate({right_remapped, left_remapped}, x_in, xo);
         right_remapped.store_at(output, xo).compute_at(output, x_in);
         left_remapped.store_at(output, xo).compute_at(output, x_in);
 
@@ -243,7 +243,7 @@ void compile_hls() {
     offset_l1.unroll(c);
     offset_l1.update(0).unroll(search_l1.x);
 
-    hw_output.accelerate({right_remapped, left_remapped}, hw_output, x_in, xo);
+    hw_output.accelerate({right_remapped, left_remapped}, x_in, xo);
 
     output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
     output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");

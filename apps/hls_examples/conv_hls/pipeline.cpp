@@ -30,14 +30,13 @@ public:
                    conv1("conv1"), output("output"), hw_output("hw_output") {
         // define the algorithm
         clamped = BoundaryConditions::repeat_edge(input);
-        conv1 = convolve55_rd(clamped);
-        hw_output = convolve55_rd(conv1);
+        //conv1 = convolve55_rd(clamped);
+        hw_output = convolve55_rd(clamped);
         output(x, y, c) = hw_output(x, y, c);
 
-        // define common schedule: tile output
-        output.tile(x, y, xo, yo, xi, yi, 256, 256);
+        // constraints
+        output.bound(c, 0, 3);
 
-        // restrict arguments
         weight.set_bounds(0, 0, 5);
         weight.set_bounds(1, 0, 5);
         weight.set_stride(0, 1);
@@ -51,8 +50,7 @@ public:
     void compile_cpu() {
         std::cout << "\ncompiling cpu code..." << std::endl;
 
-        conv1.store_at(output, xo).compute_at(output, xi);
-        clamped.store_at(output, xo).compute_at(output, xi);
+        output.tile(x, y, xo, yo, xi, yi, 256, 256);
 
         //output.print_loop_nest();
         output.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
@@ -63,15 +61,15 @@ public:
     void compile_hls() {
         std::cout << "\ncompiling HLS code..." << std::endl;
 
+        clamped.compute_root(); // prepare the input for the whole image
+
         // HLS schedule: make a hw pipeline producing 'hw_output', taking
         // inputs of 'clamped', buffering intermediates at (output, xo) loop
         // level
-        hw_output.accelerate({clamped}, output, xi, xo);  // define the inputs and the output
-        hw_output.store_at(output, xo);   // define the tile size processed by the pipeline
-        hw_output.compute_at(output, xi); // define the throughput of the pipeline
-
-        clamped.compute_root(); // prepare the input for the whole image
-        conv1.linebuffer();    // line-buffer an intermediate stage is optional
+        hw_output.compute_root();
+        hw_output.tile(x, y, xo, yo, xi, yi, 256, 256).reorder(c, xi, yi, xo, yo );
+        std::vector<Func> hw_bounds = hw_output.accelerate({clamped}, xi, xo);  // define the inputs and the output
+        hw_bounds[0].unroll(c);
 
         //output.print_loop_nest();
         output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);

@@ -27,13 +27,7 @@ public:
         hw_sum(x,y,c) = Halide::cast<uint8_t>(padded1(x,y,c) / 2 + padded2(x,y,c) / 2);
         sum(x,y,c) = hw_sum(x,y,c);
 
-        //Halide::Image<uint8_t> result = sum.realize(input1.width(), input1.height(), 3);
-        //save_image(result, "sum.png");
-
         // Common schedule
-        sum.tile(x, y, xo, yo, xi, yi, 256, 256);
-        sum.reorder(c, xi, yi, xo, yo);
-
         // Unroll across color; bound this to 3 channels
         sum.bound(c, 0, 3);
 
@@ -53,8 +47,12 @@ public:
 
         padded1.compute_root();
         padded2.compute_root();
-        hw_sum.store_at(sum, xo).compute_at(sum, xi).unroll(c);
-        hw_sum.accelerate({padded1, padded2}, sum, xi, xo);
+        hw_sum.compute_root();
+        hw_sum.tile(x, y, xo, yo, xi, yi, 256, 256);
+        hw_sum.reorder(c, xi, yi, xo, yo);
+
+        std::vector<Func> hw_bounds = hw_sum.accelerate({padded1, padded2}, xi, xo);
+        hw_bounds[0].unroll(c);
 
         //sum.print_loop_nest();
         sum.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);

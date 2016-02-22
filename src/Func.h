@@ -1473,12 +1473,18 @@ public:
 
     /** Schedule a function onto the hardware accelerator.
      * Extract the pipeline from inputs to this function.
-     * In addition, f, compute_var and store_var, specify
+     * In addition, compute_var and store_var, specify
      * the compute and store levels of all linebuffered
-     * functions in the pipeline.
+     * functions in the pipeline w.r.t this function.
+     *
+     * This method inserts buffer functions at the accelerator
+     * boundary (inputs and output). The function points of newly
+     * created function are returned in a vector. The first element
+     * is the output buffer functions, and the rests are in the
+     * order as the inputs argument.
      */
-    EXPORT Func &accelerate(const std::vector<std::reference_wrapper<Func>> &inputs,
-                            Func f, Var compute_var, Var store_var);
+    EXPORT std::vector<Func> accelerate(const std::vector<std::reference_wrapper<Func>> &inputs,
+                                        Var compute_var, Var store_var);
 
     /** Schedule a function to be linebuffered.
      */

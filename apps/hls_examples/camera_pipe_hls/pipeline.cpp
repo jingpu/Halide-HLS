@@ -167,18 +167,14 @@ class MyPipeline {
         if (do_hw_schedule) {
             // Compute these in chunks over tiles
             // Don't vectorize, because sse is bad at 16-bit interleaving
-            g_r.compute_at(processed, x_grid).store_at(processed, tx);
-            g_b.compute_at(processed, x_grid).store_at(processed, tx);
-            r_gr.compute_at(processed, x_grid).store_at(processed, tx);
-            b_gr.compute_at(processed, x_grid).store_at(processed, tx);
-            r_gb.compute_at(processed, x_grid).store_at(processed, tx);
-            b_gb.compute_at(processed, x_grid).store_at(processed, tx);
-            r_b.compute_at(processed, x_grid).store_at(processed, tx);
-            b_r.compute_at(processed, x_grid).store_at(processed, tx);
-            // These interleave in x and y, so unrolling them helps
-            output.compute_at(processed, x_grid).store_at(processed, tx)
-                .unroll(x).unroll(y)
-                .bound(c, 0, 3).unroll(c);
+            g_r.linebuffer();
+            g_b.linebuffer();
+            r_gr.linebuffer();
+            b_gr.linebuffer();
+            r_gb.linebuffer();
+            b_gb.linebuffer();
+            r_b.linebuffer();
+            b_r.linebuffer();
         } else {
             // optimized for X86
             // Don't vectorize, because sse is bad at 16-bit interleaving
@@ -297,34 +293,40 @@ public:
         std::cout << "\ncompiling cpu code..." << std::endl;
         //processed.print_loop_nest();
 
-
         // Compute in chunks over tiles
+        processed.tile(tx, ty, xi, yi, 128, 128).reorder(xi, yi, c, tx, ty);
         denoised.compute_at(processed, tx);
         deinterleaved.compute_at(processed, tx);
         corrected.compute_at(processed, tx);
-        processed.tile(tx, ty, xi, yi, 128, 128).reorder(xi, yi, c, tx, ty);
 
         processed.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
         processed.compile_to_file("pipeline_native", args);
     }
 
-
     void compile_hls() {
         assert(do_hw_schedule);
         std::cout << "\ncompiling HLS code..." << std::endl;
 
-
         // Block in chunks over tiles, do line buffering for intermediate functions
-        processed.tile(tx, ty, xi, yi, 128, 128);
-        processed.tile(xi, yi, x_grid, y_grid, x_in, y_in, 2, 2);
-        processed.reorder(x_in, y_in, c, x_grid, y_grid, tx, ty);
-
-        corrected.compute_at(processed, x_in);
+        processed.tile(tx, ty, xi, yi, 128, 128).reorder(xi, yi, c, tx, ty);
+        denoised.compute_at(processed, tx);
+        corrected.compute_at(processed, tx);
 
         // hardware pipeline from denoised to demosaiced
-        demosaiced.accelerate({denoised}, processed, x_grid, tx);
-        denoised.linebuffer();
+
+        Expr out_width = processed.output_buffer().width();
+        Expr out_height = processed.output_buffer().height();
+        demosaiced
+            .bound(x, 0, (out_width/128)*128)
+            .bound(y, 0, (out_height/128)*128);
+
+        demosaiced.compute_at(processed, tx);
+        demosaiced.tile(x, y, tx, ty, xi, yi, 128, 128);
+        demosaiced.tile(xi, yi, x_grid, y_grid, x_in, y_in, 2, 2);
+        demosaiced.reorder(x_in, y_in, c, x_grid, y_grid, tx, ty);
+        std::vector<Func> hw_bounds = demosaiced.accelerate({denoised}, x_grid, tx);
         deinterleaved.linebuffer().unroll(c);
+        hw_bounds[0].unroll(c).unroll(x).unroll(y);
 
         //processed.print_loop_nest();
         processed.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);

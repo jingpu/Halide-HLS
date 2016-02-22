@@ -26,12 +26,11 @@ public:
         // define the algorithm
         clamped = BoundaryConditions::repeat_edge(input);
         conv1 = convolve(clamped);
-        relu1 = relu(conv1); 
+        relu1 = relu(conv1);
         hw_output = maxPool(relu1);
         output(c, x, y) = hw_output(c, x, y);
 
         // define common schedule: tile output, and linebuffer the intermediate
-        output.tile(x, y, xo, yo, xi, yi, 64, 64);
         //output.reorder(xi, yi, xo, yo, c);
 
         // restrict arguments
@@ -53,6 +52,7 @@ public:
     void compile_cpu() {
         std::cout << "\ncompiling cpu code..." << std::endl;
 
+        output.tile(x, y, xo, yo, xi, yi, 64, 64);
         clamped.store_at(output, xo).compute_at(output, xi);
 
         output.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
@@ -66,11 +66,12 @@ public:
         // HLS schedule: make a hw pipeline producing 'hw_output', taking
         // inputs of 'clamped', buffering intermediates at (output, xo) loop
         // level
-        hw_output.store_at(output, xo).compute_at(output, xi);
-        hw_output.accelerate({clamped}, output, xi, xo);
+        clamped.compute_root();
+        hw_output.compute_root();
+        hw_output.tile(x, y, xo, yo, xi, yi, 64, 64);
+        hw_output.accelerate({clamped}, xi, xo);
 
 
-        clamped.store_at(output, xo).compute_at(output, xi);
         conv1.linebuffer();
 
         //output.print_loop_nest();

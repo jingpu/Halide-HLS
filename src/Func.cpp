@@ -1137,8 +1137,8 @@ Func &Func::store_root() {
     return *this;
 }
 
-Func &Func::accelerate(const vector<std::reference_wrapper<Func>> &inputs,
-                       Func f, Var compute_var, Var store_var) {
+vector<Func> Func::accelerate(const vector<std::reference_wrapper<Func>> &inputs,
+                       Var compute_var, Var store_var) {
     // Note INPUTS need to be passed by reference because the
     // insert_buffer_before() method will allocate new FunctionContents,
     // which need to be updated back to the pointers in inputs.
@@ -1177,15 +1177,19 @@ Func &Func::accelerate(const vector<std::reference_wrapper<Func>> &inputs,
       and in1 to f1) would lose if we changed the in0's and in1's names.
      */
     invalidate_cache();
+    vector<Func> res;
+
     // inserts a buffer function before the this function,
     // which represents the physical output of the accelerator
     Function hw_out = func.insert_buffer_before("__auto_insert__" + name());
+    res.push_back(Func(hw_out));
 
     for (size_t i = 0; i < inputs.size(); i++) {
         // inserts a buffer function after the input function passed in,
         // which represents the physical input of the accelerator
         Func &input = inputs[i].get();
         Function hw_in = input.func.insert_buffer_after("__auto_insert__" + input.name());
+        res.push_back(Func(hw_in));
 
         // save the hw inputs of the accelerator pipeline in the schedule
         hw_out.schedule().accelerate_inputs().insert(hw_in.name());
@@ -1202,8 +1206,9 @@ Func &Func::accelerate(const vector<std::reference_wrapper<Func>> &inputs,
     // In other word, we constrain the compute and store levels
     // of all linebuffered functions in the pipeline to be the same
     // as the hw_out.
-    hw_out.schedule().compute_level() = LoopLevel(f.name(), compute_var.name());
-    hw_out.schedule().store_level() = LoopLevel(f.name(), store_var.name());
+    // The looplevel is always relative to this Func
+    hw_out.schedule().compute_level() = LoopLevel(name(), compute_var.name());
+    hw_out.schedule().store_level() = LoopLevel(name(), store_var.name());
     hw_out.schedule().is_accelerated() = true;
 
     // hw_out is stored in kernel buffer slice, this function store in kernel buffer
@@ -1212,7 +1217,7 @@ Func &Func::accelerate(const vector<std::reference_wrapper<Func>> &inputs,
 
     // mark all the halide functions in the pipeline to be "hw_kernel"
     mark_hw_kernels(hw_out, hw_out.schedule().accelerate_inputs());
-    return *this;
+    return res;
 }
 
 Func &Func::linebuffer() {
