@@ -714,6 +714,175 @@ public:
     PushLoopsIntoStreamForFunction(const HWKernel &k) : kernel(k) {}
 };
 
+Stmt create_dispatch_call(const HWKernel& kernel) {
+    // dispatch the stream into seperate streams for each of its consumers
+    // syntax:
+    //   dispatch_stream(stream_name, num_of_dimensions,
+    //                   stencil_size_dim_0, stencil_step_dim_0, store_extent_dim_0,
+    //                   [stencil_size_dim_1, stencil_step_dim_1, store_extent_dim_1, ...]
+    //                   num_of_consumers,
+    //                   consumer_0_name, fifo_0_depth,
+    //                   consumer_0_offset_dim_0, consumer_0_extent_dim_0,
+    //                   [consumer_0_offset_dim_1, consumer_0_extent_dim_1, ...]
+    //                   [consumer_1_name, ...])
+    Expr stream_var = Variable::make(Handle(), kernel.name + ".stencil.stream");
+    vector<Expr> dispatch_args({stream_var, (int)kernel.dims.size()});
+    for (size_t i = 0; i < kernel.dims.size(); i++) {
+        dispatch_args.push_back(kernel.dims[i].size);
+        dispatch_args.push_back(kernel.dims[i].step);
+        Expr store_extent = simplify(kernel.dims[i].store_bound.max -
+                                     kernel.dims[i].store_bound.min + 1);
+        internal_assert(is_const(store_extent));
+        dispatch_args.push_back((int)*as_const_int(store_extent));
+    }
+    dispatch_args.push_back((int)kernel.consumer_stencils.size());
+    for (const auto& p : kernel.consumer_stencils) {
+        dispatch_args.push_back(p.first);
+        internal_assert(kernel.consumer_fifo_depths.count(p.first));
+        dispatch_args.push_back(kernel.consumer_fifo_depths.find(p.first)->second);
+        internal_assert(p.second.size() == kernel.dims.size());
+        for (size_t i = 0; i < kernel.dims.size(); i++) {
+            Expr store_offset = simplify(p.second[i].store_bound.min -
+                                         kernel.dims[i].store_bound.min);
+            Expr store_extent = simplify(p.second[i].store_bound.max -
+                                         p.second[i].store_bound.min + 1);
+            internal_assert(is_const(store_offset));
+            internal_assert(is_const(store_extent));
+            dispatch_args.push_back((int)*as_const_int(store_offset));
+            dispatch_args.push_back((int)*as_const_int(store_extent));
+        }
+    }
+    return Evaluate::make(Call::make(Handle(), "dispatch_stream", dispatch_args, Call::Intrinsic));
+}
+
+
+class CreateDispatchCallForFunction : public IRMutator {
+    const HWKernel& kernel;
+    Scope<Expr> scope;
+
+    using IRMutator::visit;
+
+    // mostly copied from LinebufferForFunction::visit(const Realize *op)
+    void visit(const Realize *op) {
+        if(op->name != kernel.name + ".stencil.stream") {
+            IRMutator::visit(op);
+        } else {
+            // It is the realize(+PC) node for func.stencil.stream, we add an dispatch
+            // to the end of produce node.
+            // e.g. before:
+            //        realize func.stencil.stream {
+            //          produce func.stencil.stream {...}
+            //          consume {...}
+            //        }
+            //
+            //      after:
+            //        realize func.stencil.stream {
+            //          produce func.stencil.stream {
+            //            ...
+            //            dispatch(...)
+            //          }
+            //          consume {...}
+            //        }
+            const ProducerConsumer *pc = op->body.as<ProducerConsumer>();
+            internal_assert(pc && pc->name == kernel.name + ".stencil.stream");
+
+            Stmt dispatch_call = create_dispatch_call(kernel);
+            Stmt new_produce = Block::make(mutate(pc->produce), dispatch_call);
+
+            // create realize+PC nodes for func.stencil.stream
+            internal_assert(!pc->update.defined());
+            Stmt new_pc = ProducerConsumer::make(kernel.name + ".stencil.stream",
+                                                 new_produce, Stmt(), pc->consume);
+            stmt = Realize::make(kernel.name + ".stencil.stream", op->types,
+                                 op->bounds, const_true(), new_pc);
+        }
+    }
+
+    // mostly copied from LinebufferForFunction::visit(const For *op)
+    void visit(const For *op) {
+        // 1. We replace the outer loops that slide the stencil window across the image
+        //    with loops for update stencil
+        //
+        // e.g.
+        // for scan.loop_var, scan.min, scan.extent
+        //   realize stencil[0, stencil.size]
+        //   for stencil.loop_var, 0, stencil.size
+        //     compute stencil[stencil.loop_var]
+        //
+        // =========
+        // let scan_update.extent = store_bounds.extent / stencil.step
+        // for scan_update.loop_var, scan.min, scan_update.extent
+        //   let scan.loop_var = scan_update.loop_var
+        //   realize update_stencil[0, stencil.step]
+        //   for stencil_update.loop_var, 0, stencil.step
+        //     let stencil.loop_var = stencil_update.loop_var
+        //     compute stencil_update[stencil.loop_var]
+
+        // check if the for loop is a outer loops (scan.loop_var) that slide
+        size_t dim_idx = 0;
+        while (dim_idx < kernel.dims.size()) {
+            if(op->name == kernel.dims[dim_idx].loop_var)
+                break;
+            dim_idx++;
+        }
+
+        if(dim_idx < kernel.dims.size()) {
+            // found a proper outer scan.loop_var
+            debug(3) << "find outer loop " << op->name << " to mutate.\n";
+
+            StencilDimSpecs dimspecs = kernel.dims[dim_idx];
+            internal_assert(dimspecs.loop_var == op->name);
+            string new_loop_var_name = kernel.name + ".scan." + kernel.func.args()[dim_idx];
+            Expr new_loop_var = Variable::make(Int(32), new_loop_var_name);
+
+            //Expr store_extent = buffer_bounds[dim_idx].extent;w
+            Expr store_extent = simplify(kernel.dims[dim_idx].store_bound.max -
+                                         kernel.dims[dim_idx].store_bound.min + 1);
+            debug(3) << "kernel " << kernel.name << " store_extent = " << store_extent << '\n';
+
+            // check the condition for the new loop for sliding the update stencil
+            const IntImm *store_extent_int = store_extent.as<IntImm>();
+            internal_assert(store_extent_int);
+            if (store_extent_int->value % dimspecs.step != 0) {
+                // we cannot handle this scenario yet
+                internal_error
+                    << "Line buffer extent (" << store_extent_int->value
+                    << ") is not divisible by the stencil step " << dimspecs.step << '\n';
+            }
+            int new_extent = store_extent_int->value / dimspecs.step;
+
+            string old_var_name = op->name;
+            Expr old_var_value = new_loop_var;
+
+            // traversal down into the body
+            scope.push(old_var_name, old_var_value);
+            Stmt new_body = mutate(op->body);
+            scope.pop(old_var_name);
+
+            new_body = LetStmt::make(old_var_name, old_var_value, new_body);
+            stmt = For::make(new_loop_var_name, op->min, new_extent, op->for_type, op->device_api, new_body);
+
+        } else {
+            // otherwise, keep traversal down
+            IRMutator::visit(op);
+        }
+    }
+
+    void visit(const LetStmt *op) {
+        scope.push(op->name, simplify(expand_expr(op->value, scope)));
+        Stmt new_body = mutate(op->body);
+        if (new_body.same_as(op->body)) {
+            stmt = op;
+        } else {
+            stmt = LetStmt::make(op->name, op->value, new_body);
+        }
+        scope.pop(op->name);
+    }
+public:
+    CreateDispatchCallForFunction(const HWKernel &k)
+        : kernel(k) { }
+};
+
 // Implements line buffers
 // It replace the produce of func.stencil and func.stencil.stream with
 // func.stencil_update and func.stencil_update.stream. The latters are
@@ -747,7 +916,10 @@ class LinebufferForFunction : public IRMutator {
             //        realize func.stencil_update.stream {
             //          produce func.stencil_update.stream {...}
             //            realize func.stencil.stream {
-            //              produce func.stencil.stream {linebuffer(...)}
+            //              produce func.stencil.stream {
+            //                linebuffer(...)
+            //                dispatch(...)
+            //              }
             //              consume {...}
             //        }   }
             const ProducerConsumer *stencil_pc = op->body.as<ProducerConsumer>();
@@ -766,43 +938,7 @@ class LinebufferForFunction : public IRMutator {
             }
             Stmt linebuffer_call = Evaluate::make(Call::make(Handle(), "linebuffer", args, Call::Intrinsic));
 
-            // dispatch the stream into seperate streams for each of its consumers
-            // syntax:
-            //   dispatch_stream(stream_name, num_of_dimensions,
-            //                   stencil_size_dim_0, stencil_step_dim_0, store_extent_dim_0,
-            //                   [stencil_size_dim_1, stencil_step_dim_1, store_extent_dim_1, ...]
-            //                   num_of_consumers,
-            //                   consumer_0_name, fifo_0_depth,
-            //                   consumer_0_offset_dim_0, consumer_0_extent_dim_0,
-            //                   [consumer_0_offset_dim_1, consumer_0_extent_dim_1, ...]
-            //                   [consumer_1_name, ...])
-            vector<Expr> dispatch_args({stream_var, (int)kernel.dims.size()});
-            for (size_t i = 0; i < kernel.dims.size(); i++) {
-                dispatch_args.push_back(kernel.dims[i].size);
-                dispatch_args.push_back(kernel.dims[i].step);
-                Expr store_extent = simplify(kernel.dims[i].store_bound.max -
-                                             kernel.dims[i].store_bound.min + 1);
-                internal_assert(is_const(store_extent));
-                dispatch_args.push_back((int)*as_const_int(store_extent));
-            }
-            dispatch_args.push_back((int)kernel.consumer_stencils.size());
-            for (const auto& p : kernel.consumer_stencils) {
-                dispatch_args.push_back(p.first);
-                internal_assert(kernel.consumer_fifo_depths.count(p.first));
-                dispatch_args.push_back(kernel.consumer_fifo_depths.find(p.first)->second);
-                internal_assert(p.second.size() == kernel.dims.size());
-                for (size_t i = 0; i < kernel.dims.size(); i++) {
-                    Expr store_offset = simplify(p.second[i].store_bound.min -
-                                                 kernel.dims[i].store_bound.min);
-                    Expr store_extent = simplify(p.second[i].store_bound.max -
-                                                 p.second[i].store_bound.min + 1);
-                    internal_assert(is_const(store_offset));
-                    internal_assert(is_const(store_extent));
-                    dispatch_args.push_back((int)*as_const_int(store_offset));
-                    dispatch_args.push_back((int)*as_const_int(store_extent));
-                }
-            }
-            Stmt dispatch_call = Evaluate::make(Call::make(Handle(), "dispatch_stream", dispatch_args, Call::Intrinsic));
+            Stmt dispatch_call = create_dispatch_call(kernel);
 
             Stmt stream_calls = Block::make(linebuffer_call, dispatch_call);
 
@@ -1012,18 +1148,33 @@ class StreamOpt : public IRMutator {
         debug(3) << "IR after PullUpTargetNode pass on Function " << kernel.name
                  << ":\n" << new_body << '\n';
 
-        // check if we need a line buffer
-        // We skip inserting a line buffer for the output kernel
-        bool insert_linebuffer = true;
-        if (kernel.is_output)
-            insert_linebuffer = false;
+        if (!kernel.is_output) {
+            // check if we need a line buffer
+            // We skip inserting a line buffer for the output kernel
+            bool insert_linebuffer = false;
+            for (size_t i = 0; i < kernel.dims.size(); i++) {
+                if (kernel.dims[i].size != kernel.dims[i].step) {
+                    insert_linebuffer = true;
+                    break;
+                }
+            }
+            // always add linebuffer at inputs
+            // TODO this may not be needed if the assumption in GroupHwPipeline is
+            // fixed accordingly
+            if (dag.input_kernels.count(kernel.name))
+                insert_linebuffer = true;
 
-        if (insert_linebuffer) {
-            new_body = LinebufferForFunction(kernel).mutate(new_body);
-            debug(3) << "IR after LinebufferForFunction pass on Function " << kernel.name
-                     << ":\n" << new_body << '\n';
-        } else {
-            debug(3) << "Skip inserting linebuffer for Function " << kernel.name << '\n';
+            if (insert_linebuffer) {
+                new_body = LinebufferForFunction(kernel).mutate(new_body);
+                debug(3) << "IR after LinebufferForFunction pass on Function " << kernel.name
+                         << ":\n" << new_body << '\n';
+            } else {
+                new_body = CreateDispatchCallForFunction(kernel).mutate(new_body);
+                debug(3) << "Skip inserting linebuffer for Function " << kernel.name
+                         << ":\n" << new_body << '\n';
+                user_warning << "No linebuffer inserted after function " << kernel.name
+                             << ".\n";
+            }
         }
 
         new_body = mutate(new_body);
