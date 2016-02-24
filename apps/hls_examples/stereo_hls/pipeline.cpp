@@ -72,6 +72,12 @@ public:
         output.bound(x, 0, 720);
         output.bound(y, 0, 405);
 
+        // all inputs has three channels
+        right.set_bounds(2, 0, 3);
+        left.set_bounds(2, 0, 3);
+        right_remap.set_bounds(2, 0, 3);
+        left_remap.set_bounds(2, 0, 3);
+
         // Arguments
         args = {right, left, right_remap, left_remap};
     }
@@ -79,17 +85,16 @@ public:
     void compile_cpu() {
         std::cout << "\ncompiling cpu code..." << std::endl;
 
-        output.tile(x, y, xo, yo, x_in, y_in, 256, 256);
+        output.tile(x, y, xo, yo, x_in, y_in, 256, 64);
+        output.fuse(xo, yo, xo).parallel(xo);
 
-        right_padded.compute_root();//.vectorize(_0, 8);
-        left_padded.compute_root();//.vectorize(_0, 8);
-        right_remap_padded.compute_root();//.vectorize(_0, 8);
-        left_remap_padded.compute_root();//.vectorize(_0, 8);
+        right_padded.compute_at(output, xo).vectorize(_0, 16);
+        left_padded.compute_at(output, xo).vectorize(_0, 16);
+        right_remap_padded.compute_at(output, xo).vectorize(_0, 16);
+        left_remap_padded.compute_at(output, xo).vectorize(_0, 16);
 
-        right_remapped.store_at(output, xo).compute_at(output, x_in);
-        left_remapped.store_at(output, xo).compute_at(output, x_in);
-        //right_remapped.vectorize(x, 8);
-        //left_remapped.vectorize(x, 8);
+        right_remapped.compute_at(output, xo);
+        left_remapped.compute_at(output, xo);
 
         SAD.compute_at(output, x_in);
         SAD.unroll(c);
@@ -102,6 +107,29 @@ public:
         output.compile_to_object("pipeline_native.o", args, "pipeline_native");
     }
 
+    void compile_gpu() {
+        std::cout << "\ncompiling gpu code..." << std::endl;
+
+        right_padded.compute_at(right_remapped, Var::gpu_blocks()).gpu_threads(_0, _1, _2);
+        right_remap_padded.compute_at(right_remapped, Var::gpu_blocks()).gpu_threads(_0, _1, _2);
+        left_padded.compute_at(left_remapped, Var::gpu_blocks()).gpu_threads(_0, _1, _2);
+        left_remap_padded.compute_at(left_remapped, Var::gpu_blocks()).gpu_threads(_0, _1, _2);
+
+        right_remapped.compute_root().gpu_tile(x, y, 8, 8);
+        left_remapped.compute_root().gpu_tile(x, y, 8, 8);
+
+        output.gpu_tile(x, y, 64, 1);
+        SAD.compute_at(output, Var::gpu_blocks()).gpu_threads(x, y, c);
+        SAD.update(0).gpu_threads(c).unroll(win.x).unroll(win.y);
+
+        //output.print_loop_nest();
+
+        Target target = get_target_from_environment();
+        target.set_feature(Target::CUDA);
+        output.compile_to_lowered_stmt("pipeline_cuda.ir.html", args, HTML, target);
+        output.compile_to_header("pipeline_cuda.h", args, "pipeline_cuda", target);
+        output.compile_to_object("pipeline_cuda.o", args, "pipeline_cuda", target);
+    }
 
     void compile_hls() {
         std::cout << "\ncompiling HLS code..." << std::endl;
@@ -185,8 +213,11 @@ MyPipelineOpt()
     output.bound(x, 0, 720);
     output.bound(y, 0, 405);
 
-    //right_remapped.store_at(output, xo).compute_at(output, x_in);
-    //left_remapped.store_at(output, xo).compute_at(output, x_in);
+    // all inputs has three channels
+    right.set_bounds(2, 0, 3);
+    left.set_bounds(2, 0, 3);
+    right_remap.set_bounds(2, 0, 3);
+    left_remap.set_bounds(2, 0, 3);
 
     // Arguments
     args = {right, left, right_remap, left_remap};
@@ -272,10 +303,10 @@ void compile_hls() {
 
 
 int main(int argc, char **argv) {
-    MyPipeline p1;
+    MyPipeline p1, p3;
     MyPipelineOpt p2;
     p1.compile_cpu();
     p2.compile_hls();
-
+    p3.compile_gpu();
     return 0;
 }

@@ -23,19 +23,24 @@ out.png: run
 #pipeline_zynq.o: pipeline_zynq.c
 #	$(CXX) -c -O2 $(CXXFLAGS) -g -Wall -Werror $^ -o $@  $(PNGFLAGS)
 
-run_zynq.o: run_zynq.cpp
-	$(CXX) -c $(CXXFLAGS) -g -Wall -Werror $^ -o $@  $(PNGFLAGS)
+run_zynq: pipeline_zynq.o pipeline_native.o run_zynq.cpp
+	$(CXX) -O3 $(CXXFLAGS) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
 
-run_zynq: pipeline_zynq.o pipeline_native.o run_zynq.o
-	$(CXX) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
+run_cuda: pipeline_native.o pipeline_cuda.o run_cuda.cpp
+	$(CXX) -O3 $(CXXFLAGS) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
 
 out_zynq.png: run_zynq
 	HL_NUM_THREADS=3 ./run_zynq ../../images/left0224.png ../../images/left-remap.png ../../images/right0224.png ../../images/right-remap.png
 
+out_cuda.png: run_cuda
+	HL_NUM_THREADS=4 ./run_cuda ../../images/left0224.png ../../images/left-remap.png ../../images/right0224.png ../../images/right-remap.png
+
 clean:
-	rm -f pipeline run run_zynq
-	rm -f out.png out_zynq.png
-	rm -f *.o *.h
+	rm -f pipeline run run_zynq run_cuda
 	rm -f pipeline_native.h pipeline_native.o
 	rm -f pipeline_hls.h pipeline_hls.cpp
 	rm -f hls_target.h hls_target.cpp
+	rm -f *.png
+	rm -f *.h
+	rm -f *.o
+	rm -f *.html
