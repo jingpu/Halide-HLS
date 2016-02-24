@@ -15,8 +15,8 @@
 using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
-    if (argc < 3) {
-        printf("Usage: ./run input.png output.png\n");
+    if (argc < 2) {
+        printf("Usage: ./run input.png\n");
         return 0;
     }
 
@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
     printf("start.\n");
 
     pipeline_native(input, out_native);
-    save_image(out_native, argv[2]);
+    save_image(out_native, "out_native.png");
     printf("cpu program results saved.\n");
     //out_native = load_image("out_native.png");
     //printf("cpu program results loaded.\n");
@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
 
     // Timing code. Timing doesn't include copying the input data to
     // the gpu or copying the output back.
-    double min_t = benchmark(1, 10, [&]() {
+    double min_t = benchmark(3, 10, [&]() {
         pipeline_native(input, out_native);
       });
     printf("CPU program runtime: %g\n", min_t * 1e3);
