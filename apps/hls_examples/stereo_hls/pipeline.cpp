@@ -110,17 +110,18 @@ public:
     void compile_gpu() {
         std::cout << "\ncompiling gpu code..." << std::endl;
 
-        right_padded.compute_at(right_remapped, Var::gpu_blocks()).gpu_threads(_0, _1, _2);
-        right_remap_padded.compute_at(right_remapped, Var::gpu_blocks()).gpu_threads(_0, _1, _2);
-        left_padded.compute_at(left_remapped, Var::gpu_blocks()).gpu_threads(_0, _1, _2);
-        left_remap_padded.compute_at(left_remapped, Var::gpu_blocks()).gpu_threads(_0, _1, _2);
+        right_padded.compute_root().gpu_tile(_0, _1, _2, 8, 8, 1);
+        right_remap_padded.compute_root().gpu_tile(_0, _1, _2, 8, 8, 1);
+        left_padded.compute_root().gpu_tile(_0, _1, _2, 8, 8, 1);
+        left_remap_padded.compute_root().gpu_tile(_0, _1, _2, 8, 8, 1);
 
         right_remapped.compute_root().gpu_tile(x, y, 8, 8);
         left_remapped.compute_root().gpu_tile(x, y, 8, 8);
 
-        output.gpu_tile(x, y, 64, 1);
-        SAD.compute_at(output, Var::gpu_blocks()).gpu_threads(x, y, c);
-        SAD.update(0).gpu_threads(c).unroll(win.x).unroll(win.y);
+
+        output.gpu_tile(x, y, 16, 1);
+        SAD.compute_at(output, Var::gpu_blocks()).gpu_threads(c);
+        SAD.update(0).gpu_threads(c).unroll(win.x);//.unroll(win.y);
 
         //output.print_loop_nest();
 

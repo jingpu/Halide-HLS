@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
     double min_t2 = benchmark(iter, 10, [&]() {
         pipeline_cuda(right, left, right_remap, left_remap, out_cuda);
       });
-    printf(" program runtime: %g\n", min_t2 * 1e3);
+    printf("CUDA program runtime: %g\n", min_t2 * 1e3);
     save_image(out_cuda, "out_cuda.png");
 
     return 0;
