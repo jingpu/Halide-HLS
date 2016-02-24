@@ -23,11 +23,8 @@ out.png: run
 #pipeline_zynq.o: pipeline_zynq.c
 #	$(CXX) -c -O2 $(CXXFLAGS) -g -Wall -Werror $^ -o $@
 
-run_zynq.o: run_zynq.cpp
-	$(CXX) -c $(CXXFLAGS) -g -Wall -Werror $^ -o $@  $(PNGFLAGS)
-
-run_zynq: pipeline_zynq.o pipeline_native.o run_zynq.o
-	$(CXX) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
+run_zynq: pipeline_zynq.o pipeline_native.o run_zynq.cpp
+	$(CXX) -O3 $(CXXFLAGS) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
 
 run_cuda: pipeline_native.o pipeline_cuda.o run_cuda.cpp
 	$(CXX) -O3 $(CXXFLAGS) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
