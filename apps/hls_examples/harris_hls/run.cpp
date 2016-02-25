@@ -13,18 +13,22 @@ using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
 
+    float k = 0.04;
+    int threshold = 10;
+
     Image<uint8_t> input = load_image(argv[1]);
     Image<uint8_t> out_native(input.width(), input.height(), input.channels());
     Image<uint8_t> out_hls(input.width(), input.height(), input.channels());
 
     printf("start.\n");
 
-    pipeline_native(input, out_native);
-    save_image(out_native, "corners.png");
+    pipeline_native(input, k, threshold, out_native);
+    save_image(out_native, "out.png");
 
     printf("finished running native code\n");
 
-    pipeline_hls(input, out_hls);
+    pipeline_hls(input, k, threshold,  out_hls);
+    save_image(out_hls, "out_hls.png");
 
     printf("finished running HLS code\n");
 
