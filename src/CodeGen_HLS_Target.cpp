@@ -72,13 +72,6 @@ const string hls_header_includes =
     "#include <stdlib.h>\n"
     "#include <hls_stream.h>\n"
     "#include \"Stencil.h\"\n";
-
-
-const string globals =
-    // TODO: this next chunk is copy-pasted from posix_math.cpp. A
-    // better solution for the C runtime would be nice.
-    "template<typename T> T max(T a, T b) {if (a > b) return a; return b;}\n"
-    "template<typename T> T min(T a, T b) {if (a < b) return a; return b;}\n";
 }
 
 void CodeGen_HLS_Target::init_module() {
@@ -99,8 +92,8 @@ void CodeGen_HLS_Target::init_module() {
 
     // initialize the source file
     src_stream << "#include \"" << target_name << ".h\"\n\n";
-    src_stream << "#include \"Linebuffer.h\"\n\n";
-    src_stream << globals << "\n";
+    src_stream << "#include \"Linebuffer.h\"\n"
+               << "#include \"halide_math.h\"\n";
 
 }
 
@@ -248,7 +241,8 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::visit(const For *op) {
     open_scope();
     // add a 'PIPELINE' pragma if it is an innermost loop
     if (!contain_for_loop(op->body)) {
-        stream << "#pragma HLS PIPELINE\n";
+        stream << "#pragma HLS DEPENDENCE array inter false\n"
+               << "#pragma HLS PIPELINE II=1\n";
     }
     op->body.accept(this);
     close_scope("for " + print_name(op->name));
