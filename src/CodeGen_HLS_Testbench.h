@@ -24,7 +24,10 @@ public:
     ~CodeGen_HLS_Testbench();
 
 protected:
+    std::string print_stencil_type(Stencil_Type s, bool is_axi = false);
+
     using CodeGen_HLS_Base::visit;
+
     void visit(const ProducerConsumer *);
     void visit(const Allocate *);
     void visit(const Call *);

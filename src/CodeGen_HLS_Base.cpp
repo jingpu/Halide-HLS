@@ -20,7 +20,7 @@ using std::vector;
 using std::ostringstream;
 using std::to_string;
 
-string CodeGen_HLS_Base::print_stencil_type(Stencil_Type stencil_type) {
+string CodeGen_HLS_Base::print_stencil_type(Stencil_Type stencil_type, bool is_axi) {
     ostringstream oss;
     // C: Stencil<uint16_t, 1, 1, 1> stencil_var;
     // C: hls::stream<Stencil<uint16_t, 1, 1, 1> > stencil_stream_var;
@@ -36,8 +36,12 @@ string CodeGen_HLS_Base::print_stencil_type(Stencil_Type stencil_type) {
         oss << ">";
         break;
     case Stencil_Type::StencilContainerType::Stream :
-        oss << "hls::stream<PackedStencil<"
-            << print_type(stencil_type.elemType);
+        if (is_axi) {
+            oss << "hls::stream<AxiPackedStencil<";
+        } else {
+            oss << "hls::stream<PackedStencil<";
+        }
+        oss << print_type(stencil_type.elemType);
 
         for(size_t i = 0; i < stencil_type.bounds.size(); i++) {
             const Range &range = stencil_type.bounds[i];
@@ -111,7 +115,7 @@ void CodeGen_HLS_Base::visit(const Call *op) {
         } else {
             // write stream call for the dag output kernel
             // IR: write_stream(output.stencil.stream, output.stencil, loop_var_1, loop_max_1, ...)
-            // C:  PackedStencil<uint8_t, 1, 1, 1> _output_stencil_packed = _output_stencil;
+            // C:  AxiPackedStencil<uint8_t, 1, 1, 1> _output_stencil_packed = _output_stencil;
             //     if (_loop_var_1 == loop_max_1 && ...)
             //       _output_stencil_packed.last = 1;
             //     else
@@ -131,7 +135,7 @@ void CodeGen_HLS_Base::visit(const Call *op) {
 
             // emit code declaring the packed stencil
             do_indent();
-            stream << "Packed" << print_stencil_type(stencil_type)
+            stream << "AxiPacked" << print_stencil_type(stencil_type)
                    << print_name(packed_stencil_name) << " = "
                    << print_name(stencil_name) << ";\n";
 

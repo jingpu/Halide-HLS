@@ -5,9 +5,10 @@
 #include <stdint.h>
 #include <assert.h>
 
-#define USE_PACKED_STENCIL
 ///Forward declaration
 template <typename T, size_t EXTENT_0, size_t EXTENT_1, size_t EXTENT_2, size_t EXTENT_3> struct Stencil;
+template <typename T, size_t EXTENT_0, size_t EXTENT_1, size_t EXTENT_2, size_t EXTENT_3> struct PackedStencil;
+template <typename T, size_t EXTENT_0, size_t EXTENT_1, size_t EXTENT_2, size_t EXTENT_3> struct AxiPackedStencil;
 
 #ifndef AP_INT_MAX_W
 //#define AP_INT_MAX_W 32768
@@ -20,7 +21,6 @@ template <typename T, size_t EXTENT_0, size_t EXTENT_1, size_t EXTENT_2, size_t 
 template <typename T, size_t EXTENT_0, size_t EXTENT_1 = 1, size_t EXTENT_2 = 1, size_t EXTENT_3 = 1>
 struct PackedStencil {
     ap_uint<8*sizeof(T)*EXTENT_3*EXTENT_2*EXTENT_1*EXTENT_0> value;
-    ap_uint<1> last;
 
     /** writer
      */
@@ -69,6 +69,36 @@ struct PackedStencil {
             res.value[idx_3][idx_2][idx_1][idx_0] = operator()(idx_0, idx_1, idx_2, idx_3);
         }
         return res;
+    }
+
+    // convert to AxiPackedStencil
+    operator AxiPackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3>() {
+#pragma HLS INLINE
+        AxiPackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> res;
+        res.value = value;
+        return res;
+    }
+
+};
+
+template <typename T, size_t EXTENT_0, size_t EXTENT_1 = 1, size_t EXTENT_2 = 1, size_t EXTENT_3 = 1>
+struct AxiPackedStencil {
+    ap_uint<8*sizeof(T)*EXTENT_3*EXTENT_2*EXTENT_1*EXTENT_0> value;
+    ap_uint<1> last;
+
+    // convert to PackedStencil
+    operator PackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3>() {
+#pragma HLS INLINE
+        PackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> res;
+        res.value = value;
+        return res;
+    }
+
+    // convert to Stencil
+    operator Stencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3>() {
+#pragma HLS INLINE
+        PackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> res = *this;
+        return (Stencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3>)res;
     }
 };
 
@@ -119,6 +149,12 @@ public:
         return res;
     }
 
+    // convert to AxiPackedStencil
+    operator AxiPackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3>() {
+#pragma HLS INLINE
+        PackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> res = *this;
+        return (AxiPackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3>)res;
+    }
 };
 
 

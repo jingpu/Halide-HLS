@@ -136,7 +136,7 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::add_kernel(Stmt stmt,
         string arg_name = "arg_" + std::to_string(i);
         if (args[i].is_stencil) {
             CodeGen_HLS_Base::Stencil_Type stype = args[i].stencil_type;
-            stream << print_stencil_type(args[i].stencil_type) << " ";
+            stream << print_stencil_type(args[i].stencil_type, true) << " ";
             if (args[i].stencil_type.type == Stencil_Type::StencilContainerType::Stream) {
                 stream << "&";  // hls_stream needs to be passed by reference
             }
@@ -192,7 +192,7 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::add_kernel(Stmt stmt,
             do_indent();
             if (args[i].is_stencil) {
                 CodeGen_HLS_Base::Stencil_Type stype = args[i].stencil_type;
-                stream << print_stencil_type(args[i].stencil_type) << " &"
+                stream << print_stencil_type(args[i].stencil_type, true) << " &"
                        << print_name(args[i].name) << " = " << arg_name << ";\n";
             } else {
                 stream << print_type(args[i].scalar_type) << " &"

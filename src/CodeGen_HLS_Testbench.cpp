@@ -75,6 +75,11 @@ CodeGen_HLS_Testbench::CodeGen_HLS_Testbench(ostream &tb_stream)
 CodeGen_HLS_Testbench::~CodeGen_HLS_Testbench() {
 }
 
+string CodeGen_HLS_Testbench::print_stencil_type(Stencil_Type stencil_type, bool is_axi) {
+    // always assume AXI interface
+    return CodeGen_HLS_Base::print_stencil_type(stencil_type, true);
+}
+
 void CodeGen_HLS_Testbench::visit(const ProducerConsumer *op) {
     if (starts_with(op->name, "_hls_target.")) {
         // steps over the start_hwacc() call
