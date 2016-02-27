@@ -120,7 +120,18 @@ class CreateStencilForFunction : public IRMutator {
 
     void visit(const For *op) {
         if (!starts_with(op->name, kernel.name)) {
-            IRMutator::visit(op);
+            // try to simplify trivial reduction loops
+            // TODO add assertions to check loop type
+            Expr loop_extent = simplify(expand_expr(op->extent, scope));
+            if (is_one(loop_extent)) {
+                scope.push(op->name, simplify(expand_expr(op->min, scope)));
+                Stmt body = mutate(op->body);
+                scope.pop(op->name);
+                stmt = LetStmt::make(op->name, op->min, body);
+            } else {
+                Stmt body = mutate(op->body);
+                stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+            }
         } else {
             // replace the loop var over the dimensions of the original function
             // realization with the loop var over the stencil dimension.
