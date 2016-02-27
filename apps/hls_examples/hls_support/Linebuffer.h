@@ -31,6 +31,7 @@ static void call(stream<PackedStencil<T, IN_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT
 
  LB1D_shift:for (size_t i = 0; i < IMG_EXTENT_0; i += IN_EXTENT_0) {
 #pragma HLS DEPENDENCE array inter false
+#pragma HLS LOOP_FLATTEN off
 #pragma HLS PIPELINE II=1
         for (size_t j = 0; j < buffer_size - 1; j++) {
             buffer[j] = buffer[j+1]; // left shift
@@ -91,6 +92,7 @@ static void call(stream<PackedStencil<T, IN_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT
 
  LB1D_sipo:for (size_t idx_0 = 0; idx_0 < BUFFER_EXTENT_0; idx_0++) {
 #pragma HLS DEPENDENCE array inter false
+#pragma HLS LOOP_FLATTEN off
 #pragma HLS PIPELINE II=1
         PackedStencil<T, IN_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> in = in_stream.read();
         // TODO make it a shift register
@@ -172,6 +174,7 @@ static void call(stream<PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, EXTENT_2, EXT
  LB2D_buf:for (size_t row = 0; row < IDX_EXTENT_1; row++) {
         for (size_t col = 0; col < IDX_EXTENT_0; col++) {
 #pragma HLS DEPENDENCE array inter false
+#pragma HLS LOOP_FLATTEN off
 #pragma HLS PIPELINE II=1
             size_t write_idx_1 = row % BUFFER_EXTENT_1; // the line index of coming stencil in the linebuffer
             buffer[write_idx_1][col] = in_stream.read();
@@ -254,6 +257,7 @@ static void call(stream<PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, EXTENT_2, EXT
  LB2D_sipo:for (size_t idx_1 = 0; idx_1 < BUFFER_EXTENT_1; idx_1++) {
         for (size_t idx_0 = 0; idx_0 < BUFFER_EXTENT_0; idx_0++) {
 #pragma HLS DEPENDENCE array inter false
+#pragma HLS LOOP_FLATTEN off
 #pragma HLS PIPELINE II=1
             PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, EXTENT_2, EXTENT_3> in = in_stream.read();
             // TODO make it a shift register
@@ -338,6 +342,7 @@ void linebuffer_3D(stream<PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, IN_EXTENT_2
         for (size_t idx_1 = 0; idx_1 < IDX_EXTENT_1; idx_1++) {
             for (size_t idx_0 = 0; idx_0 < IDX_EXTENT_0; idx_0++) {
 #pragma HLS DEPENDENCE array inter false
+#pragma HLS LOOP_FLATTEN off
 #pragma HLS PIPELINE II=1
                 size_t write_idx_2 = idx_2 % BUFFER_EXTENT_2; // the line index of coming stencil in the linebuffer
                 buffer[write_idx_2][idx_1][idx_0] = in_stream.read();

@@ -166,7 +166,7 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::add_kernel(Stmt stmt,
             if (args[i].is_stencil) {
                 if (ends_with(args[i].name, ".stream")) {
                     // stream arguments use AXI-stream interface
-                    stream << "#pragma HLS INTERFACE axis "
+                    stream << "#pragma HLS INTERFACE axis register "
                            << "port=" << arg_name << "\n";
                 } else {
                     // stencil arguments use AXI-lite interface
@@ -242,6 +242,7 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::visit(const For *op) {
     // add a 'PIPELINE' pragma if it is an innermost loop
     if (!contain_for_loop(op->body)) {
         stream << "#pragma HLS DEPENDENCE array inter false\n"
+               <<" #pragma HLS LOOP_FLATTEN off\n"
                << "#pragma HLS PIPELINE II=1\n";
     }
     op->body.accept(this);
