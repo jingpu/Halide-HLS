@@ -20,7 +20,6 @@ const unsigned char gaussian2d[5][5] = {
 int main(int argc, char **argv) {
     Image<uint8_t> in(800, 800, 3);
     Image<uint8_t> weight(5, 5);
-    uint8_t bias = 0;
 
     Image<uint8_t> out_native(in.width(), in.height(), in.channels());
     Image<uint8_t> out_hls(in.width(), in.height(), in.channels());
@@ -39,11 +38,11 @@ int main(int argc, char **argv) {
 
     printf("start.\n");
 
-    pipeline_native(in, weight, bias, out_native);
+    pipeline_native(in, weight, out_native);
 
     printf("finish running native code\n");
 
-    pipeline_hls(in, weight, bias, out_hls);
+    pipeline_hls(in, weight, out_hls);
 
     printf("finish running HLS code\n");
 

@@ -19,7 +19,6 @@ class MyPipeline {
 public:
     ImageParam input;
     ImageParam weight;
-    Param<uint8_t> bias;
     Func clamped;
     Func conv1;
     Func output;
@@ -44,7 +43,6 @@ public:
 
         args.push_back(input);
         args.push_back(weight);
-        args.push_back(bias);
     }
 
     void compile_cpu() {
@@ -67,9 +65,11 @@ public:
         // inputs of 'clamped', buffering intermediates at (output, xo) loop
         // level
         hw_output.compute_root();
-        hw_output.tile(x, y, xo, yo, xi, yi, 256, 256).reorder(c, xi, yi, xo, yo );
+        //hw_output.tile(x, y, xo, yo, xi, yi, 1920, 1080).reorder(c, xi, yi, xo, yo);
+        hw_output.tile(x, y, xo, yo, xi, yi, 256, 256).reorder(c, xi, yi, xo, yo);
+        hw_output.unroll(xi, 2);
         std::vector<Func> hw_bounds = hw_output.accelerate({clamped}, xi, xo);  // define the inputs and the output
-        hw_bounds[0].unroll(c);
+        hw_bounds[0].unroll(c).unroll(x).unroll(y);
 
         //output.print_loop_nest();
         output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
@@ -82,7 +82,6 @@ private:
         Func local_sum, res;
         RDom r(-2, 5, -2, 5);
 
-        local_sum(x, y, c) = cast<uint16_t>(bias);
         local_sum(x, y, c) += cast<uint16_t>(in(x+r.x, y+r.y, c)) * weight(r.x+2, r.y+2);
         res(x, y, c) = cast<uint8_t>(local_sum(x, y, c) >> 8);
 
