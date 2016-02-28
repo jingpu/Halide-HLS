@@ -18,6 +18,57 @@ template <typename T, size_t EXTENT_0, size_t EXTENT_1, size_t EXTENT_2, size_t 
 
 #include <ap_int.h>
 
+union single_cast {
+    float f;
+    uint32_t i;
+};
+
+union double_cast {
+    float f;
+    uint64_t i;
+};
+
+template<typename T>
+inline T bitcast_to_uint(T in) {
+#pragma HLS INLINE
+    return in;
+}
+
+static inline ap_uint<32> bitcast_to_uint(float in) {
+#pragma HLS INLINE
+    union single_cast temp;
+    temp.f = in;
+    return temp.i;
+}
+
+static inline ap_uint<64> bitcast_to_uint(double in) {
+#pragma HLS INLINE
+    union double_cast temp;
+    temp.f = in;
+    return temp.i;
+}
+
+template<typename T, int N>
+inline void bitcast_to_type(ap_uint<N>& in, T& out) {
+#pragma HLS INLINE
+    static_assert(sizeof(T) * 8 == N, "bitcast_to_type parameters are incorrect.\n");
+    out = in;
+}
+
+static inline void bitcast_to_type(ap_uint<32>& in, float& out) {
+#pragma HLS INLINE
+    union single_cast temp;
+    temp.i = in;
+    out = temp.f;
+}
+
+static inline void bitcast_to_type(ap_uint<64>& in, double& out) {
+#pragma HLS INLINE
+    union double_cast temp;
+    temp.i = in;
+    out = temp.f;
+}
+
 template <typename T, size_t EXTENT_0, size_t EXTENT_1 = 1, size_t EXTENT_2 = 1, size_t EXTENT_3 = 1>
 struct PackedStencil {
     ap_uint<8*sizeof(T)*EXTENT_3*EXTENT_2*EXTENT_1*EXTENT_0> value;
@@ -52,7 +103,7 @@ struct PackedStencil {
         return value.range(hi, lo);
     }
 
-    // convert to PackedStencil
+    // convert to Stencil
     operator Stencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3>() {
 #pragma HLS INLINE
         Stencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> res;
@@ -66,7 +117,8 @@ struct PackedStencil {
 #pragma HLS UNROLL
         for(size_t idx_0 = 0; idx_0 < EXTENT_0; idx_0++) {
 #pragma HLS UNROLL
-            res.value[idx_3][idx_2][idx_1][idx_0] = operator()(idx_0, idx_1, idx_2, idx_3);
+            ap_uint<sizeof(T) * 8> temp = operator()(idx_0, idx_1, idx_2, idx_3);
+            bitcast_to_type(temp, res.value[idx_3][idx_2][idx_1][idx_0]);
         }
         return res;
     }
@@ -144,7 +196,8 @@ public:
                 idx_2 * EXTENT_0 * EXTENT_1 * word_length +
                 idx_3 * EXTENT_0 * EXTENT_1 * EXTENT_2 * word_length;
             const size_t hi = lo + word_length - 1;
-            res.value.range(hi, lo) = value[idx_3][idx_2][idx_1][idx_0];
+            ap_uint<word_length> temp = bitcast_to_uint(value[idx_3][idx_2][idx_1][idx_0]);
+            res.value.range(hi, lo) = temp;
         }
         return res;
     }
@@ -156,7 +209,6 @@ public:
         return (AxiPackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3>)res;
     }
 };
-
 
 #ifndef HALIDE_ATTRIBUTE_ALIGN
   #ifdef _MSC_VER
