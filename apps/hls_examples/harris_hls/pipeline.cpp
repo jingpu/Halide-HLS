@@ -7,7 +7,7 @@ Var x("x"), y("y"), c("c");
 Var xo("xo"), yo("yo"), xi("xi"), yi("yi"), tile_index("ti");
 Var xio("xio"), yio("yio"), xv("xv"), yp("yp");
 
-int blockSize = 2;
+int blockSize = 3;
 int Ksize = 3;
 
 class MyPipeline {
@@ -105,17 +105,24 @@ public:
     std::cout << "\ncompiling HLS code..." << std::endl;
 
     hw_output.compute_root();
-    hw_output.tile(x, y, xo, yo, xi, yi, 1920, 1080);
-    hw_output.accelerate({padded}, xi, xo);
-    grad_x.linebuffer();
-    grad_y.linebuffer();
-    grad_xx.linebuffer();
-    grad_yy.linebuffer();
-    grad_xy.linebuffer();
-    grad_gx.linebuffer();
-    grad_gy.linebuffer();
-    grad_gxy.linebuffer();
-    cim.linebuffer();
+    //hw_output.tile(x, y, xo, yo, xi, yi, 1920, 1080);
+    hw_output.tile(x, y, xo, yo, xi, yi, 256, 256);
+    hw_output.unroll(xi, 2);
+    std::vector<Func> hw_bounds = hw_output.accelerate({padded}, xi, xo);
+    hw_bounds[0].unroll(x);
+
+    grad_x.linebuffer().unroll(x);
+    grad_y.linebuffer().unroll(x);
+    grad_xx.linebuffer().unroll(x);
+    grad_yy.linebuffer().unroll(x);
+    grad_xy.linebuffer().unroll(x);
+    grad_gx.linebuffer().unroll(x);
+    grad_gx.update(0).unroll(x);
+    grad_gy.linebuffer().unroll(x);
+    grad_gy.update(0).unroll(x);
+    grad_gxy.linebuffer().unroll(x);
+    grad_gxy.update(0).unroll(x);
+    cim.linebuffer().unroll(x);
 
     grad_gx.update(0).unroll(box.x).unroll(box.y);
     grad_gy.update(0).unroll(box.x).unroll(box.y);

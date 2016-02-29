@@ -23,7 +23,7 @@ void image_filter(AXI_STREAM& INPUT_STREAM,
     MY_IMAGE img_1(HEIGHT, WIDTH);
     // Convert AXI4 Stream data to hls::mat format
     hls::AXIvideo2Mat(INPUT_STREAM, img_0);
-    hls::Harris<2, 3>(img_0, img_1, k, threshold);
+    hls::Harris<3, 3>(img_0, img_1, k, threshold);
 
     // Convert the hls::mat format to AXI4 Stream format
     hls::Mat2AXIvideo(img_1, OUTPUT_STREAM);
