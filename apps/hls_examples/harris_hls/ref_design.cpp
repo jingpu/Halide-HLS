@@ -1,11 +1,11 @@
 #include "hls_video.h"
 
-#define HEIGHT 2048
-#define WIDTH 2048
+#define HEIGHT 1080
+#define WIDTH 1920
 
 typedef hls::stream<ap_axiu<32,1,1,1> > AXI_STREAM;
-//typedef hls::Mat<HEIGHT, WIDTH, HLS_8UC1> MY_IMAGE;
-typedef hls::Mat<HEIGHT, WIDTH, HLS_32FC1> MY_IMAGE;
+typedef hls::Mat<HEIGHT, WIDTH, HLS_8UC1> MY_IMAGE;
+//typedef hls::Mat<HEIGHT, WIDTH, HLS_32FC1> MY_IMAGE;
 
 
 void image_filter(AXI_STREAM& INPUT_STREAM,
@@ -15,8 +15,8 @@ void image_filter(AXI_STREAM& INPUT_STREAM,
 #pragma HLS INTERFACE s_axilite port=return bundle=config
 #pragma HLS INTERFACE s_axilite port=k bundle=config
 #pragma HLS INTERFACE s_axilite port=threshold bundle=config
-#pragma HLS INTERFACE axis port=INPUT_STREAM
-#pragma HLS INTERFACE axis port=OUTPUT_STREAM
+#pragma HLS INTERFACE axis register port=INPUT_STREAM
+#pragma HLS INTERFACE axis register port=OUTPUT_STREAM
 
     //Create AXI streaming interfaces for the core
     MY_IMAGE img_0(HEIGHT, WIDTH);

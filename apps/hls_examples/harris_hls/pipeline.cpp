@@ -14,8 +14,7 @@ class MyPipeline {
 
 public:
     ImageParam input;
-    Param<float> k;
-    Param<int> threshold;
+    Param<float> k,  threshold;
     std::vector<Argument> args;
 
     Func padded;
@@ -63,16 +62,16 @@ public:
     Expr lgxy = cast<float>(grad_gxy(x, y) / scale / scale);
     Expr det = lgx*lgy - lgxy*lgxy;
     Expr trace = lgx + lgy;
-    cim(x,y) = det - k*trace*trace;
+    cim(x, y) = det - k*trace*trace;
 
     // Perform non-maximal suppression
-    Expr is_max = cim(x,y) > cim(x-1, y-1) && cim(x, y) > cim(x, y-1) &&
+    Expr is_max = cim(x, y) > cim(x-1, y-1) && cim(x, y) > cim(x, y-1) &&
         cim(x, y) > cim(x+1, y-1) && cim(x-1, y) > cim(x, y) &&
         cim(x, y) > cim(x+1, y) && cim(x, y) > cim(x-1, y+1) &&
         cim(x, y) > cim(x, y+1) && cim(x, y) > cim(x+1, y+1);
     hw_output(x, y) = select( is_max && (cim(x, y) >= threshold), cast<uint8_t>(255), 0);
 
-    output(x,y) = hw_output(x,y);
+    output(x, y) = hw_output(x, y);
 
     // Arguments
     args = {input, k, threshold};
@@ -106,7 +105,7 @@ public:
     std::cout << "\ncompiling HLS code..." << std::endl;
 
     hw_output.compute_root();
-    hw_output.tile(x, y, xo, yo, xi, yi, 2048, 2048);
+    hw_output.tile(x, y, xo, yo, xi, yi, 1920, 1080);
     hw_output.accelerate({padded}, xi, xo);
     grad_x.linebuffer();
     grad_y.linebuffer();
