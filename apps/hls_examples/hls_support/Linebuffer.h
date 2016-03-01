@@ -458,7 +458,7 @@ void linebuffer(stream<AxiPackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, IN_EXTENT_2
     for (size_t idx_3 = 0; idx_3 < IMG_EXTENT_3 / IN_EXTENT_3; idx_3++)
     for (size_t idx_2 = 0; idx_2 < IMG_EXTENT_2 / IN_EXTENT_2; idx_2++)
     for (size_t idx_1 = 0; idx_1 < IMG_EXTENT_1 / IN_EXTENT_1; idx_1++)
-    for (size_t idx_0 = 0; idx_0 < IMG_EXTENT_1 / IN_EXTENT_0; idx_0++)
+    for (size_t idx_0 = 0; idx_0 < IMG_EXTENT_0 / IN_EXTENT_0; idx_0++)
 #pragma HLS PIPELINE II=1
         in_stream.write(in_axi_stream.read());
 
