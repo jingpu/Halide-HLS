@@ -454,6 +454,8 @@ void linebuffer(stream<AxiPackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, IN_EXTENT_2
 #pragma HLS INLINE off
 #pragma HLS DATAFLOW
     stream<PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, IN_EXTENT_2, IN_EXTENT_3> > in_stream;
+#pragma HLS STREAM variable=in_stream depth=1
+#pragma HLS RESOURCE variable=in_stream core=FIFO_SRL
 
     for (size_t idx_3 = 0; idx_3 < IMG_EXTENT_3 / IN_EXTENT_3; idx_3++)
     for (size_t idx_2 = 0; idx_2 < IMG_EXTENT_2 / IN_EXTENT_2; idx_2++)
