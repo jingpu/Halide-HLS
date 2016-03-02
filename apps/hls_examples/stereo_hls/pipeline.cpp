@@ -28,6 +28,26 @@ Func rectify_float(Func img, Func remap) {
     return interpolated;
 }
 
+Func rectify_int(Func img, Func remap) {
+    Expr targetX = (cast<int16_t>(remap(x, y, 0)) - 128) / 16;
+    Expr targetY = (cast<int16_t>(remap(x, y, 1)) - 128) / 16;
+
+    // wx and wy are equal to wx*256 and wy*256 in rectify_float()
+    Expr wx = cast<uint8_t>((cast<int16_t>(remap(x, y, 0)) * 16) - (128 * 16) - (targetX * 256));
+    Expr wy = cast<uint8_t>((cast<int16_t>(remap(x, y, 1)) * 16) - (128 * 16) - (targetY * 256));
+
+    Func interpolated("interpolated");
+    interpolated(x, y) = lerp(lerp(img(x+targetX, y+targetY, 1), img(x+targetX+1, y+targetY, 1), wx),
+                              lerp(img(x+targetX, y+targetY+1, 1), img(x+targetX+1, y+targetY+1, 1), wx), wy);
+
+    return interpolated;
+}
+
+Func rectify_noop(Func img, Func remap) {
+    Func pass("pass");
+    pass(x, y) = img(x, y, 1);
+    return pass;
+}
 
 class MyPipeline {
 public:
@@ -50,8 +70,8 @@ public:
         right_remap_padded = BoundaryConditions::constant_exterior(right_remap, 128);
         left_remap_padded = BoundaryConditions::constant_exterior(left_remap, 128);
 
-        right_remapped = rectify_float(right_padded, right_remap_padded);
-        left_remapped = rectify_float(left_padded, left_remap_padded);
+        right_remapped = rectify_noop(right_padded, right_remap_padded);
+        left_remapped = rectify_noop(left_padded, left_remap_padded);
 
         SAD(x, y, c) += cast<uint16_t>(absd(right_remapped(x+win.x, y+win.y),
                                             left_remapped(x+win.x+20+c, y+win.y)));
@@ -85,18 +105,19 @@ public:
     void compile_cpu() {
         std::cout << "\ncompiling cpu code..." << std::endl;
 
-        output.tile(x, y, xo, yo, x_in, y_in, 256, 64);
-        output.fuse(xo, yo, xo).parallel(xo);
+        //output.tile(x, y, xo, yo, x_in, y_in, 256, 64);
+        //output.fuse(xo, yo, xo).parallel(xo);
+        output.split(y, yo, y_in, 64).parallel(yo);
 
-        right_padded.compute_at(output, xo).vectorize(_0, 16);
-        left_padded.compute_at(output, xo).vectorize(_0, 16);
-        right_remap_padded.compute_at(output, xo).vectorize(_0, 16);
-        left_remap_padded.compute_at(output, xo).vectorize(_0, 16);
+        right_padded.compute_at(output, yo).vectorize(_0, 16);
+        left_padded.compute_at(output, yo).vectorize(_0, 16);
+        right_remap_padded.compute_at(output, yo).vectorize(_0, 16);
+        left_remap_padded.compute_at(output, yo).vectorize(_0, 16);
 
-        right_remapped.compute_at(output, xo);
-        left_remapped.compute_at(output, xo);
+        //right_remapped.compute_at(output, yo);
+        //left_remapped.compute_at(output, yo);
 
-        SAD.compute_at(output, x_in);
+        SAD.compute_at(output, x);
         SAD.unroll(c);
         SAD.update(0).vectorize(c, 8).unroll(win.x).unroll(win.y);
 
@@ -186,8 +207,8 @@ MyPipelineOpt()
     right_remap_padded = BoundaryConditions::constant_exterior(right_remap, 128);
     left_remap_padded = BoundaryConditions::constant_exterior(left_remap, 128);
 
-    right_remapped = rectify_float(right_padded, right_remap_padded);
-    left_remapped = rectify_float(left_padded, left_remap_padded);
+    right_remapped = rectify_noop(right_padded, right_remap_padded);
+    left_remapped = rectify_noop(left_padded, left_remap_padded);
 
     SAD(x, y, c) += cast<uint16_t>(absd(right_remapped(x+win.x, y+win.y),
                                         left_remapped(x+win.x+20+c, y+win.y)));
@@ -244,11 +265,9 @@ void compile_cpu() {
 
 void compile_hls() {
     std::cout << "\ncompiling HLS code..." << std::endl;
-    output.tile(x, y, xo, yo, x_in, y_in, 256, 256);
 
-    hw_output.compute_at(output, xo);
-    //hw_output.compute_root();
-    hw_output.tile(x, y, xo, yo, x_in, y_in, 256, 256);
+    hw_output.compute_root();
+    hw_output.tile(x, y, xo, yo, x_in, y_in, 720, 405);
 
     /*
     right_remapped.compute_root();
@@ -263,19 +282,25 @@ void compile_hls() {
     right_remapped.compute_at(hw_output, xo);
     left_remapped.compute_at(hw_output, xo);
 
-    right_padded.compute_at(hw_output, xo);
-    left_padded.compute_at(hw_output, xo);
-    right_remap_padded.compute_at(hw_output, xo);
-    left_remap_padded.compute_at(hw_output, xo);
+    //right_padded.compute_at(hw_output, xo);
+    //left_padded.compute_at(hw_output, xo);
+    //right_remap_padded.compute_at(hw_output, xo);
+    //left_remap_padded.compute_at(hw_output, xo);
 
-    offset.update(0).unroll(search.x, 4);
-    SAD.compute_at(offset_l1, Var::outermost());
+    //offset.update(0).unroll(search.x, 4);
+    RVar search_xo, search_xi;
+    offset.update(0).split(search.x, search_xo, search_xi, 4);
+    //SAD.compute_at(offset_l1, Var::outermost());
     SAD.unroll(c);
     SAD.update(0).unroll(win.x).unroll(win.y).unroll(c);
+    offset_l1.compute_at(offset, search_xo);
     offset_l1.unroll(c);
-    offset_l1.update(0).unroll(search_l1.x);
+    offset_l1.update(0).unroll(c).unroll(search_l1.x);
 
     hw_output.accelerate({right_remapped, left_remapped}, x_in, xo);
+    //hw_output.accelerate({right_padded, left_padded, right_remap_padded, left_remap_padded}, x_in, xo);
+    //right_remapped.linebuffer();
+    //left_remapped.linebuffer();
 
     output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
     output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
@@ -291,8 +316,7 @@ void compile_hls() {
     output.compile_to_header("pipeline_zynq.h", args, "pipeline_zynq", target);
 
     // Vectorization and Parallelization Schedules (only work with LLVM codegen)
-    output.vectorize(x_in, 8);
-    output.fuse(xo, yo, xo).parallel(xo);
+    output.vectorize(x, 16);
 
     //output.print_loop_nest();
     //Module module = output.compile_to_module(args, "pipeline_zynq", target);
