@@ -53,6 +53,38 @@ double benchmark(int samples, int iterations, F op) {
     return best / iterations;
 }
 
+#include <sys/ioctl.h>
+#define READ_TIMER 1010 // Retreive hw timer count
+
+double zynq_gettime_sec(int fd) {
+  struct {
+    unsigned long counter0;
+    unsigned long counter1;
+  } count;
+  ioctl(fd, READ_TIMER, (long unsigned int)(&count));
+
+  const double FREQ_MHZ = 125.0;
+  const double K = 4294967296.0;  // 2^32
+  return count.counter0 / FREQ_MHZ / 1e6
+    + count.counter1 * (K / FREQ_MHZ / 1e6);
+}
+
+template <typename F>
+double benchmark_zynq(int fd, int samples, int iterations, F op) {
+    double best = std::numeric_limits<double>::infinity();
+    for (int i = 0; i < samples; i++) {
+        double t1 = zynq_gettime_sec(fd);
+        for (int j = 0; j < iterations; j++) {
+            op();
+        }
+        double t2 = zynq_gettime_sec(fd);
+        double dt = t2 - t1;
+        if (dt < best) best = dt;
+    }
+    return best / iterations;
+}
+
+
 #endif
 
 #endif

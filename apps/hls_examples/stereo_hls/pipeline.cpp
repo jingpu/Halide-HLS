@@ -266,18 +266,10 @@ void compile_cpu() {
 void compile_hls() {
     std::cout << "\ncompiling HLS code..." << std::endl;
 
-    hw_output.compute_root();
+    output.tile(x, y, xo, yo, x_in, y_in, 720, 405);
+
+    hw_output.compute_at(output, xo);
     hw_output.tile(x, y, xo, yo, x_in, y_in, 720, 405);
-
-    /*
-    right_remapped.compute_root();
-    left_remapped.compute_root();
-
-    right_padded.compute_root();
-    left_padded.compute_root();
-    right_remap_padded.compute_root();
-    left_remap_padded.compute_root();
-    */
 
     right_remapped.compute_at(hw_output, xo);
     left_remapped.compute_at(hw_output, xo);
@@ -311,18 +303,20 @@ void compile_hls() {
     //std::vector<Target::Feature> features({Target::HLS, Target::Debug});
     std::vector<Target::Feature> features({Target::HLS});
     Target target(Target::Linux, Target::ARM, 32, features);
-    output.compile_to_lowered_stmt("pipeline_zynq.ir.html", args, HTML, target);
     output.compile_to_zynq_c("pipeline_zynq.c", args, "pipeline_zynq", target);
     output.compile_to_header("pipeline_zynq.h", args, "pipeline_zynq", target);
 
     // Vectorization and Parallelization Schedules (only work with LLVM codegen)
-    output.vectorize(x, 16);
+    //right_remapped.vectorize(x, 4);  // vectorizing input works poorly on ZYNQ
+    //left_remapped.vectorize(x, 4);
+    output.vectorize(x_in, 16);
+    output.fuse(xo, yo, xo).parallel(xo);
 
     //output.print_loop_nest();
     //Module module = output.compile_to_module(args, "pipeline_zynq", target);
     //compile_module_to_llvm_assembly(module, "pipeline_zynq.ll");
     output.compile_to_object("pipeline_zynq.o", args, "pipeline_zynq", target);
-
+    output.compile_to_lowered_stmt("pipeline_zynq.ir.html", args, HTML, target);
 }
 };
 
