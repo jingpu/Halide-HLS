@@ -89,8 +89,8 @@ public:
         output(x, y) = hw_output(x, y);
 
         // The comment constraints and schedules.
-        output.bound(x, 0, 720);
-        output.bound(y, 0, 405);
+        //output.bound(x, 0, 720);
+        //output.bound(y, 0, 405);
 
         // all inputs has three channels
         right.set_bounds(2, 0, 3);

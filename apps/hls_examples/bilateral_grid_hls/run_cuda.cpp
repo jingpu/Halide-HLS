@@ -20,8 +20,8 @@ int main(int argc, char **argv) {
 
     int iter = 5;
     Image<uint8_t> input = load_image(argv[1]);
-    Image<uint8_t> out_native(1024, 1024, 1);
-    Image<uint8_t> out_cuda(1024, 1024, 1);
+    Image<uint8_t> out_native(input.width(), input.height());
+    Image<uint8_t> out_cuda(input.width(), input.height());
 
     printf("\nstart timing code...\n");
 

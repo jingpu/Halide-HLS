@@ -33,7 +33,7 @@ out_zynq.png: run_zynq
 	HL_NUM_THREADS=3 ./run_zynq ../../images/gray.png
 
 out_cuda.png: run_cuda
-	HL_NUM_THREADS=4 ./run_cuda ../../images/gray.png
+	HL_NUM_THREADS=4 ./run_cuda ../../images/benchmark_8mp_gray.png
 
 clean:
 	rm -f pipeline run run_zynq run_cuda
