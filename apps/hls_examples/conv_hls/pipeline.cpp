@@ -29,8 +29,9 @@ public:
                    conv1("conv1"), output("output"), hw_output("hw_output") {
         // define the algorithm
         clamped = BoundaryConditions::repeat_edge(input);
-        //conv1 = convolve55_rd(clamped);
-        hw_output = convolve55_rd(clamped);
+        //conv1 = clamped;
+        conv1 = convolve55_rd(clamped);
+        hw_output = convolve55_rd(conv1);
         output(x, y, c) = hw_output(x, y, c);
 
         // constraints
@@ -49,11 +50,30 @@ public:
         std::cout << "\ncompiling cpu code..." << std::endl;
 
         output.tile(x, y, xo, yo, xi, yi, 256, 256);
+        output.fuse(xo, yo, xo).parallel(xo);
+
+        output.vectorize(xi, 8);
+        conv1.compute_at(output, xo).vectorize(x, 8);
 
         //output.print_loop_nest();
         output.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
         output.compile_to_header("pipeline_native.h", args, "pipeline_native");
         output.compile_to_object("pipeline_native.o", args, "pipeline_native");
+    }
+
+    void compile_gpu() {
+        std::cout << "\ncompiling gpu code..." << std::endl;
+
+        output.compute_root().reorder(x, y, c).gpu_tile(x, y, c, 16, 16, 1);
+        conv1.compute_root().reorder(x, y, c).gpu_tile(x, y, c, 16, 16, 1);
+        //conv1.compute_at(output, Var::gpu_blocks()).gpu_threads(x, y, c);
+        //output.print_loop_nest();
+
+        Target target = get_target_from_environment();
+        target.set_feature(Target::CUDA);
+        output.compile_to_lowered_stmt("pipeline_cuda.ir.html", args, HTML, target);
+        output.compile_to_header("pipeline_cuda.h", args, "pipeline_cuda", target);
+        output.compile_to_object("pipeline_cuda.o", args, "pipeline_cuda", target);
     }
 
     void compile_hls() {
@@ -69,6 +89,7 @@ public:
         hw_output.tile(x, y, xo, yo, xi, yi, 256, 256).reorder(c, xi, yi, xo, yo);
         hw_output.unroll(xi, 2);
         std::vector<Func> hw_bounds = hw_output.accelerate({clamped}, xi, xo);  // define the inputs and the output
+        conv1.linebuffer().unroll(c).unroll(x).unroll(y);
         hw_bounds[0].unroll(c).unroll(x).unroll(y);
 
         //output.print_loop_nest();
@@ -99,5 +120,7 @@ int main(int argc, char **argv) {
     MyPipeline p2;
     p2.compile_hls();
 
+    MyPipeline p3;
+    p3.compile_gpu();
     return 0;
 }

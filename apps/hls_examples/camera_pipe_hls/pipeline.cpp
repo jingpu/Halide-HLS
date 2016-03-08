@@ -13,7 +13,7 @@ Expr avg(Expr a, Expr b) {
 }
 
 class MyPipeline {
-    bool do_hw_schedule;
+    int schedule;
 
     ImageParam input;
     ImageParam matrix_3200, matrix_7000;
@@ -164,9 +164,25 @@ class MyPipeline {
 
 
         /* THE SCHEDULE */
-        if (do_hw_schedule) {
-            // Compute these in chunks over tiles
-            // Don't vectorize, because sse is bad at 16-bit interleaving
+        if (schedule == 1) {
+            // optimized for ARM
+            // Compute these in chunks over tiles, vectorized by 8
+            g_r.compute_at(processed, tx).vectorize(x, 8);
+            g_b.compute_at(processed, tx).vectorize(x, 8);
+            r_gr.compute_at(processed, tx).vectorize(x, 8);
+            b_gr.compute_at(processed, tx).vectorize(x, 8);
+            r_gb.compute_at(processed, tx).vectorize(x, 8);
+            b_gb.compute_at(processed, tx).vectorize(x, 8);
+            r_b.compute_at(processed, tx).vectorize(x, 8);
+            b_r.compute_at(processed, tx).vectorize(x, 8);
+            // These interleave in y, so unrolling them in y helps
+            output.compute_at(processed, tx)
+                .vectorize(x, 8)
+                .unroll(y, 2)
+                .reorder(c, x, y).bound(c, 0, 3).unroll(c);
+
+        } else if (schedule == 2) {
+            // acelerator schedule
             g_r.linebuffer();
             g_b.linebuffer();
             r_gr.linebuffer();
@@ -175,6 +191,21 @@ class MyPipeline {
             b_gb.linebuffer();
             r_b.linebuffer();
             b_r.linebuffer();
+
+        } else if (schedule == 3) {
+            // CUDA
+            g_r.compute_root().gpu_tile(x, y, 16, 16);;
+            g_b.compute_root().gpu_tile(x, y, 16, 16);;
+            r_gr.compute_root().gpu_tile(x, y, 16, 16);;
+            b_gr.compute_root().gpu_tile(x, y, 16, 16);;
+            r_gb.compute_root().gpu_tile(x, y, 16, 16);;
+            b_gb.compute_root().gpu_tile(x, y, 16, 16);;
+            r_b.compute_root().gpu_tile(x, y, 16, 16);;
+            b_r.compute_root().gpu_tile(x, y, 16, 16);;
+            output.compute_root().unroll(y, 2).unroll(x, 2)
+                .reorder(c, x, y).bound(c, 0, 3).unroll(c)
+                .gpu_tile(x, y, 16, 16);;
+
         } else {
             // optimized for X86
             // Don't vectorize, because sse is bad at 16-bit interleaving
@@ -240,6 +271,11 @@ class MyPipeline {
         curve(x) = val;
         curve.compute_root(); // It's a LUT, compute it once ahead of time.
 
+        if (schedule == 3) {
+            // GPU schedule
+            curve.gpu_tile(x, 16);
+        }
+
         Func curved;
         curved(x, y, c) = curve(input(x, y, c));
 
@@ -248,8 +284,8 @@ class MyPipeline {
 
 
 public:
-    MyPipeline(bool hw_schedule)
-        : do_hw_schedule(hw_schedule), input(UInt(16), 2),
+    MyPipeline(int s)
+        : schedule(s), input(UInt(16), 2),
           matrix_3200(Float(32), 2, "m3200"), matrix_7000(Float(32), 2, "m7000"),
           color_temp("color_temp"), gamma("gamma"), contrast("contrast"),
           args({color_temp, gamma, contrast, input, matrix_3200, matrix_7000})
@@ -289,22 +325,45 @@ public:
     }
 
     void compile_cpu() {
-        assert(!do_hw_schedule);
+        assert(schedule == 1);
+
         std::cout << "\ncompiling cpu code..." << std::endl;
+
+        // Compute in chunks over tiles, vectorized by 8
+        denoised.compute_at(processed, tx).vectorize(x, 8);
+        deinterleaved.compute_at(processed, tx).vectorize(x, 8).reorder(c, x, y).unroll(c);
+        corrected.compute_at(processed, tx).vectorize(x, 4).reorder(c, x, y).unroll(c);
+        processed.tile(tx, ty, xi, yi, 32, 32).reorder(xi, yi, c, tx, ty);
+        processed.parallel(ty);
+
         //processed.print_loop_nest();
-
-        // Compute in chunks over tiles
-        processed.tile(tx, ty, xi, yi, 128, 128).reorder(xi, yi, c, tx, ty);
-        denoised.compute_at(processed, tx);
-        deinterleaved.compute_at(processed, tx);
-        corrected.compute_at(processed, tx);
-
         processed.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
         processed.compile_to_file("pipeline_native", args);
     }
 
+    void compile_gpu() {
+        assert(schedule == 3);
+        std::cout << "\ncompiling gpu code..." << std::endl;
+
+        processed.gpu_tile(tx, ty, c, 16, 16, 1);
+        denoised.compute_root().gpu_tile(x, y, 16, 16);
+        deinterleaved.compute_root();
+        corrected.compute_root().gpu_tile(x, y, c, 16, 16, 1);
+
+        //conv1.compute_at(output, Var::gpu_blocks()).gpu_threads(x, y, c);
+
+        //processed.print_loop_nest();
+
+        Target target = get_target_from_environment();
+        target.set_feature(Target::CUDA);
+        processed.compile_to_lowered_stmt("pipeline_cuda.ir.html", args, HTML, target);
+        processed.compile_to_header("pipeline_cuda.h", args, "pipeline_cuda", target);
+        processed.compile_to_object("pipeline_cuda.o", args, "pipeline_cuda", target);
+    }
+
+
     void compile_hls() {
-        assert(do_hw_schedule);
+        assert(schedule == 2);
         std::cout << "\ncompiling HLS code..." << std::endl;
 
         // Block in chunks over tiles, do line buffering for intermediate functions
@@ -336,10 +395,13 @@ public:
 };
 
 int main(int argc, char **argv) {
-    MyPipeline p1(false);
+    MyPipeline p1(1);
     p1.compile_cpu();
 
-    MyPipeline p2(true);
+    MyPipeline p2(2);
     p2.compile_hls();
+
+    MyPipeline p3(3);
+    p3.compile_gpu();
     return 0;
 }

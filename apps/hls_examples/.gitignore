@@ -2,12 +2,14 @@ pipeline_hls.cpp
 pipeline_hls.h
 hls_target.cpp
 hls_target.h
-pipeline_native.cpp
 pipeline_native.h
+pipeline_cuda.h
 pipeline_zynq.c
 pipeline_zynq.h
 pipeline
 run
+run_zynq
+run_cuda
 dump
 *.png
 *.ir.html

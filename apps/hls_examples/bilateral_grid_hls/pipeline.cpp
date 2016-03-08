@@ -68,9 +68,8 @@ public:
 
         // Normalize
         val = interpolated(x, y, 0);
-        Expr weight = interpolated(x, y, 1) + 1; // plus one to avoid underflow
-        Expr norm_val = clamp(val * 64 / weight, 0, 255);
-        hw_output(x, y) = cast<uint8_t>(select(weight == 0, 0, norm_val));
+        Expr weight = max(interpolated(x, y, 1), 1); // to avoid underflow
+        hw_output(x, y) = cast<uint8_t>(clamp(val * 64 / weight, 0, 255));
         output(x, y) = hw_output(x, y);
 
         // The comment constraints and schedules.
@@ -233,11 +232,11 @@ public:
             lerp(lerp(lerp(blury(xi, yi, zi, 1), blury(xi+1, yi, zi, 1), xf),
                       lerp(blury(xi, yi+1, zi, 1), blury(xi+1, yi+1, zi, 1), xf), yf),
                  lerp(lerp(blury(xi, yi, zi+1, 1), blury(xi+1, yi, zi+1, 1), xf),
-                      lerp(blury(xi, yi+1, zi+1, 1), blury(xi+1, yi+1, zi+1, 1), xf), yf), zf) + 1; // plus one to avoid underflow
+                      lerp(blury(xi, yi+1, zi+1, 1), blury(xi+1, yi+1, zi+1, 1), xf), yf), zf);
+        weight = max(weight, 1); // to avoid underflow
 
         // Normalize
-        Expr norm_val = clamp(value * 64 / weight, 0, 255);
-        output_shuffled(x_in, y_in, x_grid, y_grid) = cast<uint8_t>(select(weight == 0, 0, norm_val));
+        output_shuffled(x_in, y_in, x_grid, y_grid) = cast<uint8_t>(clamp(value * 64 / weight, 0, 255));
 
         // shuffle the output
         output(x, y) = output_shuffled(x%s_sigma, y%s_sigma, x/s_sigma, y/s_sigma);

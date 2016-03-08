@@ -105,19 +105,19 @@ public:
     void compile_cpu() {
         std::cout << "\ncompiling cpu code..." << std::endl;
 
-        //output.tile(x, y, xo, yo, x_in, y_in, 256, 64);
-        //output.fuse(xo, yo, xo).parallel(xo);
-        output.split(y, yo, y_in, 64).parallel(yo);
+        output.tile(x, y, xo, yo, x_in, y_in, 256, 64);
+        output.fuse(xo, yo, xo).parallel(xo);
+        //output.split(y, yo, y_in, 64).parallel(yo);
 
-        right_padded.compute_at(output, yo).vectorize(_0, 16);
-        left_padded.compute_at(output, yo).vectorize(_0, 16);
-        right_remap_padded.compute_at(output, yo).vectorize(_0, 16);
-        left_remap_padded.compute_at(output, yo).vectorize(_0, 16);
+        right_padded.compute_at(output, xo).vectorize(_0, 16);
+        left_padded.compute_at(output, xo).vectorize(_0, 16);
+        right_remap_padded.compute_at(output, xo).vectorize(_0, 16);
+        left_remap_padded.compute_at(output, xo).vectorize(_0, 16);
 
         //right_remapped.compute_at(output, yo);
         //left_remapped.compute_at(output, yo);
 
-        SAD.compute_at(output, x);
+        SAD.compute_at(output, x_in);
         SAD.unroll(c);
         SAD.update(0).vectorize(c, 8).unroll(win.x).unroll(win.y);
 

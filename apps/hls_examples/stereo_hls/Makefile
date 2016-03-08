@@ -33,7 +33,7 @@ out_zynq.png: run_zynq
 	HL_NUM_THREADS=3 ./run_zynq ../../images/left0224.png ../../images/left-remap.png ../../images/right0224.png ../../images/right-remap.png
 
 out_cuda.png: run_cuda
-	HL_NUM_THREADS=4 ./run_cuda ../../images/benchmark_1080p_rgb.png ../../images/benchmark_1080p_rgb.png ../../images/benchmark_1080p_rgb.png ../../images/benchmark_1080p_rgb.png
+	CUDA_LAUNCH_BLOCKING=1 HL_NUM_THREADS=4 ./run_cuda ../../images/benchmark_1080p_rgb.png ../../images/benchmark_1080p_rgb.png ../../images/benchmark_1080p_rgb.png ../../images/benchmark_1080p_rgb.png
 
 clean:
 	rm -f pipeline run run_zynq run_cuda

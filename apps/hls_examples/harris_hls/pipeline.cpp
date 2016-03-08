@@ -81,24 +81,50 @@ public:
     std::cout << "\ncompiling cpu code..." << std::endl;
 
     output.tile(x, y, xo, yo, xi, yi, 256, 256);
-    grad_x.compute_at(output, xo);
-    grad_y.compute_at(output, xo);
-    grad_xx.compute_at(output, xo);
-    grad_yy.compute_at(output, xo);
-    grad_xy.compute_at(output, xo);
-    grad_gx.compute_at(output, xo);
-    grad_gy.compute_at(output, xo);
-    grad_gxy.compute_at(output, xo);
-    cim.compute_at(output, xo);
+    grad_x.compute_at(output, xo).vectorize(x, 8);
+    grad_y.compute_at(output, xo).vectorize(x, 8);
+    grad_xx.compute_at(output, xo).vectorize(x, 4);
+    grad_yy.compute_at(output, xo).vectorize(x, 4);
+    grad_xy.compute_at(output, xo).vectorize(x, 4);
+    grad_gx.compute_at(output, xo).vectorize(x, 4);
+    grad_gy.compute_at(output, xo).vectorize(x, 4);
+    grad_gxy.compute_at(output, xo).vectorize(x, 4);
+    cim.compute_at(output, xo).vectorize(x, 4);
 
     grad_gx.update(0).unroll(box.x).unroll(box.y);
     grad_gy.update(0).unroll(box.x).unroll(box.y);
     grad_gxy.update(0).unroll(box.x).unroll(box.y);
 
+    output.fuse(xo, yo, xo).parallel(xo).vectorize(xi, 4);
+
     //output.print_loop_nest();
     //output.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
     output.compile_to_header("pipeline_native.h", args, "pipeline_native");
     output.compile_to_object("pipeline_native.o", args, "pipeline_native");
+  }
+
+  void compile_gpu() {
+    std::cout << "\ncompiling gpu code..." << std::endl;
+
+    output.compute_root().gpu_tile(x, y, 16, 16);
+    grad_x.compute_root().gpu_tile(x, y, 16, 16);
+    grad_y.compute_root().gpu_tile(x, y, 16, 16);
+    grad_xx.compute_root().gpu_tile(x, y, 16, 16);
+    grad_yy.compute_root().gpu_tile(x, y, 16, 16);
+    grad_xy.compute_root().gpu_tile(x, y, 16, 16);
+    grad_gx.compute_root().gpu_tile(x, y, 16, 16);
+    grad_gy.compute_root().gpu_tile(x, y, 16, 16);
+    grad_gxy.compute_root().gpu_tile(x, y, 16, 16);
+    cim.compute_root().gpu_tile(x, y, 16, 16);
+    //conv1.compute_at(output, Var::gpu_blocks()).gpu_threads(x, y, c);
+
+    //output.print_loop_nest();
+
+    Target target = get_target_from_environment();
+    target.set_feature(Target::CUDA);
+    output.compile_to_lowered_stmt("pipeline_cuda.ir.html", args, HTML, target);
+    output.compile_to_header("pipeline_cuda.h", args, "pipeline_cuda", target);
+    output.compile_to_object("pipeline_cuda.o", args, "pipeline_cuda", target);
   }
 
   void compile_hls() {
@@ -128,7 +154,7 @@ public:
     grad_gy.update(0).unroll(box.x).unroll(box.y);
     grad_gxy.update(0).unroll(box.x).unroll(box.y);
 
-    output.print_loop_nest();
+    //output.print_loop_nest();
     output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
     output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
     output.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
@@ -142,5 +168,7 @@ int main(int argc, char **argv) {
   MyPipeline p2;
   p2.compile_hls();
 
+  MyPipeline p3;
+  p3.compile_gpu();
   return 0;
 }
