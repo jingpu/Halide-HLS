@@ -27,7 +27,7 @@ run_zynq: pipeline_zynq.o pipeline_native.o run_zynq.cpp
 	$(CXX) -O3 $(CXXFLAGS) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
 
 run_cuda: pipeline_native.o pipeline_cuda.o run_cuda.cpp
-	$(CXX) -O3 $(CXXFLAGS) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
+	$(CXX) -O3 $(CXXFLAGS) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS) `pkg-config --libs opencv`
 
 out_zynq.png: run_zynq
 	HL_NUM_THREADS=3 ./run_zynq ../../images/left0224.png ../../images/left-remap.png ../../images/right0224.png ../../images/right-remap.png

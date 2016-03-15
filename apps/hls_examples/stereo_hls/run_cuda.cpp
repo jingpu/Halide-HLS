@@ -10,7 +10,11 @@
 #include "halide_image.h"
 #include "halide_image_io.h"
 
+#include "opencv2/gpu/gpu.hpp"
+#include "opencv2/highgui/highgui.hpp"
+
 using namespace Halide::Tools;
+using namespace cv;
 
 int main(int argc, char **argv) {
     if (argc < 5) {
@@ -42,8 +46,25 @@ int main(int argc, char **argv) {
     double min_t2 = benchmark(iter, 10, [&]() {
         pipeline_cuda(right, left, right_remap, left_remap, out_cuda);
       });
-    printf("CUDA program runtime: %g\n", min_t2 * 1e3);
+    printf("Halide CUDA program runtime: %g\n", min_t2 * 1e3);
     save_image(out_cuda, "out_cuda.png");
+
+    Mat cv_left = imread( argv[1], CV_LOAD_IMAGE_GRAYSCALE );
+    Mat cv_right = imread( argv[2], CV_LOAD_IMAGE_GRAYSCALE );
+
+    gpu::GpuMat d_left(cv_left);
+    gpu::GpuMat d_right(cv_right);
+    gpu::GpuMat d_disp(cv_left.size(), CV_8U);
+
+    int ndisparities = 16*4;   /**< Range of disparity */
+    int SADWindowSize = 9; /**< Size of the block window. Must be odd */
+    gpu::StereoBM_GPU bm(gpu::StereoBM_GPU::BASIC_PRESET, ndisparities, SADWindowSize);
+
+    double min_t3 = benchmark(iter, 10, [&]() {
+            bm(d_left, d_right, d_disp);
+      });
+    printf("OpenCV CUDA program runtime: %g\n", min_t3 * 1e3);
+    //save_image(out_cuda, "out_cuda.png");
 
     return 0;
 }

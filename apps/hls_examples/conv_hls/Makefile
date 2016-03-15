@@ -21,7 +21,7 @@ run: run.cpp pipeline_hls.cpp hls_target.cpp pipeline_native.o
 
 
 run_cuda: pipeline_native.o pipeline_cuda.o run_cuda.cpp
-	$(CXX) -O3 $(CXXFLAGS) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
+	$(CXX) -O3 $(CXXFLAGS) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS) `pkg-config --libs opencv`
 
 out.png: run
 	./run
