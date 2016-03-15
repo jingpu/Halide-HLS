@@ -40,10 +40,10 @@ void CodeGen_Zynq_LLVM::visit(const Allocate *op) {
            kbuf_var.height =128;
            kbuf_var.depth = 64;
            kbuf_var.stride = 128;
-           halide_alloc_kbuf(__hwacc, &kbuf_var);
+           halide_alloc_kbuf(__cma, &kbuf_var);
            uint8_t *_var = (uint8_t*) mmap(NULL,
                          kbuf_var.stride * kbuf_var.height * kbuf_var.depth,
-                         PROT_WRITE, MAP_SHARED, __hwacc, kbuf_var.mmap_offset);
+                         PROT_WRITE, MAP_SHARED, __cma, kbuf_var.mmap_offset);
         */
         string kbuf_name = "kbuf_" + op->name;
 
@@ -121,10 +121,10 @@ void CodeGen_Zynq_LLVM::visit(const Allocate *op) {
           create call to allocate a kernel buffer
 
           C code:
-          halide_alloc_kbuf(__hwacc, &kbuf_var);
+          halide_alloc_kbuf(__cma, &kbuf_var);
         */
         vector<llvm::Value *> alloc_args(2);
-        alloc_args[0] = sym_get("__hwacc", true);
+        alloc_args[0] = sym_get("__cma", true);
         alloc_args[1] = kbuf_ptr;
 
         llvm::Function *alloc_fn = module->getFunction("halide_alloc_kbuf");
@@ -142,14 +142,14 @@ void CodeGen_Zynq_LLVM::visit(const Allocate *op) {
 
           C code:
           uint8_t *_var = (uint8_t*) mmap(NULL, allocation_bytes,
-                          PROT_WRITE, MAP_SHARED, __hwacc, kbuf_var.mmap_offset);
+                          PROT_WRITE, MAP_SHARED, __cma, kbuf_var.mmap_offset);
         */
         vector<llvm::Value *> mmap_args(6);
         mmap_args[0] = llvm::ConstantPointerNull::get(llvm::PointerType::get(i8, 0));
         mmap_args[1] = codegen(allocation.constant_bytes);
         mmap_args[2] = codegen(FLAG_PROT_WRITE);
         mmap_args[3] = codegen(FLAG_MAP_SHARED);
-        mmap_args[4] = sym_get("__hwacc", true);
+        mmap_args[4] = sym_get("__cma", true);
 
         llvm::Value *field_mmap_offset_ptr =
             builder->CreateConstInBoundsGEP2_32(
@@ -202,7 +202,7 @@ void CodeGen_Zynq_LLVM::visit(const Free *op) {
 
            C code:
            munmap((void*)_var, allocation_bytes);
-           halide_free_kbuf(__hwacc, &kbuf_var);
+           halide_free_kbuf(__cma, &kbuf_var);
         */
         string kbuf_name = "kbuf_" + op->name;
         llvm::Value *kbuf_ptr = sym_get(kbuf_name, true);
@@ -215,8 +215,7 @@ void CodeGen_Zynq_LLVM::visit(const Free *op) {
         builder->CreateCall(munmap_fn, munmap_args);
 
         vector<llvm::Value *> free_args(2);
-        internal_assert(sym_exists("__hwacc"));
-        free_args[0] = sym_get("__hwacc", true);
+        free_args[0] = sym_get("__cma", true);
         free_args[1] = kbuf_ptr;
         llvm::Function *free_fn = module->getFunction("halide_free_kbuf");
         internal_assert(free_fn) << "Did not find halide_free_kbuf in initial module";

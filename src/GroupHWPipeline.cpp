@@ -94,9 +94,10 @@ class InsertHWPipeline : public IRMutator {
             internal_assert(!op->update.defined());
 
             // insert a "start_hwacc" call to include the device
-            // handler "__hwacc" in the closure
+            // handlers "__hwacc" and "__cma" in the closure
             Expr fd_hwacc = Variable::make(Int(32), "__hwacc");
-            Stmt hw_call = Evaluate::make(Call::make(Handle(), "start_hwacc", {fd_hwacc}, Call::Intrinsic));
+            Expr fd_cma = Variable::make(Int(32), "__cma");
+            Stmt hw_call = Evaluate::make(Call::make(Handle(), "start_hwacc", {fd_hwacc, fd_cma}, Call::Intrinsic));
             stmt = ProducerConsumer::make( "_hls_target." + op->name, Block::make(hw_call, pipeline_body), Stmt(), op->consume);
         } else {
             IRMutator::visit(op);
