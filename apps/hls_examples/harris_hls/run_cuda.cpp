@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
     printf("CPU program runtime: %g\n", min_t * 1e3);
     save_image(out_native, "out_native.png");
 
-    /*
+
     // Timing code. Timing doesn't include copying the input data to
     // the gpu or copying the output back.
     double min_t2 = benchmark(iter, 10, [&]() {
@@ -47,7 +47,7 @@ int main(int argc, char **argv) {
       });
     printf("Halide CUDA program runtime: %g\n", min_t2 * 1e3);
     save_image(out_cuda, "out_cuda.png");
-    */
+
 
     Mat cv_input = imread( argv[1], CV_LOAD_IMAGE_GRAYSCALE );
     gpu::GpuMat d_input(cv_input);

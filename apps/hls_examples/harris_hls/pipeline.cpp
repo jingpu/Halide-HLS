@@ -106,7 +106,8 @@ public:
   void compile_gpu() {
     std::cout << "\ncompiling gpu code..." << std::endl;
 
-    output.compute_root().gpu_tile(x, y, 16, 16);
+    output.compute_root().gpu_tile(x, y, 32, 8);
+    /*
     grad_x.compute_root().gpu_tile(x, y, 16, 16);
     grad_y.compute_root().gpu_tile(x, y, 16, 16);
     grad_xx.compute_root().gpu_tile(x, y, 16, 16);
@@ -115,7 +116,9 @@ public:
     grad_gx.compute_root().gpu_tile(x, y, 16, 16);
     grad_gy.compute_root().gpu_tile(x, y, 16, 16);
     grad_gxy.compute_root().gpu_tile(x, y, 16, 16);
-    cim.compute_root().gpu_tile(x, y, 16, 16);
+    */
+    cim.compute_root().gpu_tile(x, y, 32, 8);
+
     //conv1.compute_at(output, Var::gpu_blocks()).gpu_threads(x, y, c);
 
     //output.print_loop_nest();
