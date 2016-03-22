@@ -19,7 +19,14 @@ int main(int argc, char **argv) {
         printf("Usage: ./run left.png left-remap.png right0224.png right-remap.png\n");
         return 0;
     }
+    // Open the buffer allocation device
+    int cma = open("/dev/cmabuffer0", O_RDWR);
+    if(cma == -1){
+        printf("Failed to open cma provider!\n");
+        return(0);
+    }
 
+    // open the hardware
     int hwacc = open("/dev/hwacc0", O_RDWR);
     if(hwacc == -1) {
         printf("Failed to open hardware device!\n");
@@ -32,8 +39,7 @@ int main(int argc, char **argv) {
     Image<uint8_t> right_remap = load_image(argv[4]);
 
     Image<uint8_t> out_native(left.width(), left.height());
-    Image<uint8_t> out_zynq(left.width(), left.height());
-    //Image<uint8_t> out_zynq(720*4, 405*4);
+    Image<uint8_t> out_zynq(256, 256);
 
     printf("start.\n");
 
@@ -43,7 +49,7 @@ int main(int argc, char **argv) {
     //out_native = load_image("out_native.png");
     //printf("cpu program results loaded.\n");
 
-    pipeline_zynq(right, left, right_remap, left_remap, out_zynq, hwacc);
+    pipeline_zynq(right, left, right_remap, left_remap, out_zynq, hwacc, cma);
     save_image(out_zynq, "out_zynq.png");
     printf("accelerator program results saved.\n");
 
@@ -53,17 +59,17 @@ int main(int argc, char **argv) {
         for (int x = 0; x < out_zynq.width(); x++) {
             if (out_native(x, y) != 0 &&
                 out_native(x, y) != out_zynq(x, y)) {
+                /*
                 printf("out_native(%d, %d) = %d, but out_zynq(%d, %d) = %d\n",
                        x, y, out_native(x, y),
                        x, y, out_zynq(x, y));
+                */
                 fails++;
             }
 	}
     }
     if (fails > 0) {
-      //close(hwacc);
       printf("find %d fails.\n", fails);
-      //return 1;
     } else {
       printf("passed.\n");
     }
@@ -79,11 +85,12 @@ int main(int argc, char **argv) {
 
     // Timing code. Timing doesn't include copying the input data to
     // the gpu or copying the output back.
-    double min_t2 = benchmark_zynq(hwacc, 5, 10, [&]() {
-        pipeline_zynq(right, left, right_remap, left_remap, out_zynq, hwacc);
+    double min_t2 = benchmark(5, 10, [&]() {
+       pipeline_zynq(right, left, right_remap, left_remap, out_zynq, hwacc, cma);
       });
     printf("accelerator program runtime: %g\n", min_t2 * 1e3);
 
     close(hwacc);
+    close(cma);
     return 0;
 }

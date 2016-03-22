@@ -232,8 +232,8 @@ MyPipelineOpt()
     output(x, y) = hw_output(x, y);
 
     // The comment constraints and schedules.
-    output.bound(x, 0, 720);
-    output.bound(y, 0, 405);
+    //output.bound(x, 0, 720);
+    //output.bound(y, 0, 405);
 
     // all inputs has three channels
     right.set_bounds(2, 0, 3);
@@ -266,10 +266,10 @@ void compile_cpu() {
 void compile_hls() {
     std::cout << "\ncompiling HLS code..." << std::endl;
 
-    output.tile(x, y, xo, yo, x_in, y_in, 720, 405);
+    output.tile(x, y, xo, yo, x_in, y_in, 256, 256);
 
     hw_output.compute_at(output, xo);
-    hw_output.tile(x, y, xo, yo, x_in, y_in, 720, 405);
+    hw_output.tile(x, y, xo, yo, x_in, y_in, 256, 256);
 
     right_remapped.compute_at(hw_output, xo);
     left_remapped.compute_at(hw_output, xo);
