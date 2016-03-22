@@ -85,14 +85,14 @@ void CodeGen_Zynq_C::visit(const Allocate *op) {
            kbuf_var.height =128;
            kbuf_var.depth = 64;
            kbuf_var.stride = 128;
-           int get_kbuf_status = halide_alloc_kbuf(__hwacc, &kbuf_var);
+           int get_kbuf_status = halide_alloc_kbuf(__cma, &kbuf_var);
            if(get_kbuf_status < 0) {
             printf("Failed to allocate kernel buffer for var.\n");
             return 0;
            }
            uint8_t *_var = (uint8_t*) mmap(NULL,
                          kbuf_var.stride * kbuf_var.height * kbuf_var.depth,
-                         PROT_WRITE, MAP_SHARED, __hwacc, kbuf_var.mmap_offset);
+                         PROT_WRITE, MAP_SHARED, __cma, kbuf_var.mmap_offset);
         */
         string kbuf_name = "kbuf_" + op->name;
         string get_kbuf_status_name = "status_get_" + kbuf_name;
@@ -122,7 +122,7 @@ void CodeGen_Zynq_C::visit(const Allocate *op) {
         stream << print_name(kbuf_name) << ".stride = " << width << ";\n";
         do_indent();
         stream << "int " << print_name(get_kbuf_status_name) << " = "
-               << "halide_alloc_kbuf(__hwacc, &"
+               << "halide_alloc_kbuf(__cma, &"
                << print_name(kbuf_name) << ");\n";
 
         do_indent();
@@ -144,7 +144,7 @@ void CodeGen_Zynq_C::visit(const Allocate *op) {
                << print_name(kbuf_name) << ".stride * "
                << print_name(kbuf_name) << ".height * "
                << print_name(kbuf_name) << ".depth, "
-               << "PROT_WRITE, MAP_SHARED, __hwacc, "
+               << "PROT_WRITE, MAP_SHARED, __cma, "
                << print_name(kbuf_name) << ".mmap_offset);\n";
 
         op->body.accept(this);
@@ -169,7 +169,7 @@ void CodeGen_Zynq_C::visit(const Free *op) {
 
            C code:
            munmap((void*)_var, kbuf_var.stride * kbuf_var.height * kbuf_var.depth);
-           halide_free_kbuf(__hwacc, &kbuf_var);
+           halide_free_kbuf(__cma, &kbuf_var);
         */
         internal_assert(heap_allocations.contains(op->name));
         string kbuf_name = "kbuf_" + op->name;
@@ -180,7 +180,7 @@ void CodeGen_Zynq_C::visit(const Free *op) {
                << print_name(kbuf_name) << ".height * "
                << print_name(kbuf_name) << ".depth);\n";
         do_indent();
-        stream << "halide_free_kbuf(__hwacc, &" << print_name(kbuf_name) << ");\n";
+        stream << "halide_free_kbuf(__cma, &" << print_name(kbuf_name) << ");\n";
 
         heap_allocations.pop(op->name);
         allocations.pop(op->name);

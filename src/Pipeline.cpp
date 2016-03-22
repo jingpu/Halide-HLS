@@ -546,6 +546,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     // Adds an argument of the device handler if HLS feature is enable
     if (target.has_feature(Target::HLS)) {
         public_args.push_back(Argument("__hwacc", Argument::InputScalar, Int(32), 0));
+        public_args.push_back(Argument("__cma", Argument::InputScalar, Int(32), 0));
     }
 
     // Create a module with all the global images in it.
