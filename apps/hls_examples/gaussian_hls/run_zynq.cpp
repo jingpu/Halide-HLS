@@ -3,14 +3,16 @@
 #include <cassert>
 #include <math.h>
 
-#include "pipeline_hls.h"
+#include <fcntl.h>
+#include <unistd.h>
+#include "pipeline_zynq.h"
 #include "pipeline_native.h"
 
+#include "benchmark.h"
 #include "halide_image.h"
 #include "halide_image_io.h"
 
 using namespace Halide::Tools;
-
 
 class my_load_image {
 public:
@@ -45,36 +47,51 @@ void my_save_image(ImageType &im, const std::string &filename) {
     (void) save<ImageType, Internal::CheckFail>(shuffled, filename);
 }
 
-
 int main(int argc, char **argv) {
-
     if (argc < 3) {
         printf("Usage: ./run input.png output.png\n");
         return 0;
     }
+    // Open the buffer allocation device
+    int cma = open("/dev/cmabuffer0", O_RDWR);
+    if(cma == -1){
+        printf("Failed to open cma provider!\n");
+        return(0);
+    }
+
+    // open the hardware
+    int hwacc = open("/dev/hwacc0", O_RDWR);
+    if(hwacc == -1) {
+        printf("Failed to open hardware device!\n");
+        return(0);
+    }
 
     Image<uint8_t> input = my_load_image(argv[1]);
     Image<uint8_t> out_native(3, input.extent(1)-6, input.extent(2)-6);
-    Image<uint8_t> out_hls(3, 512, 512);
+    Image<uint8_t> out_zynq(3, input.extent(1)-6, input.extent(2)-6);
 
     printf("start.\n");
 
     pipeline_native(input, out_native);
     my_save_image(out_native, argv[2]);
+    printf("cpu program results saved.\n");
+    //out_native = load_image("out_native.png");
+    //printf("cpu program results loaded.\n");
 
-    printf("finish running native code\n");
-    pipeline_hls(input, out_hls);
+    pipeline_zynq(input, out_zynq, hwacc, cma);
+    my_save_image(out_zynq, "out_zynq.png");
+    printf("accelerator program results saved.\n");
 
-    printf("finish running HLS code\n");
+    printf("checking results...\n");
 
     unsigned fails = 0;
-    for (int y = 0; y < out_hls.height(); y++) {
-        for (int x = 0; x < out_hls.width(); x++) {
-            for (int c = 0; c < out_hls.channels(); c++) {
-                if (fabs(out_native(x, y, c) - out_hls(x, y, c)) > 10) {
+    for (int y = 0; y < out_zynq.height(); y++) {
+        for (int x = 0; x < out_zynq.width(); x++) {
+            for (int c = 0; c < out_zynq.channels(); c++) {
+                if (fabs(out_native(x, y, c) - out_zynq(x, y, c)) > 10) {
                     printf("out_native(%d, %d, %d) = %d, but out_c(%d, %d, %d) = %d\n",
                            x, y, c, out_native(x, y, c),
-                           x, y, c, out_hls(x, y, c));
+                           x, y, c, out_zynq(x, y, c));
                     fails++;
                 }
           }
@@ -82,10 +99,27 @@ int main(int argc, char **argv) {
     }
     if (!fails) {
         printf("passed.\n");
-        return 0;
     } else  {
         printf("%u fails.\n", fails);
-        return 1;
     }
+
+    printf("\nstart timing code...\n");
+
+    // Timing code. Timing doesn't include copying the input data to
+    // the gpu or copying the output back.
+    double min_t = benchmark(1, 10, [&]() {
+        pipeline_native(input, out_native);
+      });
+    printf("CPU program runtime: %g\n", min_t * 1e3);
+
+    // Timing code. Timing doesn't include copying the input data to
+    // the gpu or copying the output back.
+    double min_t2 = benchmark(5, 10, [&]() {
+            pipeline_zynq(input, out_zynq, hwacc, cma);
+      });
+    printf("accelerator program runtime: %g\n", min_t2 * 1e3);
+
+    close(hwacc);
+    close(cma);
     return 0;
 }

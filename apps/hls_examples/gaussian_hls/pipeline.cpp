@@ -25,10 +25,11 @@ public:
 
         kernel_f(x) = exp(-x*x/(2*sigma*sigma)) / (sqrtf(2*M_PI)*sigma);
         // normalize and convert to 8bit fixed point
-        kernel(x) = cast<uint8_t>(kernel_f(x) * 256 /
+        kernel(x) = cast<uint8_t>(kernel_f(x) * 255 /
                                   (kernel_f(0) + kernel_f(1)*2 + kernel_f(2)*3));
 
-        in_bounded = BoundaryConditions::repeat_edge(in);
+        //in_bounded = BoundaryConditions::repeat_edge(in);
+        in_bounded(_0, _1, _2) = in(_0, _1 + 3, _2 + 3);
 
         blur_y(c, x, y) = cast<uint8_t>((kernel(0) * cast<uint16_t>(in_bounded(c, x, y)) +
                                          kernel(1) * (cast<uint16_t>(in_bounded(c, x, y-1)) +
@@ -100,20 +101,33 @@ public:
         std::cout << "\ncompiling HLS code..." << std::endl;
         //kernel.compute_root();
         output.tile(x, y, xo, yo, xi, yi, 256, 256);
-
-        hw_output.compute_at(output, xo);
-        hw_output.tile(x, y, xo, yo, xi, yi, 256, 256);
         in_bounded.compute_at(output, xo);
 
-        std::vector<Func> hw_bounds = hw_output.accelerate({in_bounded}, xi, xo);
-        hw_bounds[0].unroll(c);
+        hw_output.compute_at(output, xo)
+            .tile(x, y, xo, yo, xi, yi, 256, 256)
+            .unroll(xi, 2);
 
-        blur_y.linebuffer().unroll(c);
+        std::vector<Func> hw_bounds = hw_output.accelerate({in_bounded}, xi, xo);
+        hw_bounds[0].unroll(c).unroll(x).unroll(y);
+
+        blur_y.linebuffer().unroll(c).unroll(x).unroll(y);
 
         //output.print_loop_nest();
         output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
         output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
         output.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
+
+        std::vector<Target::Feature> features({Target::HLS});
+        Target target(Target::Linux, Target::ARM, 32, features);
+        output.compile_to_zynq_c("pipeline_zynq.c", args, "pipeline_zynq", target);
+        output.compile_to_header("pipeline_zynq.h", args, "pipeline_zynq", target);
+
+        output.vectorize(xi, 16).unroll(c);
+        in_bounded.vectorize(_1, 16).unroll(_0);
+        //output.fuse(xo, yo, xo).parallel(xo);
+
+        output.compile_to_object("pipeline_zynq.o", args, "pipeline_zynq", target);
+        output.compile_to_lowered_stmt("pipeline_zynq.ir.html", args, HTML, target);
     }
 };
 
