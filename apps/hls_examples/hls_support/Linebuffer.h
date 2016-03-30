@@ -174,9 +174,9 @@ static void call(stream<PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, EXTENT_2, EXT
 
     size_t write_idx_1 = 0; // the line index of coming stencil in the linebuffer
  LB2D_buf:for (size_t row = 0; row < IDX_EXTENT_1; row++) {
+#pragma HLS LOOP_FLATTEN off
         for (size_t col = 0; col < IDX_EXTENT_0; col++) {
 #pragma HLS DEPENDENCE array inter false
-#pragma HLS LOOP_FLATTEN off
 #pragma HLS PIPELINE II=1
             //size_t write_idx_1 = row % BUFFER_EXTENT_1; // the line index of coming stencil in the linebuffer
             if (write_idx_1 >= BUFFER_EXTENT_1) {
@@ -421,10 +421,10 @@ void linebuffer_3D(stream<PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, IN_EXTENT_2
 
     size_t write_idx_2 = 0; // the line index of coming stencil in the linebuffer
  LB3D_buf:for (size_t idx_2 = 0; idx_2 < IDX_EXTENT_2; idx_2++) {
+#pragma HLS LOOP_FLATTEN off
         for (size_t idx_1 = 0; idx_1 < IDX_EXTENT_1; idx_1++) {
             for (size_t idx_0 = 0; idx_0 < IDX_EXTENT_0; idx_0++) {
 #pragma HLS DEPENDENCE array inter false
-#pragma HLS LOOP_FLATTEN off
 #pragma HLS PIPELINE II=1
                 //size_t write_idx_2 = idx_2 % BUFFER_EXTENT_2; // the line index of coming stencil in the linebuffer
                 if (write_idx_2 >= BUFFER_EXTENT_2) {
