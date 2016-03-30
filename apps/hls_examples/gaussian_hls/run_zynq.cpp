@@ -23,16 +23,22 @@ public:
         (void) load<ImageType, Internal::CheckFail>(filename, &im);
         // shuffle data
         ImageType res(im.channels(), im.width(), im.height());
-        for(int x = 0; x < im.width(); x++)
-            for(int y = 0; y < im.height(); y++)
-                for(int c = 0; c < im.channels(); c++)
+        //ImageType res(3, 256+8, 256+8);
+        for(int c = 0; c < res.extent(0); c++)
+            for(int x = 0; x < res.extent(1); x++)
+                for(int y = 0; y < res.extent(2); y++)
                     res(c, x, y) = im(x, y, c);
+        /*
+                    if (c==0)
+                        res(c, x, y) = (uint8_t)x+y;
+                    else
+                        res(c, x, y) = 0;
+        */
         return res;
     }
 private:
   const std::string filename;
 };
-
 
 template<typename ImageType>
 void my_save_image(ImageType &im, const std::string &filename) {
@@ -67,8 +73,10 @@ int main(int argc, char **argv) {
     }
 
     Image<uint8_t> input = my_load_image(argv[1]);
-    Image<uint8_t> out_native(3, input.extent(1)-6, input.extent(2)-6);
-    Image<uint8_t> out_zynq(3, input.extent(1)-6, input.extent(2)-6);
+    Image<uint8_t> out_native(3, input.extent(1)-8, input.extent(2)-8);
+    Image<uint8_t> out_zynq(3, input.extent(1)-8, input.extent(2)-8);
+    //Image<uint8_t> out_native(3, 256, 256);
+    //Image<uint8_t> out_zynq(3, 256, 256);
 
     printf("start.\n");
 
@@ -88,7 +96,7 @@ int main(int argc, char **argv) {
     for (int y = 0; y < out_zynq.height(); y++) {
         for (int x = 0; x < out_zynq.width(); x++) {
             for (int c = 0; c < out_zynq.channels(); c++) {
-                if (fabs(out_native(x, y, c) - out_zynq(x, y, c)) > 10) {
+                if (out_native(x, y, c) != out_zynq(x, y, c)) {
                     printf("out_native(%d, %d, %d) = %d, but out_c(%d, %d, %d) = %d\n",
                            x, y, c, out_native(x, y, c),
                            x, y, c, out_zynq(x, y, c));
@@ -108,15 +116,15 @@ int main(int argc, char **argv) {
     // Timing code. Timing doesn't include copying the input data to
     // the gpu or copying the output back.
     double min_t = benchmark(1, 10, [&]() {
-        pipeline_native(input, out_native);
-      });
+            pipeline_native(input, out_native);
+        });
     printf("CPU program runtime: %g\n", min_t * 1e3);
 
     // Timing code. Timing doesn't include copying the input data to
     // the gpu or copying the output back.
     double min_t2 = benchmark(5, 10, [&]() {
             pipeline_zynq(input, out_zynq, hwacc, cma);
-      });
+        });
     printf("accelerator program runtime: %g\n", min_t2 * 1e3);
 
     close(hwacc);

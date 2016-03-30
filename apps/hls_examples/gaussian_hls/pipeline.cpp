@@ -20,16 +20,17 @@ public:
           kernel("kernel"), blur_y("blur_y"), blur_x("blur_x"),
           output("output"), hw_output("hw_output")
     {
-        // Define a 7x7 Gaussian Blur with a repeat-edge boundary condition.
+        // Define a 9x9 Gaussian Blur with a repeat-edge boundary condition.
         float sigma = 1.5f;
 
         kernel_f(x) = exp(-x*x/(2*sigma*sigma)) / (sqrtf(2*M_PI)*sigma);
         // normalize and convert to 8bit fixed point
         kernel(x) = cast<uint8_t>(kernel_f(x) * 255 /
-                                  (kernel_f(0) + kernel_f(1)*2 + kernel_f(2)*3));
+                                  (kernel_f(0) + kernel_f(1)*2 + kernel_f(2)*2
+                                   + kernel_f(3)*2 + kernel_f(4)*2));
 
         //in_bounded = BoundaryConditions::repeat_edge(in);
-        in_bounded(_0, _1, _2) = in(_0, _1 + 3, _2 + 3);
+        in_bounded(_0, _1, _2) = in(_0, _1 + 4, _2 + 4);
 
         blur_y(c, x, y) = cast<uint8_t>((kernel(0) * cast<uint16_t>(in_bounded(c, x, y)) +
                                          kernel(1) * (cast<uint16_t>(in_bounded(c, x, y-1)) +
@@ -37,7 +38,9 @@ public:
                                          kernel(2) * (cast<uint16_t>(in_bounded(c, x, y-2)) +
                                                       cast<uint16_t>(in_bounded(c, x, y+2))) +
                                          kernel(3) * (cast<uint16_t>(in_bounded(c, x, y-3)) +
-                                                      cast<uint16_t>(in_bounded(c, x, y+3)))) >> 8);
+                                                      cast<uint16_t>(in_bounded(c, x, y+3))) +
+                                         kernel(4) * (cast<uint16_t>(in_bounded(c, x, y-4)) +
+                                                      cast<uint16_t>(in_bounded(c, x, y+4)))) >> 8);
 
         blur_x(c, x, y) = cast<uint8_t>((kernel(0) * cast<uint16_t>(blur_y(c, x, y)) +
                                          kernel(1) * (cast<uint16_t>(blur_y(c, x-1, y)) +
@@ -45,7 +48,9 @@ public:
                                          kernel(2) * (cast<uint16_t>(blur_y(c, x-2, y)) +
                                                       cast<uint16_t>(blur_y(c, x+2, y))) +
                                          kernel(3) * (cast<uint16_t>(blur_y(c, x-3, y)) +
-                                                      cast<uint16_t>(blur_y(c, x+3, y)))) >> 8);
+                                                      cast<uint16_t>(blur_y(c, x+3, y))) +
+                                         kernel(4) * (cast<uint16_t>(blur_y(c, x-4, y)) +
+                                                      cast<uint16_t>(blur_y(c, x+4, y)))) >> 8);
 
         hw_output(c, x, y) = blur_x(c, x, y);
 
@@ -104,8 +109,8 @@ public:
         in_bounded.compute_at(output, xo);
 
         hw_output.compute_at(output, xo)
-            .tile(x, y, xo, yo, xi, yi, 256, 256)
-            .unroll(xi, 2);
+            .tile(x, y, xo, yo, xi, yi, 256, 256);
+        hw_output.unroll(xi, 2);
 
         std::vector<Func> hw_bounds = hw_output.accelerate({in_bounded}, xi, xo);
         hw_bounds[0].unroll(c).unroll(x).unroll(y);

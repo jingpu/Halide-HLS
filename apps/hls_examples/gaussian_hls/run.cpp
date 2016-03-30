@@ -21,10 +21,17 @@ public:
         (void) load<ImageType, Internal::CheckFail>(filename, &im);
         // shuffle data
         ImageType res(im.channels(), im.width(), im.height());
-        for(int x = 0; x < im.width(); x++)
-            for(int y = 0; y < im.height(); y++)
-                for(int c = 0; c < im.channels(); c++)
+        //ImageType res(3, 256+8, 256+8);
+        for(int c = 0; c < res.extent(0); c++)
+            for(int x = 0; x < res.extent(1); x++)
+                for(int y = 0; y < res.extent(2); y++)
                     res(c, x, y) = im(x, y, c);
+        /*
+                    if (c==0)
+                        res(c, x, y) = (uint8_t)x+y;
+                    else
+                        res(c, x, y) = 0;
+        */
         return res;
     }
 private:
@@ -54,7 +61,7 @@ int main(int argc, char **argv) {
     }
 
     Image<uint8_t> input = my_load_image(argv[1]);
-    Image<uint8_t> out_native(3, input.extent(1)-6, input.extent(2)-6);
+    Image<uint8_t> out_native(3, input.extent(1)-8, input.extent(2)-8);
     Image<uint8_t> out_hls(3, 512, 512);
 
     printf("start.\n");
@@ -71,7 +78,7 @@ int main(int argc, char **argv) {
     for (int y = 0; y < out_hls.height(); y++) {
         for (int x = 0; x < out_hls.width(); x++) {
             for (int c = 0; c < out_hls.channels(); c++) {
-                if (fabs(out_native(x, y, c) - out_hls(x, y, c)) > 10) {
+                if (out_native(x, y, c) != out_hls(x, y, c)) {
                     printf("out_native(%d, %d, %d) = %d, but out_c(%d, %d, %d) = %d\n",
                            x, y, c, out_native(x, y, c),
                            x, y, c, out_hls(x, y, c));
