@@ -35,7 +35,7 @@ bool check_outputs(stream<PackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_
 	for(size_t idx_1 = 0; idx_1 < EXTENT_1; idx_1++)
         for(size_t idx_0 = 0; idx_0 < EXTENT_0; idx_0++)
             if (output_1(idx_0, idx_1, idx_2, idx_3) != output_2(idx_0, idx_1, idx_2, idx_3)) {
-                printf("output_1(%lu, %lu, %lu, %lu) = %d, but output_2(%lu, %lu, %lu, %lu) = %d\n",
+                printf("check #%d: output_1(%lu, %lu, %lu, %lu) = %d, but output_2(%lu, %lu, %lu, %lu) = %d\n", i,
                        idx_0, idx_1, idx_2, idx_3, output_1(idx_0, idx_1, idx_2, idx_3),
                        idx_0, idx_1, idx_2, idx_3, output_2(idx_0, idx_1, idx_2, idx_3));
                 success = false;
@@ -82,6 +82,9 @@ void test_1D() {
 	printf("failed!\n");
 }
 
+void syn_target(hls::stream<PackedStencil<uint8_t, 2, 1> > &input_stream,
+                hls::stream<PackedStencil<uint8_t, 2, 3> > &output_stream);
+
 void test_2D() {
     hls::stream<PackedStencil<uint8_t, 2, 1> > input_stream, input_ref_stream;
     hls::stream<PackedStencil<uint8_t, 2, 3> > output_stream, output_ref_stream;
@@ -89,8 +92,9 @@ void test_2D() {
     gen_inputs<10*12>(input_stream, input_ref_stream);
 
     printf("test linebuffer_2D()... ");
-    linebuffer<20, 12>(input_stream, output_stream);
-    //hls_target(input_stream, output_stream);
+    //linebuffer<20, 12>(input_stream, output_stream);
+    syn_target(input_stream, output_stream);
+
     linebuffer_ref<20, 12>(input_ref_stream, output_ref_stream);
 
     if (check_outputs<10*10>(output_stream, output_ref_stream))
@@ -107,7 +111,7 @@ void test_3D() {
 
     printf("test linebuffer_3D()... ");
     linebuffer<20, 20, 12>(input_stream, output_stream);
-    //hls_target(input_stream, output_stream);
+
     linebuffer_ref<20, 20, 12>(input_ref_stream, output_ref_stream);
 
     if (check_outputs<10*10*10>(output_stream, output_ref_stream))
@@ -133,63 +137,6 @@ void test_3D_float() {
 	printf("failed!\n");
 }
 
-
-void syn_target_3D2D1D(hls::stream<PackedStencil<uint8_t, 1, 1, 1, 1> > &input_stream,
-                       hls::stream<PackedStencil<uint8_t, 3, 3, 3, 1> > &output_stream) {
-#pragma HLS DATAFLOW
-    linebuffer<32, 32, 32, 1>(input_stream, output_stream);
-}
-
-void syn_target_3D2D(hls::stream<PackedStencil<uint8_t, 1, 1, 1, 1> > &input_stream,
-                     hls::stream<PackedStencil<uint8_t, 1, 3, 3, 1> > &output_stream) {
-#pragma HLS DATAFLOW
-    linebuffer<32, 32, 32, 1>(input_stream, output_stream);
-}
-
-void syn_target_3D1D(hls::stream<PackedStencil<uint8_t, 1, 1, 1, 1> > &input_stream,
-                     hls::stream<PackedStencil<uint8_t, 3, 1, 3, 1> > &output_stream) {
-#pragma HLS DATAFLOW
-    linebuffer<32, 32, 32, 1>(input_stream, output_stream);
-}
-
-void syn_target_3D(hls::stream<PackedStencil<uint8_t, 1, 1, 1, 1> > &input_stream,
-                   hls::stream<PackedStencil<uint8_t, 1, 1, 3, 1> > &output_stream) {
-#pragma HLS DATAFLOW
-    linebuffer<32, 32, 32, 1>(input_stream, output_stream);
-}
-
-void syn_target_2D1D(hls::stream<PackedStencil<uint8_t, 1, 1, 1, 1> > &input_stream,
-                     hls::stream<PackedStencil<uint8_t, 3, 3, 1, 1> > &output_stream) {
-#pragma HLS DATAFLOW
-    linebuffer<32, 32, 1, 1>(input_stream, output_stream);
-}
-
-void syn_target_2D(hls::stream<PackedStencil<uint8_t, 1, 1, 1, 1> > &input_stream,
-                   hls::stream<PackedStencil<uint8_t, 1, 3, 1, 1> > &output_stream) {
-#pragma HLS DATAFLOW
-    linebuffer<32, 32, 1, 1>(input_stream, output_stream);
-}
-
-
-void syn_target_1D(hls::stream<PackedStencil<uint8_t, 1, 1, 1, 1> > &input_stream,
-                   hls::stream<PackedStencil<uint8_t, 3, 1, 1, 1> > &output_stream) {
-#pragma HLS DATAFLOW
-    linebuffer<32, 1, 1, 1>(input_stream, output_stream);
-}
-
-
-//2D and 3D linebuffer has latency bug when IMG_EXTENT_0=IN_EXTENT_0=OUT_EXTENT_0
-void syn_target_3D2D_bug(hls::stream<PackedStencil<uint8_t, 1, 1, 1, 1> > &input_stream,
-                         hls::stream<PackedStencil<uint8_t, 1, 3, 3, 1> > &output_stream) {
-#pragma HLS DATAFLOW
-    linebuffer<1, 32, 32, 1>(input_stream, output_stream);
-}
-
-void syn_target_2D_bug(hls::stream<PackedStencil<uint8_t, 1, 1, 1, 1> > &input_stream,
-                       hls::stream<PackedStencil<uint8_t, 1, 3, 1, 1> > &output_stream) {
-#pragma HLS DATAFLOW
-    linebuffer<1, 32, 1, 1>(input_stream, output_stream);
-}
 
 int main(int argc, char **argv) {
     test_1D();
