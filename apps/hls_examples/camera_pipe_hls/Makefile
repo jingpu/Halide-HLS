@@ -21,10 +21,22 @@ run_cuda: pipeline_native.o pipeline_cuda.o run_cuda.cpp
 	$(CXX) -O3 $(CXXFLAGS) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
 
 out.png: run
-	./run ../../images/bayer_raw.png 3700 2.0 50
+	./run ../../images/bayer_raw.png
 
 out_cuda.png: run_cuda
-	CUDA_LAUNCH_BLOCKING=1 HL_NUM_THREADS=4 ./run_cuda ../../images/bayer_raw.png 3700 2.0 50
+	CUDA_LAUNCH_BLOCKING=1 HL_NUM_THREADS=4 ./run_cuda ../../images/bayer_raw.png
+
+#pipeline_zynq.o: pipeline_zynq.c
+#	$(CXX) -c -O2 $(CXXFLAGS) -g -Wall -Werror $^ -o $@
+
+run_zynq.o: run_zynq.cpp
+	$(CXX) -c $(CXXFLAGS) -g -Wall -Werror $^ -o $@  $(PNGFLAGS)
+
+run_zynq: pipeline_zynq.o pipeline_native.o run_zynq.o
+	$(CXX) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
+
+out_zynq.png: run_zynq
+	HL_NUM_THREADS=3 ./run_zynq ../../images/bayer_raw.png
 
 clean:
 	rm -f pipeline run out.png

@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
     Image<uint16_t> input = load_image(argv[1]);
     fprintf(stderr, "%d %d\n", input.width(), input.height());
     Image<uint8_t> out_native(2560, 1920, 3);
-    Image<uint8_t> out_hls(256, 256, 3);
+    Image<uint8_t> out_hls(3, 640*2, 480*2);
 
     printf("start.\n");
     pipeline_native(input, out_native);
@@ -28,13 +28,13 @@ int main(int argc, char **argv) {
 
     printf("finish running HLS code\n");
 
-    for (int y = 0; y < out_hls.height(); y++) {
-        for (int x = 0; x < out_hls.width(); x++) {
-            for (int c = 0; c < out_hls.channels(); c++) {
-                if (out_native(x, y, c) != out_hls(x, y, c)) {
+    for (int y = 0; y < out_hls.extent(2); y++) {
+        for (int x = 0; x < out_hls.extent(1); x++) {
+            for (int c = 0; c < out_hls.extent(0); c++) {
+                if (out_native(x, y, c) != out_hls(c, x, y)) {
                     printf("out_native(%d, %d, %d) = %d, but out_c(%d, %d, %d) = %d\n",
                            x, y, c, out_native(x, y, c),
-                           x, y, c, out_hls(x, y, c));
+                           c, x, y, out_hls(c, x, y));
                 }
             }
 	}
