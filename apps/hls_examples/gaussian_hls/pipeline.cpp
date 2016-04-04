@@ -71,12 +71,8 @@ public:
         // for certain size of images
         Expr out_width = output.output_buffer().extent(1);
         Expr out_height = output.output_buffer().extent(2);
-        output.bound(x, 0, (out_width/256)*256);
+        output.bound(x, 0, (out_width/320)*256);
         output.bound(y, 0, (out_height/64)*64);
-        //in.set_bounds(1, 0, 2448);
-        //in.set_bounds(2, 0, 3264);
-        //output.output_buffer().set_min(1, 0).set_min(2, 0);
-        //in.set_min(1, 0).set_min(2, 0);
 
         // Arguments
         args = {in};
@@ -154,6 +150,6 @@ int main(int argc, char **argv) {
     p2.compile_hls();
 
     MyPipeline p3;
-    //p3.compile_gpu();
+    p3.compile_gpu();
     return 0;
 }

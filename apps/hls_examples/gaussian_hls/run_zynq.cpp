@@ -23,17 +23,10 @@ public:
         (void) load<ImageType, Internal::CheckFail>(filename, &im);
         // shuffle data
         ImageType res(im.channels(), im.width(), im.height());
-        //ImageType res(3, 256+8, 256+8);
         for(int c = 0; c < res.extent(0); c++)
             for(int x = 0; x < res.extent(1); x++)
                 for(int y = 0; y < res.extent(2); y++)
                     res(c, x, y) = im(x, y, c);
-        /*
-                    if (c==0)
-                        res(c, x, y) = (uint8_t)x+y;
-                    else
-                        res(c, x, y) = 0;
-        */
         return res;
     }
 private:
@@ -112,14 +105,14 @@ int main(int argc, char **argv) {
     }
 
     printf("\nstart timing code...\n");
-    /*
+
     // Timing code. Timing doesn't include copying the input data to
     // the gpu or copying the output back.
     double min_t = benchmark(1, 10, [&]() {
             pipeline_native(input, out_native);
         });
     printf("CPU program runtime: %g\n", min_t * 1e3);
-    */
+
     // Timing code. Timing doesn't include copying the input data to
     // the gpu or copying the output back.
     double min_t2 = benchmark(5, 10, [&]() {

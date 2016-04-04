@@ -40,11 +40,6 @@ run_power: run_power.cpp
 
 out_zynq.png: run_zynq
 	HL_NUM_THREADS=3 ./run_zynq ../../images/benchmark_8mp_rgb.png out_zynq.png
-	HL_NUM_THREADS=3 ./run_zynq ../../images/benchmark_8mp_rgb.png out_zynq.png
-	HL_NUM_THREADS=3 ./run_zynq ../../images/benchmark_8mp_rgb.png out_zynq.png
-	HL_NUM_THREADS=1 ./run_zynq ../../images/benchmark_8mp_rgb.png out_zynq.png
-	HL_NUM_THREADS=1 ./run_zynq ../../images/benchmark_8mp_rgb.png out_zynq.png
-	HL_NUM_THREADS=1 ./run_zynq ../../images/benchmark_8mp_rgb.png out_zynq.png
 
 clean:
 	rm -f pipeline run run_zynq

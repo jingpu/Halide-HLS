@@ -54,19 +54,6 @@ LLVM_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
 # edit this file, add "WITH_FOO=" (no assigned value) to the make
 # line, or define an environment variable WITH_FOO that has an empty
 # value.
-WITH_NATIVE_CLIENT =
-WITH_X86 =
-WITH_ARM = not-empty
-WITH_MIPS =
-WITH_AARCH64 =
-WITH_PTX = not-empty
-WITH_OPENCL =
-WITH_METAL =
-WITH_OPENGL =
-WITH_RENDERSCRIPT =
-WITH_INTROSPECTION = not-empty
-WITH_EXCEPTIONS =
-
 WITH_NATIVE_CLIENT ?= $(findstring nacltransforms, $(LLVM_COMPONENTS))
 WITH_X86 ?= $(findstring x86, $(LLVM_COMPONENTS))
 WITH_ARM ?= $(findstring arm, $(LLVM_COMPONENTS))
