@@ -303,8 +303,6 @@ public:
         output.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
 
         // Create the Zynq platform target
-        //std::vector<Target::Feature> features({Target::HLS, Target::NoAsserts, Target::NoBoundsQuery});
-        //std::vector<Target::Feature> features({Target::HLS, Target::Debug});
         std::vector<Target::Feature> features({Target::HLS});
         Target target(Target::Linux, Target::ARM, 32, features);
 
@@ -319,8 +317,6 @@ public:
         output.fuse(xo, yo, xo).parallel(xo);
 
         output.compile_to_lowered_stmt("pipeline_zynq.ir.html", args, HTML, target);
-        //Module module = output.compile_to_module(args, "pipeline_zynq", target);
-        //compile_module_to_llvm_assembly(module, "pipeline_zynq.ll");
         output.compile_to_object("pipeline_zynq.o", args, "pipeline_zynq", target);
     }
 };

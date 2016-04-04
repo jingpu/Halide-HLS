@@ -298,7 +298,7 @@ static void call(stream<PackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3>
 }
 };
 
-// A trivial bypass layer, where input dim 1, output dim 1 and image dim 1
+// Case 4: A trivial bypass layer, where input dim 1, output dim 1 and image dim 1
 // are the same size
 template <size_t IMG_EXTENT_0, size_t EXTENT_1,
           size_t IN_EXTENT_0, size_t OUT_EXTENT_0,
@@ -310,6 +310,19 @@ static void call(stream<PackedStencil<T, IN_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT
                  stream<PackedStencil<T, OUT_EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream) {
 #pragma HLS INLINE
     linebuffer_1D<IMG_EXTENT_0>(in_stream, out_stream);
+}
+};
+
+// Case 5: union of case 3 and case 4
+template <size_t EXTENT_0, size_t EXTENT_2, size_t EXTENT_3,
+	  size_t EXTENT_1, typename T>
+class Linebuffer2D<EXTENT_0,  EXTENT_1,  EXTENT_2,  EXTENT_3,
+                   EXTENT_0,  EXTENT_1,  EXTENT_0,  EXTENT_1, T> {
+public:
+static void call(stream<PackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &in_stream,
+                 stream<PackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &out_stream) {
+#pragma HLS INLINE
+    out_stream.write(in_stream.read());
 }
 };
 
