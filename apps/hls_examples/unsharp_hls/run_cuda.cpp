@@ -15,8 +15,8 @@ using namespace Halide::Tools;
 int main(int argc, char **argv) {
     int iter = 5;
     Image<uint8_t> input = load_image(argv[1]);
-    Image<uint8_t> out_native(2400, 3600, 3);
-    Image<uint8_t> out_cuda(2400, 3600, 3);
+    Image<uint8_t> out_native(2400, 3200, 3);
+    Image<uint8_t> out_cuda(2400, 3200, 3);
 
     printf("\nstart timing code...\n");
 
