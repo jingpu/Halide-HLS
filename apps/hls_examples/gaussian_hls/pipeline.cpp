@@ -68,6 +68,16 @@ public:
         in.set_bounds(0, 0, 3);
         output.output_buffer().set_bounds(0, 0, 3);
 
+        // for certain size of images
+        Expr out_width = output.output_buffer().extent(1);
+        Expr out_height = output.output_buffer().extent(2);
+        output.bound(x, 0, (out_width/256)*256);
+        output.bound(y, 0, (out_height/64)*64);
+        //in.set_bounds(1, 0, 2448);
+        //in.set_bounds(2, 0, 3264);
+        //output.output_buffer().set_min(1, 0).set_min(2, 0);
+        //in.set_min(1, 0).set_min(2, 0);
+
         // Arguments
         args = {in};
     }
@@ -76,7 +86,7 @@ public:
         std::cout << "\ncompiling cpu code..." << std::endl;
         //kernel.compute_root();
 
-        output.tile(x, y, xo, yo, xi, yi, 256, 256)
+        output.tile(x, y, xo, yo, xi, yi, 256, 64)
             .unroll(c).vectorize(xi, 8)
             .fuse(xo, yo, xo).parallel(xo);
         blur_y.compute_at(output, xo).vectorize(x, 8).unroll(c);
@@ -105,11 +115,11 @@ public:
     void compile_hls() {
         std::cout << "\ncompiling HLS code..." << std::endl;
         //kernel.compute_root();
-        output.tile(x, y, xo, yo, xi, yi, 256, 256);
+        output.tile(x, y, xo, yo, xi, yi, 256, 64);
         in_bounded.compute_at(output, xo);
 
         hw_output.compute_at(output, xo)
-            .tile(x, y, xo, yo, xi, yi, 256, 256);
+            .tile(x, y, xo, yo, xi, yi, 256, 64);
         hw_output.unroll(xi, 2);
 
         std::vector<Func> hw_bounds = hw_output.accelerate({in_bounded}, xi, xo);
@@ -129,7 +139,7 @@ public:
 
         output.vectorize(xi, 16).unroll(c);
         in_bounded.vectorize(_1, 16).unroll(_0);
-        //output.fuse(xo, yo, xo).parallel(xo);
+        output.fuse(xo, yo, xo).parallel(xo);
 
         output.compile_to_object("pipeline_zynq.o", args, "pipeline_zynq", target);
         output.compile_to_lowered_stmt("pipeline_zynq.ir.html", args, HTML, target);

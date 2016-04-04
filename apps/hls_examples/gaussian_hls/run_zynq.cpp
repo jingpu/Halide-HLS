@@ -73,15 +73,15 @@ int main(int argc, char **argv) {
     }
 
     Image<uint8_t> input = my_load_image(argv[1]);
-    Image<uint8_t> out_native(3, input.extent(1)-8, input.extent(2)-8);
-    Image<uint8_t> out_zynq(3, input.extent(1)-8, input.extent(2)-8);
-    //Image<uint8_t> out_native(3, 256, 256);
-    //Image<uint8_t> out_zynq(3, 256, 256);
+    //Image<uint8_t> out_native(3, input.extent(1)-8, input.extent(2)-8);
+    //Image<uint8_t> out_zynq(3, input.extent(1)-8, input.extent(2)-8);
+    Image<uint8_t> out_native(3, 256*4, 64*4*4);
+    Image<uint8_t> out_zynq(3, 256*4, 64*4*4);
 
     printf("start.\n");
 
     pipeline_native(input, out_native);
-    my_save_image(out_native, argv[2]);
+    my_save_image(out_native, "out_native.png");
     printf("cpu program results saved.\n");
     //out_native = load_image("out_native.png");
     //printf("cpu program results loaded.\n");
@@ -112,14 +112,14 @@ int main(int argc, char **argv) {
     }
 
     printf("\nstart timing code...\n");
-
+    /*
     // Timing code. Timing doesn't include copying the input data to
     // the gpu or copying the output back.
     double min_t = benchmark(1, 10, [&]() {
             pipeline_native(input, out_native);
         });
     printf("CPU program runtime: %g\n", min_t * 1e3);
-
+    */
     // Timing code. Timing doesn't include copying the input data to
     // the gpu or copying the output back.
     double min_t2 = benchmark(5, 10, [&]() {

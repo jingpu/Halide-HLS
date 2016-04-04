@@ -29,10 +29,10 @@ int main(int argc, char **argv) {
         return(0);
     }
 
-    Image<uint16_t> input = load_image(argv[1]);
+    Image<uint8_t> input = load_image(argv[1]);
     fprintf(stderr, "%d %d\n", input.width(), input.height());
     Image<uint8_t> out_native(2400, 3200);
-    Image<uint8_t> out_zynq(480, 640);
+    Image<uint8_t> out_zynq(480*5, 640*5);
 
     printf("start.\n");
 

@@ -35,8 +35,16 @@ run_zynq.o: run_zynq.cpp
 run_zynq: pipeline_zynq.o pipeline_native.o run_zynq.o
 	$(CXX) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
 
+run_power: run_power.cpp
+	$(CXX) -O $(CXXFLAGS) -g -Wall -Werror $^ -o $@
+
 out_zynq.png: run_zynq
-	HL_NUM_THREADS=3 ./run_zynq ../../images/rgb.png out_zynq.png
+	HL_NUM_THREADS=3 ./run_zynq ../../images/benchmark_8mp_rgb.png out_zynq.png
+	HL_NUM_THREADS=3 ./run_zynq ../../images/benchmark_8mp_rgb.png out_zynq.png
+	HL_NUM_THREADS=3 ./run_zynq ../../images/benchmark_8mp_rgb.png out_zynq.png
+	HL_NUM_THREADS=1 ./run_zynq ../../images/benchmark_8mp_rgb.png out_zynq.png
+	HL_NUM_THREADS=1 ./run_zynq ../../images/benchmark_8mp_rgb.png out_zynq.png
+	HL_NUM_THREADS=1 ./run_zynq ../../images/benchmark_8mp_rgb.png out_zynq.png
 
 clean:
 	rm -f pipeline run run_zynq
