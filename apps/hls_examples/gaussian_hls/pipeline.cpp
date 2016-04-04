@@ -71,7 +71,7 @@ public:
         // for certain size of images
         Expr out_width = output.output_buffer().extent(1);
         Expr out_height = output.output_buffer().extent(2);
-        output.bound(x, 0, (out_width/320)*256);
+        output.bound(x, 0, (out_width/256)*256);
         output.bound(y, 0, (out_height/64)*64);
 
         // Arguments
@@ -97,7 +97,7 @@ public:
     void compile_gpu() {
         std::cout << "\ncompiling gpu code..." << std::endl;
 
-        output.gpu_tile(x, y, c, 16, 8, 3).unroll(c);
+        output.gpu_tile(x, y, 16, 16);
 
         //output.print_loop_nest();
 

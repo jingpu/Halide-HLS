@@ -12,20 +12,14 @@
 using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
-
-    if (argc < 3) {
-        printf("Usage: ./run input.png output.png\n");
-        return 0;
-    }
-
     Image<uint8_t> input = load_image(argv[1]);
-    Image<uint8_t> out_native(input.width(), input.height(), 3);
-    Image<uint8_t> out_hls(512, 512, 3);
+    Image<uint8_t> out_native(input.width()-8, input.height()-8, 3);
+    Image<uint8_t> out_hls(480*1, 640*1, 3);
 
     printf("start.\n");
 
     pipeline_native(input, out_native);
-    save_image(out_native, argv[2]);
+    save_image(out_native, "out.png");
 
     printf("finish running native code\n");
     pipeline_hls(input, out_hls);

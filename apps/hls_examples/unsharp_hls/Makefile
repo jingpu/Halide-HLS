@@ -11,7 +11,7 @@ all: out.png
 pipeline: pipeline.cpp
 	$(CXX) $(CXXFLAGS) -Wall -g $^ $(LIB_HALIDE) -o $@ $(LDFLAGS) -ltinfo
 
-pipeline_hls.cpp pipeline_native.o pipeline_zynq.c pipeline_zynq.o pipeline_cuda.o: pipeline
+pipeline_hls.cpp pipeline_native.o pipeline_cuda.o pipeline_zynq.o: pipeline
 	HL_DEBUG_CODEGEN=0 ./pipeline
 
 run: run.cpp pipeline_hls.cpp hls_target.cpp pipeline_native.o
@@ -21,10 +21,10 @@ run_cuda: pipeline_native.o pipeline_cuda.o run_cuda.cpp
 	$(CXX) -O3 $(CXXFLAGS) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
 
 out.png: run
-	./run ../../images/rgb.png out.png
+	./run ../../images/benchmark_8mp_rgb.png
 
 out_cuda.png: run_cuda
-	CUDA_LAUNCH_BLOCKING=1 HL_NUM_THREADS=4 ./run_cuda ../../images/benchmark_1080p_rgb.png
+	CUDA_LAUNCH_BLOCKING=1 HL_NUM_THREADS=4 ./run_cuda ../../images/benchmark_8mp_rgb.png
 
 #pipeline_zynq.o: pipeline_zynq.c
 #	$(CXX) -c -O2 $(CXXFLAGS) -g -Wall -Werror $^ -o $@
@@ -36,7 +36,7 @@ run_zynq: pipeline_zynq.o pipeline_native.o run_zynq.o
 	$(CXX) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
 
 out_zynq.png: run_zynq
-	HL_NUM_THREADS=3 ./run_zynq ../../images/gray.png out_zynq.png
+	HL_NUM_THREADS=3 ./run_zynq  ../../images/benchmark_8mp_rgb.png
 
 clean:
 	rm -f pipeline run run_zynq
