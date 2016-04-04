@@ -582,7 +582,7 @@ class MyPipelineOpt {
         }
 
         Func hw_output("hw_output");
-        hw_output(c, z, x, y) = curve(input(z, x, y, c));
+        hw_output(c, z, x, y) = select(c==3, 0, curve(input(z, x, y, c)));
 
         return hw_output;
     }
@@ -622,8 +622,11 @@ public:
         processed
             .bound(x, 0, (out_width/640)*640)
             .bound(y, 0, (out_height/480)*480)
-            .bound(c, 0, 3); // bound color loop 0-3, properly
+            .bound(c, 0, 4); // bound color loop 0-3, properly
 
+        processed.output_buffer()
+            .set_stride(0, 1)
+            .set_stride(1, 4);
 
         args = {input};
     }
@@ -664,12 +667,17 @@ public:
         processed.compile_to_zynq_c("pipeline_zynq.c", args, "pipeline_zynq", target);
         processed.compile_to_header("pipeline_zynq.h", args, "pipeline_zynq", target);
 
-        processed.vectorize(xi, 16).unroll(c);
         input_shuffled.vectorize(x, 8).unroll(z);
+
+        Var xii, yii;
+        processed.tile(xi, yi, xi, yi, xii, yii, 2, 2);
+        processed.unroll(c).unroll(yii).vectorize(xii);
+
         processed.fuse(xo, yo, xo).parallel(xo);
 
         processed.compile_to_object("pipeline_zynq.o", args, "pipeline_zynq", target);
         processed.compile_to_lowered_stmt("pipeline_zynq.ir.html", args, HTML, target);
+        processed.compile_to_assembly("pipeline_zynq.s", args, "pipeline_zynq", target);
     }
 };
 

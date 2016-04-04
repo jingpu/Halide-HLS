@@ -28,10 +28,6 @@ void my_save_image(ImageType &im, const std::string &filename) {
 }
 
 int main(int argc, char **argv) {
-    if (argc < 3) {
-        printf("Usage: ./run input.png output.png\n");
-        return 0;
-    }
     // Open the buffer allocation device
     int cma = open("/dev/cmabuffer0", O_RDWR);
     if(cma == -1){
@@ -49,14 +45,13 @@ int main(int argc, char **argv) {
     Image<uint16_t> input = load_image(argv[1]);
     fprintf(stderr, "%d %d\n", input.width(), input.height());
     Image<uint8_t> out_native(2560, 1920, 3);
-    Image<uint8_t> out_zynq(3, 2560, 1920);
-    //Image<uint8_t> out_native(3, 256, 256);
-    //Image<uint8_t> out_zynq(3, 256, 256);
+    Image<uint8_t> out_zynq(4, 2560, 1920);
+    //Image<uint8_t> out_zynq(4, 640, 480);
 
     printf("start.\n");
 
     pipeline_native(input, out_native);
-    save_image(out_native, argv[2]);
+    save_image(out_native, "out_native.png");
     printf("cpu program results saved.\n");
     //out_native = load_image("out_native.png");
     //printf("cpu program results loaded.\n");
@@ -70,7 +65,7 @@ int main(int argc, char **argv) {
     unsigned fails = 0;
     for (int y = 0; y < out_zynq.extent(2); y++) {
         for (int x = 0; x < out_zynq.extent(1); x++) {
-            for (int c = 0; c < out_zynq.extent(0); c++) {
+            for (int c = 0; c < 3; c++) {
                 if (out_native(x, y, c) != out_zynq(c, x, y)) {
                     printf("out_native(%d, %d, %d) = %d, but out_c(%d, %d, %d) = %d\n",
                            x, y, c, out_native(x, y, c),
@@ -97,7 +92,7 @@ int main(int argc, char **argv) {
 
     // Timing code. Timing doesn't include copying the input data to
     // the gpu or copying the output back.
-    double min_t2 = benchmark(5, 10, [&]() {
+    double min_t2 = benchmark(5, 20, [&]() {
             pipeline_zynq(input, out_zynq, hwacc, cma);
         });
     printf("accelerator program runtime: %g\n", min_t2 * 1e3);
