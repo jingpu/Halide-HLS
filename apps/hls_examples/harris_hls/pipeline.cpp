@@ -111,8 +111,11 @@ public:
     void compile_gpu() {
         std::cout << "\ncompiling gpu code..." << std::endl;
 
-        output.compute_root().gpu_tile(x, y, 32, 8);
-        cim.compute_root().gpu_tile(x, y, 32, 8);
+        grad_gx.update(0).unroll(box.x).unroll(box.y);
+        grad_gy.update(0).unroll(box.x).unroll(box.y);
+        grad_gxy.update(0).unroll(box.x).unroll(box.y);
+        output.compute_root().gpu_tile(x, y, 32, 16);
+        cim.compute_root().gpu_tile(x, y, 32, 16);
 
         //conv1.compute_at(output, Var::gpu_blocks()).gpu_threads(x, y, c);
 

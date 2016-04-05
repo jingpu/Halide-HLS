@@ -24,7 +24,7 @@ out.png: run
 	./run ../../images/benchmark_8mp_gray.png
 
 out_cuda.png: run_cuda
-	CUDA_LAUNCH_BLOCKING=1 HL_NUM_THREADS=4 ./run_cuda ../../images/benchmark_1080p_gray.png
+	CUDA_LAUNCH_BLOCKING=1 HL_NUM_THREADS=4 ./run_cuda ../../images/benchmark_8mp_gray.png
 
 #pipeline_zynq.o: pipeline_zynq.c
 #	$(CXX) -c -O2 $(CXXFLAGS) -g -Wall -Werror $^ -o $@
