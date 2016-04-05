@@ -25,7 +25,8 @@ public:
           output("output"), hw_output("hw_output")
     {
         // Add a boundary condition
-        clamped = BoundaryConditions::repeat_edge(input);
+        //clamped = BoundaryConditions::repeat_edge(input);
+        clamped(x, y) = input(x+40, y+40);
 
         // Construct the bilateral grid
         Expr val = clamped(x * s_sigma + r.x - s_sigma/2, y * s_sigma + r.y - s_sigma/2);
@@ -178,7 +179,8 @@ public:
           output("output")
     {
         // Add a boundary condition
-        clamped = BoundaryConditions::repeat_edge(input);
+        //clamped = BoundaryConditions::repeat_edge(input);
+        clamped(x, y) = input(x+40, y+40);
 
         // shuffle the input
         input_shuffled(x_in, y_in, x_grid, y_grid)
@@ -242,52 +244,27 @@ public:
         output(x, y) = output_shuffled(x%s_sigma, y%s_sigma, x/s_sigma, y/s_sigma);
 
         // The comment constraints and schedules.
-        output.bound(x, 0, 1024).bound(y, 0, 1024);
+        Expr out_width = output.output_buffer().width();
+        Expr out_height = output.output_buffer().height();
+        output
+            .bound(x, 0, (out_width/480)*480)
+            .bound(y, 0, (out_height/640)*640);
 
         // Arguments
         args = {input};
     }
 
-    void compile_cpu() {
-        std::cout << "\ncompiling cpu code..." << std::endl;
-        input_shuffled.vectorize(x_in);
-        input2_shuffled.vectorize(x_in);
-        output.vectorize(x_in);
-
-        output_shuffled.compute_root();
-        output_shuffled.tile(x_grid, y_grid, xo, yo, x_grid, y_grid, 32, 32);
-
-        blury.store_at(output_shuffled, xo).compute_at(output_shuffled, x_grid).reorder(x, y, z, c);
-        blurx.store_at(output_shuffled, xo).compute_at(output_shuffled, x_grid).reorder(x, y, z, c);
-        blurz.store_at(output_shuffled, xo).compute_at(output_shuffled, x_grid).reorder(z, x, y, c);
-
-        histogram.store_at(output_shuffled, xo).compute_at(output_shuffled, x_grid).reorder(c, z, x, y).unroll(c).unroll(z);
-        histogram.update().reorder(c, r.x, r.y, x, y).unroll(c);
-
-        input_shuffled.store_at(output_shuffled, xo).compute_at(output_shuffled, x_grid);
-        input2_shuffled.store_at(output_shuffled, xo).compute_at(output_shuffled, x_grid);
-
-        //output.print_loop_nest();
-
-        output.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
-        output.compile_to_header("pipeline_native.h", args, "pipeline_native");
-        output.compile_to_object("pipeline_native.o", args, "pipeline_native");
-    }
-
 
     void compile_hls() {
         std::cout << "\ncompiling HLS code..." << std::endl;
-        output.tile(x, y, xo, yo, x_in, y_in, 256, 256);
+        output.tile(x, y, xo, yo, x_in, y_in, 480, 640);
 
         output_shuffled.compute_at(output, xo);
-        output_shuffled.tile(x_grid, y_grid, xo, yo, x_grid, y_grid, 32, 32);
 
         input_shuffled.compute_at(output_shuffled, xo);
         input2_shuffled.compute_at(output_shuffled, xo);
-        //input_shuffled.compute_root();
-        //input2_shuffled.compute_root();
-        //output_shuffled.compute_root();
 
+        output_shuffled.tile(x_grid, y_grid, xo, yo, x_grid, y_grid, 60, 80);
         output_shuffled.accelerate({input_shuffled, input2_shuffled}, x_grid, xo);
 
         blury.linebuffer().reorder(x, y, z, c);
@@ -318,6 +295,7 @@ public:
 
         output.compile_to_lowered_stmt("pipeline_zynq.ir.html", args, HTML, target);
         output.compile_to_object("pipeline_zynq.o", args, "pipeline_zynq", target);
+        output.compile_to_assembly("pipeline_zynq.s", args, "pipeline_zynq", target);
     }
 };
 

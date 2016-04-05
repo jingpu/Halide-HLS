@@ -15,9 +15,11 @@
 using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
-    if (argc < 2) {
-        printf("Usage: ./run input.png\n");
-        return 0;
+    // Open the buffer allocation device
+    int cma = open("/dev/cmabuffer0", O_RDWR);
+    if(cma == -1){
+        printf("Failed to open cma provider!\n");
+        return(0);
     }
 
     int hwacc = open("/dev/hwacc0", O_RDWR);
@@ -26,10 +28,9 @@ int main(int argc, char **argv) {
         return(0);
     }
 
-
     Image<uint8_t> input = load_image(argv[1]);
-    Image<uint8_t> out_native(1024, 1024, 1);
-    Image<uint8_t> out_zynq(1024, 1024, 1);
+    Image<uint8_t> out_native(480*4, 640*4);
+    Image<uint8_t> out_zynq(480, 640);
 
     printf("start.\n");
 
@@ -39,28 +40,26 @@ int main(int argc, char **argv) {
     //out_native = load_image("out_native.png");
     //printf("cpu program results loaded.\n");
 
-    pipeline_zynq(input, out_zynq, hwacc);
+    pipeline_zynq(input, out_zynq, hwacc, cma);
     save_image(out_zynq, "out_zynq.png");
     printf("accelerator program results saved.\n");
 
     printf("checking results...\n");
-    bool pass = true;
+    unsigned fails = 0;
     for (int y = 0; y < out_zynq.height(); y++) {
         for (int x = 0; x < out_zynq.width(); x++) {
-            if (out_native(x, y) != out_zynq(x, y)) {
-                printf("out_native(%d, %d) = %d, but out_zynq(%d, %d) = %d\n",
+            if (fabs(out_native(x, y) - out_zynq(x, y)) > 1e-4) {
+                printf("out_native(%d, %d) = %d, but out_c(%d, %d) = %d\n",
                        x, y, out_native(x, y),
                        x, y, out_zynq(x, y));
-                pass = false;
+		fails++;
             }
 	}
     }
-    if (!pass) {
-      printf("failed.\n");
-      close(hwacc);
-      return 1;
-    } else {
-      printf("passed.\n");
+    if (!fails) {
+        printf("passed.\n");
+    } else  {
+        printf("%u fails.\n", fails);
     }
 
     printf("\nstart timing code...\n");
@@ -75,10 +74,11 @@ int main(int argc, char **argv) {
     // Timing code. Timing doesn't include copying the input data to
     // the gpu or copying the output back.
     double min_t2 = benchmark(5, 10, [&]() {
-        pipeline_zynq(input, out_zynq, hwacc);
+        pipeline_zynq(input, out_zynq, hwacc, cma);
       });
     printf("accelerator program runtime: %g\n", min_t2 * 1e3);
 
     close(hwacc);
+    close(cma);
     return 0;
 }

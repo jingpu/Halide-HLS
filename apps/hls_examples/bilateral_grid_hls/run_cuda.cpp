@@ -13,15 +13,10 @@
 using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
-    if (argc < 2) {
-        printf("Usage: ./run input.png\n");
-        return 0;
-    }
-
     int iter = 5;
     Image<uint8_t> input = load_image(argv[1]);
-    Image<uint8_t> out_native(input.width(), input.height());
-    Image<uint8_t> out_cuda(input.width(), input.height());
+    Image<uint8_t> out_native(480*4, 640*4);
+    Image<uint8_t> out_cuda(480*4, 640*4);
 
     printf("\nstart timing code...\n");
 
