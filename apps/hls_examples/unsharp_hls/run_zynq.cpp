@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
 
     Image<uint8_t> input = load_image(argv[1]);
     Image<uint8_t> out_native(2400, 3200, 3);
-    Image<uint8_t> out_zynq(480*1, 640*1, 3);
+    Image<uint8_t> out_zynq(480*5, 640*5, 3, 0, true);
 
     printf("start.\n");
 

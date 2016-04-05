@@ -41,23 +41,24 @@ public:
                                     + 150 * cast<uint16_t>(in_bounded(1, x, y))
                                     + 29 * cast<uint16_t>(in_bounded(2, x, y))) >> 8);
 
-        /*
-        // 2D filter: seperate x and y dim
-        sum_y(x, y) += kernel(win.x) * cast<uint16_t>(gray(x, y+win.x));
-        blur_y(x, y) = cast<uint8_t>(sum_y(x, y) >> 8);
+        if (false) {
+            // 2D filter: seperate x and y dim
+            sum_y(x, y) += kernel(win.x) * cast<uint16_t>(gray(x, y+win.x));
+            blur_y(x, y) = cast<uint8_t>(sum_y(x, y) >> 8);
 
-        sum_x(x, y) += kernel(win.x) * cast<uint16_t>(blur_y(x+win.x, y));
-        blur_x(x, y) = cast<uint8_t>(sum_x(x, y) >> 8);
+            sum_x(x, y) += kernel(win.x) * cast<uint16_t>(blur_y(x+win.x, y));
+            blur_x(x, y) = cast<uint8_t>(sum_x(x, y) >> 8);
 
-        sum_y.update(0).unroll(win.x);
-        sum_x.update(0).unroll(win.x);
-        */
+            sum_y.update(0).unroll(win.x);
+            sum_x.update(0).unroll(win.x);
+        } else {
 
-        // 2D filter: direct map
-        sum_x(x, y) += cast<uint32_t>(gray(x+win2.x, y+win2.y)) * kernel(win2.x) * kernel(win2.y);
-        blur_x(x, y) = cast<uint8_t>(sum_x(x, y) >> 16);
+            // 2D filter: direct map
+            sum_x(x, y) += cast<uint32_t>(gray(x+win2.x, y+win2.y)) * kernel(win2.x) * kernel(win2.y);
+            blur_x(x, y) = cast<uint8_t>(sum_x(x, y) >> 16);
 
-        sum_x.update(0).unroll(win2.x).unroll(win2.y);
+            sum_x.update(0).unroll(win2.x).unroll(win2.y);
+        }
 
         sharpen(x, y) = cast<uint8_t>(clamp(2 * cast<uint16_t>(gray(x, y)) - blur_x(x, y), 0, 255));
 
@@ -136,10 +137,13 @@ public:
         output.compile_to_zynq_c("pipeline_zynq.c", args, "pipeline_zynq", target);
         output.compile_to_header("pipeline_zynq.h", args, "pipeline_zynq", target);
 
-        in_bounded.vectorize(x, 16).unroll(c);
+        in_bounded.vectorize(x, 8).unroll(c);
         output.reorder(c, xi, yi, xo, yo)
-            .vectorize(xi, 16).unroll(c);
+            .vectorize(xi, 8).unroll(c);
         output.fuse(xo, yo, xo).parallel(xo);
+
+        //in.set_stride(0, 3).set_stride(2, 1).set_bounds(2, 0, 3);
+        output.output_buffer().set_stride(0, 3).set_stride(2, 1);
 
         output.compile_to_object("pipeline_zynq.o", args, "pipeline_zynq", target);
         output.compile_to_lowered_stmt("pipeline_zynq.ir.html", args, HTML, target);
