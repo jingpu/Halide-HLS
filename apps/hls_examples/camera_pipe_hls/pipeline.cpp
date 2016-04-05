@@ -187,17 +187,9 @@ class MyPipeline {
 
         } else if (schedule == 3) {
             // CUDA
-            g_r.compute_root().gpu_tile(x, y, 16, 16);;
-            g_b.compute_root().gpu_tile(x, y, 16, 16);;
-            r_gr.compute_root().gpu_tile(x, y, 16, 16);;
-            b_gr.compute_root().gpu_tile(x, y, 16, 16);;
-            r_gb.compute_root().gpu_tile(x, y, 16, 16);;
-            b_gb.compute_root().gpu_tile(x, y, 16, 16);;
-            r_b.compute_root().gpu_tile(x, y, 16, 16);;
-            b_r.compute_root().gpu_tile(x, y, 16, 16);;
             output.compute_root().unroll(y, 2).unroll(x, 2)
                 .reorder(c, x, y).bound(c, 0, 3).unroll(c)
-                .gpu_tile(x, y, 16, 16);;
+                .gpu_tile(x, y, 32, 16);;
 
         } else {
             // optimized for X86
@@ -256,7 +248,7 @@ class MyPipeline {
 
         if (schedule == 3) {
             // GPU schedule
-            curve.gpu_tile(x, 16);
+            curve.gpu_tile(x, 256);
         }
 
         Func hw_output("hw_output");
@@ -326,15 +318,15 @@ public:
         assert(schedule == 3);
         std::cout << "\ncompiling gpu code..." << std::endl;
 
-        processed.gpu_tile(tx, ty, c, 16, 16, 1);
-        denoised.compute_root().gpu_tile(x, y, 16, 16);
-        deinterleaved.compute_root();
-        corrected.compute_root().gpu_tile(x, y, c, 16, 16, 1);
-
-        //conv1.compute_at(output, Var::gpu_blocks()).gpu_threads(x, y, c);
+        processed.gpu_tile(tx, ty, c, 32, 16, 1);
+        denoised.compute_root().gpu_tile(x, y, 32, 16);
+        /*
+        deinterleaved.compute_root()
+            .reorder(c, x, y).unroll(c)
+            .gpu_tile(x, y, 32, 16);
+        */
 
         //processed.print_loop_nest();
-
         Target target = get_target_from_environment();
         target.set_feature(Target::CUDA);
         processed.compile_to_lowered_stmt("pipeline_cuda.ir.html", args, HTML, target);
