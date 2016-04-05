@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
 
     Image<uint8_t> input = load_image(argv[1]);
     Image<uint8_t> out_native(480*4, 640*4);
-    Image<uint8_t> out_zynq(480, 640);
+    Image<uint8_t> out_zynq(480*4, 640*4);
 
     printf("start.\n");
 
@@ -48,8 +48,8 @@ int main(int argc, char **argv) {
     unsigned fails = 0;
     for (int y = 0; y < out_zynq.height(); y++) {
         for (int x = 0; x < out_zynq.width(); x++) {
-            if (fabs(out_native(x, y) - out_zynq(x, y)) > 1e-4) {
-                printf("out_native(%d, %d) = %d, but out_c(%d, %d) = %d\n",
+            if (out_native(x, y) != out_zynq(x, y)) {
+                printf("out_native(%d, %d) = %d, but out_zynq(%d, %d) = %d\n",
                        x, y, out_native(x, y),
                        x, y, out_zynq(x, y));
 		fails++;
@@ -73,7 +73,7 @@ int main(int argc, char **argv) {
 
     // Timing code. Timing doesn't include copying the input data to
     // the gpu or copying the output back.
-    double min_t2 = benchmark(5, 10, [&]() {
+    double min_t2 = benchmark(10, 20, [&]() {
         pipeline_zynq(input, out_zynq, hwacc, cma);
       });
     printf("accelerator program runtime: %g\n", min_t2 * 1e3);
