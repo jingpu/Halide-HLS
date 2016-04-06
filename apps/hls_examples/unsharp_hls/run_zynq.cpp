@@ -22,15 +22,17 @@ int main(int argc, char **argv) {
         return(0);
     }
 
+    // open the hardware
     int hwacc = open("/dev/hwacc0", O_RDWR);
     if(hwacc == -1) {
-        printf("Failed to open hardware device!\\n");
+        printf("Failed to open hardware device!\n");
         return(0);
     }
 
+
     Image<uint8_t> input = load_image(argv[1]);
-    Image<uint8_t> out_native(480*4, 640*4);
-    Image<uint8_t> out_zynq(480*4, 640*4);
+    Image<uint8_t> out_native(2400, 3200, 3);
+    Image<uint8_t> out_zynq(480*5, 640*5, 3, 0, true);
 
     printf("start.\n");
 
@@ -48,13 +50,15 @@ int main(int argc, char **argv) {
     unsigned fails = 0;
     for (int y = 0; y < out_zynq.height(); y++) {
         for (int x = 0; x < out_zynq.width(); x++) {
-            if (out_native(x, y) != out_zynq(x, y)) {
-                printf("out_native(%d, %d) = %d, but out_zynq(%d, %d) = %d\n",
-                       x, y, out_native(x, y),
-                       x, y, out_zynq(x, y));
-		fails++;
+            for (int c = 0; c < out_zynq.channels(); c++) {
+                if (out_native(x, y, c) != out_zynq(x, y, c)) {
+                    printf("out_native(%d, %d, %d) = %d, but out_c(%d, %d, %d) = %d\n",
+                           x, y, c, out_native(x, y, c),
+                           x, y, c, out_zynq(x, y, c));
+                    fails++;
+                }
             }
-	}
+        }
     }
     if (!fails) {
         printf("passed.\n");
@@ -66,16 +70,16 @@ int main(int argc, char **argv) {
 
     // Timing code. Timing doesn't include copying the input data to
     // the gpu or copying the output back.
-    double min_t = benchmark(3, 10, [&]() {
-        pipeline_native(input, out_native);
-      });
+    double min_t = benchmark(1, 10, [&]() {
+            pipeline_native(input, out_native);
+        });
     printf("CPU program runtime: %g\n", min_t * 1e3);
 
     // Timing code. Timing doesn't include copying the input data to
     // the gpu or copying the output back.
-    double min_t2 = benchmark(10, 20, [&]() {
-        pipeline_zynq(input, out_zynq, hwacc, cma);
-      });
+    double min_t2 = benchmark(5, 20, [&]() {
+            pipeline_zynq(input, out_zynq, hwacc, cma);
+        });
     printf("accelerator program runtime: %g\n", min_t2 * 1e3);
 
     close(hwacc);

@@ -1176,6 +1176,16 @@ class StreamOpt : public IRMutator {
                 insert_linebuffer = true;
 
             if (insert_linebuffer) {
+
+                for (size_t i = 0; i < kernel.dims.size(); i++) {
+                    Expr store_extent = simplify(kernel.dims[i].store_bound.max -
+                                                 kernel.dims[i].store_bound.min + 1);
+                    if (!is_zero(simplify(op->bounds[i].extent - store_extent))) {
+                        user_error << "linebuffer (" << store_extent << ") for " << op->name << " is not equal to realize extent (" << op->bounds[i].extent << ").\n";
+                    }
+                }
+
+
                 new_body = LinebufferForFunction(kernel).mutate(new_body);
                 debug(3) << "IR after LinebufferForFunction pass on Function " << kernel.name
                          << ":\n" << new_body << '\n';

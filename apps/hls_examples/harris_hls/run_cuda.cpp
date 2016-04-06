@@ -23,18 +23,18 @@ int main(int argc, char **argv) {
     }
 
     float k = 0.04;
-    float threshold = 100;
+    //float threshold = 100;
 
     int iter = 5;
     Image<uint8_t> input = load_image(argv[1]);
-    Image<uint8_t> out_native(input.width(), input.height());
-    Image<uint8_t> out_cuda(input.width(), input.height());
+    Image<uint8_t> out_native(2400, 3200);
+    Image<uint8_t> out_cuda(2400, 3200);
 
     printf("\nstart timing code...\n");
     // Timing code. Timing doesn't include copying the input data to
     // the gpu or copying the output back.
     double min_t = benchmark(iter, 10, [&]() {
-        pipeline_native(input, k, threshold, out_native);
+        pipeline_native(input, out_native);
       });
     printf("CPU program runtime: %g\n", min_t * 1e3);
     save_image(out_native, "out_native.png");
@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
     // Timing code. Timing doesn't include copying the input data to
     // the gpu or copying the output back.
     double min_t2 = benchmark(iter, 10, [&]() {
-        pipeline_cuda(input, k, threshold, out_cuda);
+        pipeline_cuda(input, out_cuda);
       });
     printf("Halide CUDA program runtime: %g\n", min_t2 * 1e3);
     save_image(out_cuda, "out_cuda.png");

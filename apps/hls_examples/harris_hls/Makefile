@@ -11,7 +11,7 @@ all: out.png
 pipeline: pipeline.cpp
 	$(CXX) $(CXXFLAGS) -Wall -g $^ $(LIB_HALIDE) -o $@ $(LDFLAGS) -ltinfo
 
-pipeline_hls.cpp pipeline_native.o pipeline_cuda.o: pipeline
+pipeline_hls.cpp pipeline_native.o pipeline_cuda.o pipeline_zynq.o: pipeline
 	HL_DEBUG_CODEGEN=0 ./pipeline
 
 run: run.cpp pipeline_hls.cpp hls_target.cpp pipeline_native.o
@@ -21,11 +21,22 @@ run_cuda: pipeline_native.o pipeline_cuda.o run_cuda.cpp
 	$(CXX) -O3 $(CXXFLAGS) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS) `pkg-config --libs opencv`
 
 out.png: run
-	./run ../../images/gray_small.png
+	./run ../../images/benchmark_8mp_gray.png
 
 out_cuda.png: run_cuda
-	CUDA_LAUNCH_BLOCKING=1 HL_NUM_THREADS=4 ./run_cuda ../../images/benchmark_1080p_gray.png
+	CUDA_LAUNCH_BLOCKING=1 HL_NUM_THREADS=4 ./run_cuda ../../images/benchmark_8mp_gray.png
 
+#pipeline_zynq.o: pipeline_zynq.c
+#	$(CXX) -c -O2 $(CXXFLAGS) -g -Wall -Werror $^ -o $@
+
+run_zynq.o: run_zynq.cpp
+	$(CXX) -c $(CXXFLAGS) -g -Wall -Werror $^ -o $@  $(PNGFLAGS)
+
+run_zynq: pipeline_zynq.o pipeline_native.o run_zynq.o
+	$(CXX) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
+
+out_zynq.png: run_zynq
+	HL_NUM_THREADS=3 ./run_zynq ../../images/benchmark_8mp_gray.png
 clean:
 	rm -f pipeline run corners.png
 	rm -f pipeline_native.h pipeline_native.o

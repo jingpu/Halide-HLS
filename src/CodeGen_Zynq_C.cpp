@@ -102,7 +102,7 @@ void CodeGen_Zynq_C::visit(const Allocate *op) {
         size_t nDims = op->extents.size();
         unsigned width, height, depth;
         internal_assert(nDims >= 2);
-        depth = 1;
+        depth = op->type.bytes();
         if (nDims > 2) {
             for (size_t i = 0; i < nDims - 2; i++)
                 depth *= *as_const_int(op->extents[i]);

@@ -3,7 +3,8 @@
 
 using namespace Halide;
 
-Var x("x"), y("y"), tx("tx"), ty("ty"), c("c"), xi("xi"), yi("yi");
+Var x("x"), y("y"), tx("tx"), ty("ty"), c("c"), xi("xi"), yi("yi"), z("z");
+Var xo("xo"), yo("yo");
 Var x_grid("x_grid"), y_grid("y_grid"), x_in("x_in"), y_in("y_in");
 
 // Average two positive values rounding up
@@ -14,20 +15,18 @@ Expr avg(Expr a, Expr b) {
 
 class MyPipeline {
     int schedule;
-
     ImageParam input;
-    ImageParam matrix_3200, matrix_7000;
-    Param<float> color_temp; //, 3200.0f);
-    Param<float> gamma; //, 1.8f);
-    Param<float> contrast; //, 10.0f);
+
     std::vector<Argument> args;
 
+    Func shifted;
     Func processed;
     Func denoised;
     Func deinterleaved;
     Func demosaiced;
     Func corrected;
-    Func curved;
+    Func hw_output;
+    Func curve;
 
     Func hot_pixel_suppression(Func input) {
         Expr a = max(max(input(x-2, y), input(x+2, y)),
@@ -185,26 +184,12 @@ class MyPipeline {
             // acelerator schedule
             g_r.linebuffer();
             g_b.linebuffer();
-            r_gr.linebuffer();
-            b_gr.linebuffer();
-            r_gb.linebuffer();
-            b_gb.linebuffer();
-            r_b.linebuffer();
-            b_r.linebuffer();
 
         } else if (schedule == 3) {
             // CUDA
-            g_r.compute_root().gpu_tile(x, y, 16, 16);;
-            g_b.compute_root().gpu_tile(x, y, 16, 16);;
-            r_gr.compute_root().gpu_tile(x, y, 16, 16);;
-            b_gr.compute_root().gpu_tile(x, y, 16, 16);;
-            r_gb.compute_root().gpu_tile(x, y, 16, 16);;
-            b_gb.compute_root().gpu_tile(x, y, 16, 16);;
-            r_b.compute_root().gpu_tile(x, y, 16, 16);;
-            b_r.compute_root().gpu_tile(x, y, 16, 16);;
             output.compute_root().unroll(y, 2).unroll(x, 2)
                 .reorder(c, x, y).bound(c, 0, 3).unroll(c)
-                .gpu_tile(x, y, 16, 16);;
+                .gpu_tile(x, y, 32, 16);;
 
         } else {
             // optimized for X86
@@ -226,24 +211,14 @@ class MyPipeline {
     }
 
 
-    Func color_correct(Func input, ImageParam matrix_3200, ImageParam matrix_7000, Param<float> kelvin) {
-        // Get a color matrix by linearly interpolating between two
-        // calibrated matrices using inverse kelvin.
-
-        Func matrix;
-        Expr alpha = (1.0f/kelvin - 1.0f/3200) / (1.0f/7000 - 1.0f/3200);
-        Expr val =  (matrix_3200(x, y) * alpha + matrix_7000(x, y) * (1 - alpha));
-        matrix(x, y) = cast<int32_t>(val * 256.0f); // Q8.8 fixed point
-        matrix.compute_root();
-
-        Func corrected("corrected");
+    Func color_correct(Func input, int32_t matrix[3][4]) {
         Expr ir = cast<int32_t>(input(x, y, 0));
         Expr ig = cast<int32_t>(input(x, y, 1));
         Expr ib = cast<int32_t>(input(x, y, 2));
 
-        Expr r = matrix(3, 0) + matrix(0, 0) * ir + matrix(1, 0) * ig + matrix(2, 0) * ib;
-        Expr g = matrix(3, 1) + matrix(0, 1) * ir + matrix(1, 1) * ig + matrix(2, 1) * ib;
-        Expr b = matrix(3, 2) + matrix(0, 2) * ir + matrix(1, 2) * ig + matrix(2, 2) * ib;
+        Expr r = matrix[0][3] + matrix[0][0] * ir + matrix[0][1] * ig + matrix[0][2] * ib;
+        Expr g = matrix[1][3] + matrix[1][0] * ir + matrix[1][1] * ig + matrix[1][2] * ib;
+        Expr b = matrix[2][3] + matrix[2][0] * ir + matrix[2][1] * ig + matrix[2][2] * ib;
 
         r = cast<int16_t>(r/256);
         g = cast<int16_t>(g/256);
@@ -255,13 +230,13 @@ class MyPipeline {
     }
 
 
-    Func apply_curve(Func input, Type result_type, Param<float> gamma, Param<float> contrast) {
+    Func apply_curve(Func input, Type result_type, float gamma, float contrast) {
         // copied from FCam
-        Func curve("curve");
+        //Func curve("curve");
 
         Expr xf = clamp(cast<float>(x)/1024.0f, 0.0f, 1.0f);
         Expr g = pow(xf, 1.0f/gamma);
-        Expr b = 2.0f - pow(2.0f, contrast/100.0f);
+        Expr b = 2.0f - (float) pow(2.0f, contrast/100.0f);
         Expr a = 2.0f - 2.0f*b;
         Expr z = select(g > 0.5f,
                         1.0f - (a*(1.0f-g)*(1.0f-g) + b*(1.0f-g)),
@@ -273,22 +248,19 @@ class MyPipeline {
 
         if (schedule == 3) {
             // GPU schedule
-            curve.gpu_tile(x, 16);
+            curve.gpu_tile(x, 256);
         }
 
-        Func curved;
-        curved(x, y, c) = curve(input(x, y, c));
+        Func hw_output("hw_output");
+        hw_output(x, y, c) = curve(input(x, y, c));
 
-        return curved;
+        return hw_output;
     }
 
 
 public:
-    MyPipeline(int s)
-        : schedule(s), input(UInt(16), 2),
-          matrix_3200(Float(32), 2, "m3200"), matrix_7000(Float(32), 2, "m7000"),
-          color_temp("color_temp"), gamma("gamma"), contrast("contrast"),
-          args({color_temp, gamma, contrast, input, matrix_3200, matrix_7000})
+    MyPipeline(int _schedule, int32_t matrix[3][4], float gamma, float contrast)
+        : schedule(_schedule), input(UInt(16), 2), curve("curve")
     {
         // Parameterized output type, because LLVM PTX (GPU) backend does not
         // currently allow 8-bit computations
@@ -302,16 +274,16 @@ public:
         // boundaries so that we don't need to check bounds. We're going
         // to make a 2560x1920 output image, just like the FCam pipe, so
         // shift by 16, 12
-        Func shifted;
+
         shifted(x, y) = input(x+16, y+12);
 
         denoised = hot_pixel_suppression(shifted);
         deinterleaved = deinterleave(denoised);
         demosaiced = demosaic(deinterleaved);
-        corrected = color_correct(demosaiced, matrix_3200, matrix_7000, color_temp);
-        curved = apply_curve(corrected, result_type, gamma, contrast);
+        corrected = color_correct(demosaiced, matrix);
+        hw_output = apply_curve(corrected, result_type, gamma, contrast);
 
-        processed(tx, ty, c) = curved(tx, ty, c);
+        processed(tx, ty, c) = hw_output(tx, ty, c);
 
         // Schedule
         // We can generate slightly better code if we know the output is a whole number of tiles.
@@ -322,6 +294,7 @@ public:
             .bound(ty, 0, (out_height/128)*128)
             .bound(c, 0, 3); // bound color loop 0-3, properly
 
+        args = {input};
     }
 
     void compile_cpu() {
@@ -345,15 +318,15 @@ public:
         assert(schedule == 3);
         std::cout << "\ncompiling gpu code..." << std::endl;
 
-        processed.gpu_tile(tx, ty, c, 16, 16, 1);
-        denoised.compute_root().gpu_tile(x, y, 16, 16);
-        deinterleaved.compute_root();
-        corrected.compute_root().gpu_tile(x, y, c, 16, 16, 1);
-
-        //conv1.compute_at(output, Var::gpu_blocks()).gpu_threads(x, y, c);
+        processed.gpu_tile(tx, ty, c, 32, 16, 1);
+        denoised.compute_root().gpu_tile(x, y, 32, 16);
+        /*
+        deinterleaved.compute_root()
+            .reorder(c, x, y).unroll(c)
+            .gpu_tile(x, y, 32, 16);
+        */
 
         //processed.print_loop_nest();
-
         Target target = get_target_from_environment();
         target.set_feature(Target::CUDA);
         processed.compile_to_lowered_stmt("pipeline_cuda.ir.html", args, HTML, target);
@@ -366,26 +339,31 @@ public:
         assert(schedule == 2);
         std::cout << "\ncompiling HLS code..." << std::endl;
 
-        // Block in chunks over tiles, do line buffering for intermediate functions
-        processed.tile(tx, ty, xi, yi, 128, 128).reorder(xi, yi, c, tx, ty);
-        denoised.compute_at(processed, tx);
-        corrected.compute_at(processed, tx);
-
-        // hardware pipeline from denoised to demosaiced
+        // Block in chunks over tiles
+        processed.tile(tx, ty, xi, yi, 128, 128)
+            .reorder(xi, yi, c, tx, ty);
+        shifted.compute_at(processed, tx);
+        hw_output.compute_at(processed, tx);
 
         Expr out_width = processed.output_buffer().width();
         Expr out_height = processed.output_buffer().height();
-        demosaiced
+        hw_output
             .bound(x, 0, (out_width/128)*128)
             .bound(y, 0, (out_height/128)*128);
 
-        demosaiced.compute_at(processed, tx);
-        demosaiced.tile(x, y, tx, ty, xi, yi, 128, 128);
-        demosaiced.tile(xi, yi, x_grid, y_grid, x_in, y_in, 2, 2);
-        demosaiced.reorder(x_in, y_in, c, x_grid, y_grid, tx, ty);
-        std::vector<Func> hw_bounds = demosaiced.accelerate({denoised}, x_grid, tx);
+        hw_output.tile(x, y, tx, ty, xi, yi, 128, 128)
+            .tile(xi, yi, x_grid, y_grid, x_in, y_in, 2, 2)
+            .reorder(x_in, y_in, c, x_grid, y_grid, tx, ty);
+        std::vector<Func> hw_bounds = hw_output.accelerate({shifted}, x_grid, tx);
+
+        curve.compute_at(hw_bounds[0], Var::outermost())
+            .store_at(hw_bounds[0], Var::outermost());
+
         deinterleaved.linebuffer().unroll(c);
-        hw_bounds[0].unroll(c).unroll(x).unroll(y);
+        deinterleaved.fifo_depth(demosaiced, 70);
+        demosaiced.linebuffer();
+        demosaiced.unroll(c).unroll(x).unroll(y);
+        corrected.linebuffer();
 
         //processed.print_loop_nest();
         processed.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
@@ -394,14 +372,348 @@ public:
     }
 };
 
+
+class MyPipelineOpt {
+    int schedule;
+    ImageParam input;
+
+    std::vector<Argument> args;
+
+    Func shifted;
+    Func input_shuffled, output_shuffled;
+    Func processed;
+    Func denoised;
+    Func deinterleaved;
+    Func demosaiced;
+    Func corrected;
+    Func hw_output;
+    Func curve;
+
+    Func hot_pixel_suppression(Func input) {
+        Expr a = max(max(input(z, x-1, y), input(z, x+1, y)),
+                     max(input(z, x, y-1), input(z, x, y+1)));
+        Expr b = min(min(input(z, x-1, y), input(z, x+1, y)),
+                     min(input(z, x, y-1), input(z, x, y+1)));
+
+        Func denoised("denoised");
+        denoised(z, x, y) = clamp(input(z, x, y), b, a);
+
+        return denoised;
+    }
+
+    Func interleave_x(Func a, Func b) {
+        Func out;
+        //out(x, y) = select((x%2)==0, a(x/2, y), b(x/2, y));
+        out(z, x, y) = select((z%2)==0, a(x, y), b(x, y));
+        return out;
+    }
+
+    Func interleave_y(Func a, Func b) {
+        Func out;
+        //out(x, y) = select((y%2)==0, a(x, y/2), b(x, y/2));
+        out(z, x, y) = select((z/2)==0, a(z, x, y), b(z, x, y));
+        return out;
+    }
+
+    Func deinterleave(Func raw) {
+        // Deinterleave the color channels
+        Func deinterleaved("deinterleaved");
+
+        deinterleaved(c, x, y) = raw(c, x, y);
+        return deinterleaved;
+    }
+
+    Func demosaic(Func deinterleaved) {
+        // These are the values we already know from the input
+        // x_y = the value of channel x at a site in the input of channel y
+        // gb refers to green sites in the blue rows
+        // gr refers to green sites in the red rows
+
+        // Give more convenient names to the four channels we know
+        Func r_r, g_gr, g_gb, b_b;
+        g_gr(x, y) = deinterleaved(0, x, y);
+        r_r(x, y)  = deinterleaved(1, x, y);
+        b_b(x, y)  = deinterleaved(2, x, y);
+        g_gb(x, y) = deinterleaved(3, x, y);
+
+
+        // These are the ones we need to interpolate
+        Func b_r, g_r, b_gr, r_gr, b_gb, r_gb, r_b, g_b;
+
+        // First calculate green at the red and blue sites
+
+        // Try interpolating vertically and horizontally. Also compute
+        // differences vertically and horizontally. Use interpolation in
+        // whichever direction had the smallest difference.
+        Expr gv_r  = avg(g_gb(x, y-1), g_gb(x, y));
+        Expr gvd_r = absd(g_gb(x, y-1), g_gb(x, y));
+        Expr gh_r  = avg(g_gr(x+1, y), g_gr(x, y));
+        Expr ghd_r = absd(g_gr(x+1, y), g_gr(x, y));
+
+        g_r(x, y)  = select(ghd_r < gvd_r, gh_r, gv_r);
+
+        Expr gv_b  = avg(g_gr(x, y+1), g_gr(x, y));
+        Expr gvd_b = absd(g_gr(x, y+1), g_gr(x, y));
+        Expr gh_b  = avg(g_gb(x-1, y), g_gb(x, y));
+        Expr ghd_b = absd(g_gb(x-1, y), g_gb(x, y));
+
+        g_b(x, y)  = select(ghd_b < gvd_b, gh_b, gv_b);
+
+        // Next interpolate red at gr by first interpolating, then
+        // correcting using the error green would have had if we had
+        // interpolated it in the same way (i.e. add the second derivative
+        // of the green channel at the same place).
+        Expr correction;
+        correction = g_gr(x, y) - avg(g_r(x, y), g_r(x-1, y));
+        r_gr(x, y) = correction + avg(r_r(x-1, y), r_r(x, y));
+
+        // Do the same for other reds and blues at green sites
+        correction = g_gr(x, y) - avg(g_b(x, y), g_b(x, y-1));
+        b_gr(x, y) = correction + avg(b_b(x, y), b_b(x, y-1));
+
+        correction = g_gb(x, y) - avg(g_r(x, y), g_r(x, y+1));
+        r_gb(x, y) = correction + avg(r_r(x, y), r_r(x, y+1));
+
+        correction = g_gb(x, y) - avg(g_b(x, y), g_b(x+1, y));
+        b_gb(x, y) = correction + avg(b_b(x, y), b_b(x+1, y));
+
+        // Now interpolate diagonally to get red at blue and blue at
+        // red. Hold onto your hats; this gets really fancy. We do the
+        // same thing as for interpolating green where we try both
+        // directions (in this case the positive and negative diagonals),
+        // and use the one with the lowest absolute difference. But we
+        // also use the same trick as interpolating red and blue at green
+        // sites - we correct our interpolations using the second
+        // derivative of green at the same sites.
+
+        correction = g_b(x, y)  - avg(g_r(x, y), g_r(x-1, y+1));
+        Expr rp_b  = correction + avg(r_r(x, y), r_r(x-1, y+1));
+        Expr rpd_b = absd(r_r(x, y), r_r(x-1, y+1));
+
+        correction = g_b(x, y)  - avg(g_r(x-1, y), g_r(x, y+1));
+        Expr rn_b  = correction + avg(r_r(x-1, y), r_r(x, y+1));
+        Expr rnd_b = absd(r_r(x-1, y), r_r(x, y+1));
+
+        r_b(x, y)  = select(rpd_b < rnd_b, rp_b, rn_b);
+
+
+        // Same thing for blue at red
+        correction = g_r(x, y)  - avg(g_b(x, y), g_b(x+1, y-1));
+        Expr bp_r  = correction + avg(b_b(x, y), b_b(x+1, y-1));
+        Expr bpd_r = absd(b_b(x, y), b_b(x+1, y-1));
+
+        correction = g_r(x, y)  - avg(g_b(x+1, y), g_b(x, y-1));
+        Expr bn_r  = correction + avg(b_b(x+1, y), b_b(x, y-1));
+        Expr bnd_r = absd(b_b(x+1, y), b_b(x, y-1));
+
+        b_r(x, y)  =  select(bpd_r < bnd_r, bp_r, bn_r);
+
+        // Interleave the resulting channels
+        Func r = interleave_y(interleave_x(r_gr, r_r),
+                              interleave_x(r_b, r_gb));
+        Func g = interleave_y(interleave_x(g_gr, g_r),
+                              interleave_x(g_b, g_gb));
+        Func b = interleave_y(interleave_x(b_gr, b_r),
+                              interleave_x(b_b, b_gb));
+
+        Func output("demosaiced");
+        output(z, x, y, c) = select(c == 0, r(z, x, y),
+                                    c == 1, g(z, x, y),
+                                    b(z, x, y));
+
+
+        /* THE SCHEDULE */
+        if (schedule == 2) {
+            // acelerator schedule
+            // FIXME g_r and g_r should be linebuffered
+            //g_r.linebuffer();
+            //g_b.linebuffer();
+        }
+
+        return output;
+    }
+
+
+    Func color_correct(Func input, int32_t matrix[3][4]) {
+        Expr ir = cast<int32_t>(input(z, x, y, 0));
+        Expr ig = cast<int32_t>(input(z, x, y, 1));
+        Expr ib = cast<int32_t>(input(z, x, y, 2));
+
+        Expr r = matrix[0][3] + matrix[0][0] * ir + matrix[0][1] * ig + matrix[0][2] * ib;
+        Expr g = matrix[1][3] + matrix[1][0] * ir + matrix[1][1] * ig + matrix[1][2] * ib;
+        Expr b = matrix[2][3] + matrix[2][0] * ir + matrix[2][1] * ig + matrix[2][2] * ib;
+
+        r = cast<int16_t>(r/256);
+        g = cast<int16_t>(g/256);
+        b = cast<int16_t>(b/256);
+        corrected(z, x, y, c) = select(c == 0, r,
+                                    select(c == 1, g, b));
+
+        return corrected;
+    }
+
+
+    Func apply_curve(Func input, float gamma, float contrast) {
+        // copied from FCam
+        //Func curve("curve");
+
+        Expr xf = clamp(cast<float>(x)/1024.0f, 0.0f, 1.0f);
+        Expr g = pow(xf, 1.0f/gamma);
+        Expr b = 2.0f - (float) pow(2.0f, contrast/100.0f);
+        Expr a = 2.0f - 2.0f*b;
+        Expr val = select(g > 0.5f,
+                        1.0f - (a*(1.0f-g)*(1.0f-g) + b*(1.0f-g)),
+                        a*g*g + b*g);
+
+        curve(x) = cast<uint8_t>(clamp(val*256.0f, 0.0f, 255.0f));
+        curve.compute_root(); // It's a LUT, compute it once ahead of time.
+
+        if (schedule == 3) {
+            // GPU schedule
+            curve.gpu_tile(x, 16);
+        }
+
+        Func hw_output("hw_output");
+        hw_output(c, z, x, y) = select(c==3, 0, curve(input(z, x, y, c)));
+
+        return hw_output;
+    }
+
+
+public:
+    MyPipelineOpt(int _schedule, int32_t matrix[3][4], float gamma, float contrast)
+        : schedule(_schedule), input(UInt(16), 2),
+          input_shuffled("input_shuffled"), output_shuffled("output_shuffled"),
+          curve("curve")
+    {
+        // The camera pipe is specialized on the 2592x1968 images that
+        // come in, so we'll just use an image instead of a uniform image.
+
+        // shift things inwards to give us enough padding on the
+        // boundaries so that we don't need to check bounds. We're going
+        // to make a 2560x1920 output image, just like the FCam pipe, so
+        // shift by 16, 12
+
+        shifted(x, y) = input(x+16, y+12);
+        input_shuffled(z, x, y) = shifted(x*2 + z%2, y*2 + z/2); // shuffle to 2x2 grid order
+
+        denoised = hot_pixel_suppression(input_shuffled);
+        deinterleaved = deinterleave(denoised);
+        demosaiced = demosaic(deinterleaved);
+        corrected = color_correct(demosaiced, matrix);
+        hw_output = apply_curve(corrected, gamma, contrast);
+
+        output_shuffled(c, z, x, y) = hw_output(c, z, x, y);
+
+        processed(c, x, y) = output_shuffled(c, cast<int>(x%2 + (y%2)*2), x/2, y/2);
+
+        // Schedule
+        // We can generate slightly better code if we know the output is a whole number of tiles.
+        Expr out_width = processed.output_buffer().extent(1);
+        Expr out_height = processed.output_buffer().extent(2);
+        processed
+            .bound(x, 0, (out_width/640)*640)
+            .bound(y, 0, (out_height/480)*480)
+            .bound(c, 0, 4); // bound color loop 0-3, properly
+
+        processed.output_buffer()
+            .set_stride(0, 1)
+            .set_stride(1, 4);
+
+        args = {input};
+    }
+
+    void compile_hls() {
+        assert(schedule == 2);
+        std::cout << "\ncompiling HLS code..." << std::endl;
+
+        // Block in chunks over tiles
+        processed.tile(x, y, xo, yo, xi, yi, 640, 480)
+            .reorder(c, xi, yi, xo, yo);
+        //shifted.compute_at(processed, xo);
+        input_shuffled.compute_at(processed, xo);
+        hw_output.compute_at(processed, xo);
+
+        hw_output.tile(x, y, xo, yo, xi, yi, 320, 240)
+            .reorder(c, z, xi, yi, xo, yo);
+        std::vector<Func> hw_bounds = hw_output.accelerate({input_shuffled}, xi, xo);
+
+        curve.compute_at(hw_bounds[0], Var::outermost())
+            .store_at(hw_bounds[0], Var::outermost());
+
+        deinterleaved.linebuffer().unroll(c);
+        //deinterleaved.fifo_depth(demosaiced, 360);
+        demosaiced.linebuffer()
+            .unroll(c).unroll(z);
+        //corrected.linebuffer()
+        //    .reorder(c, z, x, y).unroll(c);
+        hw_bounds[0].unroll(c);
+
+        //processed.print_loop_nest();
+        processed.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
+        processed.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
+        processed.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
+
+        std::vector<Target::Feature> features({Target::HLS});
+        Target target(Target::Linux, Target::ARM, 32, features);
+        processed.compile_to_zynq_c("pipeline_zynq.c", args, "pipeline_zynq", target);
+        processed.compile_to_header("pipeline_zynq.h", args, "pipeline_zynq", target);
+
+        input_shuffled.vectorize(x, 8).unroll(z);
+
+        Var xii, yii;
+        processed.tile(xi, yi, xi, yi, xii, yii, 2, 2);
+        processed.unroll(c).unroll(yii).vectorize(xii);
+
+        processed.fuse(xo, yo, xo).parallel(xo);
+
+        processed.compile_to_object("pipeline_zynq.o", args, "pipeline_zynq", target);
+        processed.compile_to_lowered_stmt("pipeline_zynq.ir.html", args, HTML, target);
+        processed.compile_to_assembly("pipeline_zynq.s", args, "pipeline_zynq", target);
+    }
+};
+
+
 int main(int argc, char **argv) {
-    MyPipeline p1(1);
+    if (argc < 4) {
+        printf("Usage: ./pipeline color_temp gamma contrast\n"
+               "e.g. ./pieline 3200 2 50");
+        return 0;
+    }
+
+    float color_temp = atof(argv[1]);
+    float gamma = atof(argv[2]);
+    float contrast = atof(argv[3]);
+
+    // These color matrices are for the sensor in the Nokia N900 and are
+    // taken from the FCam source.
+    float matrix_3200[][4] = {{ 1.6697f, -0.2693f, -0.4004f, -42.4346f},
+                               {-0.3576f,  1.0615f,  1.5949f, -37.1158f},
+                               {-0.2175f, -1.8751f,  6.9640f, -26.6970f}};
+
+    float matrix_7000[][4] = {{ 2.2997f, -0.4478f,  0.1706f, -39.0923f},
+                               {-0.3826f,  1.5906f, -0.2080f, -25.4311f},
+                               {-0.0888f, -0.7344f,  2.2832f, -20.0826f}};
+
+
+    // Get a color matrix by linearly interpolating between two
+    // calibrated matrices using inverse kelvin.
+    int32_t matrix[3][4];
+    for (int y = 0; y < 3; y++) {
+        for (int x = 0; x < 4; x++) {
+            float alpha = (1.0f/color_temp - 1.0f/3200) / (1.0f/7000 - 1.0f/3200);
+            float val =  matrix_3200[y][x] * alpha + matrix_7000[y][x] * (1 - alpha);
+            matrix[y][x] = (int32_t)(val * 256.0f); // Q8.8 fixed point
+        }
+    }
+
+    MyPipeline p1(1, matrix, gamma, contrast);
     p1.compile_cpu();
 
-    MyPipeline p2(2);
+    MyPipelineOpt p2(2, matrix, gamma, contrast);
     p2.compile_hls();
 
-    MyPipeline p3(3);
+    MyPipeline p3(3, matrix, gamma, contrast);
     p3.compile_gpu();
     return 0;
 }

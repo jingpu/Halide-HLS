@@ -13,3 +13,8 @@ run_cuda
 dump
 *.png
 *.ir.html
+*.s
+hls_proj/
+hls_prj/
+ref_design_hls_prj/
+
