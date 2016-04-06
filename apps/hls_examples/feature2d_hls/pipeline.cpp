@@ -68,9 +68,9 @@ public:
 
     // calculate Cim
     int scale = (1 << (Ksize-1)) * blockSize;
-    Expr lgx = cast<float>(grad_gx(x, y)) / scale / scale;
-    Expr lgy = cast<float>(grad_gy(x, y)) / scale / scale;
-    Expr lgxy = cast<float>(grad_gxy(x, y)) / scale / scale;
+    Expr lgx = cast<float>(grad_gx(x, y) / scale / scale);
+    Expr lgy = cast<float>(grad_gy(x, y) / scale / scale);
+    Expr lgxy = cast<float>(grad_gxy(x, y) / scale / scale);
     Expr det = lgx*lgy - lgxy*lgxy;
     Expr trace = lgx + lgy;
     cim(x, y) = det - k*trace*trace;
@@ -85,11 +85,11 @@ public:
     //kpt(x, y) = lgxy;
     //corners(x, y) = cim(x,y);
 
-    brief.define_extern("brief", {corners, input, input.width(), input.height(), threshold}, UInt(8), 2);
+    output.define_extern("brief", {corners, input, input.width(), input.height(), threshold}, UInt(8), 2);
 
-    hw_output(x, y) = brief(x, y);
+    //hw_output(x, y) = brief(x, y);
 
-    output(x, y) = hw_output(x, y);
+    //output(x, y) = hw_output(x, y);
 
     // Arguments
     //args = {input, k, threshold};
@@ -99,34 +99,35 @@ public:
   void compile_cpu() {
     std::cout << "\ncompiling cpu code..." << std::endl;
 
-    /*output.tile(x, y, xo, yo, xi, yi, 256, 256);
-    grad_x.compute_at(output, xo).vectorize(x, 8);
-    grad_y.compute_at(output, xo).vectorize(x, 8);
-    grad_xx.compute_at(output, xo).vectorize(x, 4);
-    grad_yy.compute_at(output, xo).vectorize(x, 4);
-    grad_xy.compute_at(output, xo).vectorize(x, 4);
-    grad_gx.compute_at(output, xo).vectorize(x, 4);
-    grad_gy.compute_at(output, xo).vectorize(x, 4);
-    grad_gxy.compute_at(output, xo).vectorize(x, 4);
-    cim.compute_at(output, xo).vectorize(x, 4);
+    corners.tile(x, y, xo, yo, xi, yi, 240, 320);
+    grad_x.compute_at(corners, xo).vectorize(x, 8);
+    grad_y.compute_at(corners, xo).vectorize(x, 8);
+    grad_xx.compute_at(corners, xo).vectorize(x, 4);
+    grad_yy.compute_at(corners, xo).vectorize(x, 4);
+    grad_xy.compute_at(corners, xo).vectorize(x, 4);
+    grad_gx.compute_at(corners, xo).vectorize(x, 4);
+    grad_gy.compute_at(corners, xo).vectorize(x, 4);
+    grad_gxy.compute_at(corners, xo).vectorize(x, 4);
+    cim.compute_at(corners, xo).vectorize(x, 4);
 
     grad_gx.update(0).unroll(box.x).unroll(box.y);
     grad_gy.update(0).unroll(box.x).unroll(box.y);
     grad_gxy.update(0).unroll(box.x).unroll(box.y);
 
-    output.fuse(xo, yo, xo).parallel(xo).vectorize(xi, 4); */ //TODO
+    corners.fuse(xo, yo, xo).parallel(xo).vectorize(xi, 4); 
+    //output.fuse(xo, yo, xo).parallel(xo).vectorize(xi, 4); 
     //original.compute_root();
     //original.output_buffer().set_bounds(0, 0, input.width());
     //original.output_buffer().set_bounds(1, 0, input.height());
     
     corners.compute_root();
-    brief.compute_root();
+    //brief.compute_root();
     //output.print_loop_nest();
     //kpt.compile_to_lowered_stmt("pipeline_padded.ir.html", args, HTML);
     output.compile_to_header("pipeline_native.h", args, "pipeline_native");
     output.compile_to_object("pipeline_native.o", args, "pipeline_native");
-    corners.compile_to_header("pipeline_corners.h", args, "pipeline_corners");
-    corners.compile_to_object("pipeline_corners.o", args, "pipeline_corners");
+    //corners.compile_to_header("pipeline_corners.h", args, "pipeline_corners");
+    //corners.compile_to_object("pipeline_corners.o", args, "pipeline_corners");
     //kpt.compile_to_header("pipeline_kpt.h", args, "pipeline_kpt");
     //kpt.compile_to_object("pipeline_kpt.o", args, "pipeline_kpt");
   }
@@ -134,21 +135,13 @@ public:
   void compile_gpu() {
     std::cout << "\ncompiling gpu code..." << std::endl;
 
-    output.compute_root().gpu_tile(x, y, 32, 8);
-    
-    grad_x.compute_root().gpu_tile(x, y, 16, 16);
-    grad_y.compute_root().gpu_tile(x, y, 16, 16);
-    grad_xx.compute_root().gpu_tile(x, y, 16, 16);
-    grad_yy.compute_root().gpu_tile(x, y, 16, 16);
-    grad_xy.compute_root().gpu_tile(x, y, 16, 16);
-    grad_gx.compute_root().gpu_tile(x, y, 16, 16);
-    grad_gy.compute_root().gpu_tile(x, y, 16, 16);
-    grad_gxy.compute_root().gpu_tile(x, y, 16, 16);
-    
-    cim.compute_root().gpu_tile(x, y, 32, 8);
-    corners.compute_root().gpu_tile(x, y, 32, 8);
-    brief.compute_root();
-
+    grad_gx.update(0).unroll(box.x).unroll(box.y);
+    grad_gy.update(0).unroll(box.x).unroll(box.y);
+    grad_gxy.update(0).unroll(box.x).unroll(box.y);
+    //output.compute_root(); //.gpu_tile(x, y, 32, 16);
+    cim.compute_root().gpu_tile(x, y, 32, 16);
+    corners.compute_root();
+    //brief.compute_root();
     //conv1.compute_at(output, Var::gpu_blocks()).gpu_threads(x, y, c);
 
     //output.print_loop_nest();

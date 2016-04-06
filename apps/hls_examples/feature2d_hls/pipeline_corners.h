@@ -30,7 +30,7 @@ struct halide_filter_metadata_t;
 #ifdef __cplusplus
 extern "C" {
 #endif
-int pipeline_corners(buffer_t *_p1___input_buffer, buffer_t *_corners_buffer) HALIDE_FUNCTION_ATTRS;
+int pipeline_corners(buffer_t *_p0_buffer, buffer_t *_corners_buffer) HALIDE_FUNCTION_ATTRS;
 int pipeline_corners_argv(void **args) HALIDE_FUNCTION_ATTRS;
 extern const struct halide_filter_metadata_t pipeline_corners_metadata;
 #ifdef __cplusplus
