@@ -1,0 +1,12 @@
+./run ../../images/gray_small.png ../../images/gray_flip.png
+start.
+keypoints number: 19840
+threshold: 100
+keypoints number: 20477
+threshold: 100
+finished running native code
+[-0.164968557596575, -1.273243491219004, 160.8930124421655;
+  -0.1376290063627328, -0.9452043513098844, 120.5470771062406;
+  -0.001104426270214257, -0.007862931355571466, 1]
+#./run ../../images/gray_small.png ../../images/gray_rotate90.png
+#./run ../../images/benchmark_1080p_gray.png ../../images/benchmark_1080p_gray_rotate90.png
