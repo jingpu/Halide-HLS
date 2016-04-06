@@ -345,10 +345,10 @@ static void call(stream<PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, EXTENT_2, EXT
     PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, EXTENT_2, EXTENT_3> buffer[BUFFER_EXTENT_1][BUFFER_EXTENT_0];
 #pragma HLS ARRAY_PARTITION variable=buffer complete dim=0
 
- LB2D_sipo:for (size_t idx_1 = 0; idx_1 < BUFFER_EXTENT_1; idx_1++) {
+    for (size_t idx_1 = 0; idx_1 < BUFFER_EXTENT_1; idx_1++) {
         for (size_t idx_0 = 0; idx_0 < BUFFER_EXTENT_0; idx_0++) {
 #pragma HLS DEPENDENCE array inter false
-#pragma HLS LOOP_FLATTEN off
+            //#pragma HLS LOOP_FLATTEN off
 #pragma HLS PIPELINE II=1
             PackedStencil<T, IN_EXTENT_0, IN_EXTENT_1, EXTENT_2, EXTENT_3> in = in_stream.read();
             // TODO make it a shift register
