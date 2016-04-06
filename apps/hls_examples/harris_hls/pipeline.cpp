@@ -70,7 +70,7 @@ public:
 
         // Perform non-maximal suppression
         Expr is_max = cim(x, y) > cim(x-1, y-1) && cim(x, y) > cim(x, y-1) &&
-            cim(x, y) > cim(x+1, y-1) && cim(x-1, y) > cim(x, y) &&
+            cim(x, y) > cim(x+1, y-1) && cim(x, y) > cim(x-1, y) &&
             cim(x, y) > cim(x+1, y) && cim(x, y) > cim(x-1, y+1) &&
             cim(x, y) > cim(x, y+1) && cim(x, y) > cim(x+1, y+1);
         hw_output(x, y) = select( is_max && (cim(x, y) >= threshold), cast<uint8_t>(255), 0);
