@@ -100,8 +100,8 @@ extern "C" int brief(buffer_t *input, buffer_t *img, int col, int row, float thr
                 }
             }
         }
-        printf("keypoints number: %d\n", (int)keypoints.size());
-        printf("threshold: %u\n", (uint8_t)threshold);
+        //printf("keypoints number: %d\n", (int)keypoints.size());
+        //printf("threshold: %u\n", (uint8_t)threshold);
         int num_kpt = out->extent[1];
         std::nth_element(keypoints.begin(), keypoints.begin() + num_kpt, keypoints.end(), KeypointResponseGreater());
         keypoints.resize(num_kpt);
@@ -134,7 +134,7 @@ int main(int argc, char **argv) {
     //float k = 0.04;
     //float threshold = 100;
     int nfeatures = 20;
-    int iter = 5;
+    int iter = 1;
 
     Image<uint8_t> input = load_image(argv[1]);
     Image<uint8_t> out_native(16, nfeatures);

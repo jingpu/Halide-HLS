@@ -101,8 +101,8 @@ extern "C" int brief(buffer_t *input, buffer_t *img, int col, int row, float thr
                 }
             }
         }
-        printf("keypoints number: %d\n", (int)keypoints.size());
-        printf("threshold: %u\n", (uint8_t)threshold);
+        //printf("keypoints number: %d\n", (int)keypoints.size());
+        //printf("threshold: %u\n", (uint8_t)threshold);
         int num_kpt = out->extent[1];
         std::nth_element(keypoints.begin(), keypoints.begin() + num_kpt, keypoints.end(), KeypointResponseGreater());
         keypoints.resize(num_kpt);
