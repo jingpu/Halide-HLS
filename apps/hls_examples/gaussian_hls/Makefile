@@ -21,7 +21,7 @@ run_cuda: pipeline_native.o pipeline_cuda.o run_cuda.cpp
 	$(CXX) -O3 $(CXXFLAGS) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
 
 out.png: run
-	./run ../../images/rgb.png out.png
+	./run ../../images/gray.png
 
 out_cuda.png: run_cuda
 	CUDA_LAUNCH_BLOCKING=1 HL_NUM_THREADS=4 ./run_cuda ../../images/benchmark_1080p_rgb.png
@@ -39,7 +39,7 @@ run_power: run_power.cpp
 	$(CXX) -O $(CXXFLAGS) -g -Wall -Werror $^ -o $@
 
 out_zynq.png: run_zynq
-	HL_NUM_THREADS=3 ./run_zynq ../../images/benchmark_8mp_rgb.png out_zynq.png
+	HL_NUM_THREADS=3 ./run_zynq ../../images/benchmark_8mp_gray.png
 
 clean:
 	rm -f pipeline run run_zynq

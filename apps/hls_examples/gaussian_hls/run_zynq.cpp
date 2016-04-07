@@ -47,10 +47,6 @@ void my_save_image(ImageType &im, const std::string &filename) {
 }
 
 int main(int argc, char **argv) {
-    if (argc < 3) {
-        printf("Usage: ./run input.png output.png\n");
-        return 0;
-    }
     // Open the buffer allocation device
     int cma = open("/dev/cmabuffer0", O_RDWR);
     if(cma == -1){
@@ -65,22 +61,22 @@ int main(int argc, char **argv) {
         return(0);
     }
 
-    Image<uint8_t> input = my_load_image(argv[1]);
+    Image<uint8_t> input = load_image(argv[1]);
     //Image<uint8_t> out_native(3, input.extent(1)-8, input.extent(2)-8);
     //Image<uint8_t> out_zynq(3, input.extent(1)-8, input.extent(2)-8);
-    Image<uint8_t> out_native(3, 256*4, 64*4*4);
-    Image<uint8_t> out_zynq(3, 256*4, 64*4*4);
+    Image<uint8_t> out_native(2400, 3200);
+    Image<uint8_t> out_zynq(480, 640);
 
     printf("start.\n");
 
     pipeline_native(input, out_native);
-    my_save_image(out_native, "out_native.png");
+    save_image(out_native, "out_native.png");
     printf("cpu program results saved.\n");
     //out_native = load_image("out_native.png");
     //printf("cpu program results loaded.\n");
 
     pipeline_zynq(input, out_zynq, hwacc, cma);
-    my_save_image(out_zynq, "out_zynq.png");
+    save_image(out_zynq, "out_zynq.png");
     printf("accelerator program results saved.\n");
 
     printf("checking results...\n");

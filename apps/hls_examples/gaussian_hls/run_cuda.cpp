@@ -13,11 +13,6 @@
 using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
-    if (argc < 2) {
-        printf("Usage: ./run input.png\n");
-        return 0;
-    }
-
     int iter = 5;
     Image<uint8_t> input = load_image(argv[1]);
     Image<uint8_t> out_native(input.width(), input.height(), input.channels());

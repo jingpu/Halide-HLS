@@ -15,10 +15,14 @@ public:
     Func output, hw_output;
     std::vector<Argument> args;
 
+    RDom win, win2;
+    Func sum_y, sum_x;
+
     MyPipeline()
-        : in(UInt(8), 3),
+        : in(UInt(8), 2),
           kernel("kernel"), blur_y("blur_y"), blur_x("blur_x"),
-          output("output"), hw_output("hw_output")
+          output("output"), hw_output("hw_output"),
+          win(-4, 9), win2(-4, 9, -4, 9)
     {
         // Define a 9x9 Gaussian Blur with a repeat-edge boundary condition.
         float sigma = 1.5f;
@@ -28,51 +32,32 @@ public:
         kernel(x) = cast<uint8_t>(kernel_f(x) * 255 /
                                   (kernel_f(0) + kernel_f(1)*2 + kernel_f(2)*2
                                    + kernel_f(3)*2 + kernel_f(4)*2));
-
         //in_bounded = BoundaryConditions::repeat_edge(in);
-        in_bounded(_0, _1, _2) = in(_0, _1 + 4, _2 + 4);
+        in_bounded(x, y) = in(x + 4, y + 4);
 
-        blur_y(c, x, y) = cast<uint8_t>((kernel(0) * cast<uint16_t>(in_bounded(c, x, y)) +
-                                         kernel(1) * (cast<uint16_t>(in_bounded(c, x, y-1)) +
-                                                      cast<uint16_t>(in_bounded(c, x, y+1))) +
-                                         kernel(2) * (cast<uint16_t>(in_bounded(c, x, y-2)) +
-                                                      cast<uint16_t>(in_bounded(c, x, y+2))) +
-                                         kernel(3) * (cast<uint16_t>(in_bounded(c, x, y-3)) +
-                                                      cast<uint16_t>(in_bounded(c, x, y+3))) +
-                                         kernel(4) * (cast<uint16_t>(in_bounded(c, x, y-4)) +
-                                                      cast<uint16_t>(in_bounded(c, x, y+4)))) >> 8);
 
-        blur_x(c, x, y) = cast<uint8_t>((kernel(0) * cast<uint16_t>(blur_y(c, x, y)) +
-                                         kernel(1) * (cast<uint16_t>(blur_y(c, x-1, y)) +
-                                                      cast<uint16_t>(blur_y(c, x+1, y))) +
-                                         kernel(2) * (cast<uint16_t>(blur_y(c, x-2, y)) +
-                                                      cast<uint16_t>(blur_y(c, x+2, y))) +
-                                         kernel(3) * (cast<uint16_t>(blur_y(c, x-3, y)) +
-                                                      cast<uint16_t>(blur_y(c, x+3, y))) +
-                                         kernel(4) * (cast<uint16_t>(blur_y(c, x-4, y)) +
-                                                      cast<uint16_t>(blur_y(c, x+4, y)))) >> 8);
+        if (false) {
+            // 2D filter: seperate x and y dim
+            sum_y(x, y) += kernel(win.x) * cast<uint16_t>(in_bounded(x, y+win.x));
+            blur_y(x, y) = cast<uint8_t>(sum_y(x, y) >> 8);
 
-        hw_output(c, x, y) = blur_x(c, x, y);
+            sum_x(x, y) += kernel(win.x) * cast<uint16_t>(blur_y(x+win.x, y));
+            blur_x(x, y) = cast<uint8_t>(sum_x(x, y) >> 8);
 
-        output(c, x, y) = hw_output(c, x, y);
+            sum_y.update(0).unroll(win.x);
+            sum_x.update(0).unroll(win.x);
+        } else {
 
-        //output.bound(x, 0, 1536).bound(y, 0, 2560);
-        output.bound(c, 0, 3);
+            // 2D filter: direct map
+            sum_x(x, y) += cast<uint32_t>(in_bounded(x+win2.x, y+win2.y)) * kernel(win2.x) * kernel(win2.y);
+            blur_x(x, y) = cast<uint8_t>(sum_x(x, y) >> 16);
 
-        in.set_stride(0, 1)
-            .set_stride(1, 3);
-        output.output_buffer()
-            .set_stride(0, 1)
-            .set_stride(1, 3);
+            sum_x.update(0).unroll(win2.x).unroll(win2.y);
+        }
 
-        in.set_bounds(0, 0, 3);
-        output.output_buffer().set_bounds(0, 0, 3);
+        hw_output(x, y) = blur_x(x, y);
 
-        // for certain size of images
-        Expr out_width = output.output_buffer().extent(1);
-        Expr out_height = output.output_buffer().extent(2);
-        output.bound(x, 0, (out_width/256)*256);
-        output.bound(y, 0, (out_height/64)*64);
+        output(x, y) = hw_output(x, y);
 
         // Arguments
         args = {in};
@@ -83,9 +68,9 @@ public:
         //kernel.compute_root();
 
         output.tile(x, y, xo, yo, xi, yi, 256, 64)
-            .unroll(c).vectorize(xi, 8)
+            .vectorize(xi, 8)
             .fuse(xo, yo, xo).parallel(xo);
-        blur_y.compute_at(output, xo).vectorize(x, 8).unroll(c);
+        //blur_y.compute_at(output, xo).vectorize(x, 8).unroll(c);
 
         //output.print_loop_nest();
 
@@ -97,7 +82,7 @@ public:
     void compile_gpu() {
         std::cout << "\ncompiling gpu code..." << std::endl;
 
-        output.gpu_tile(x, y, 16, 16);
+        output.gpu_tile(x, y, 32, 16);
 
         //output.print_loop_nest();
 
@@ -111,17 +96,17 @@ public:
     void compile_hls() {
         std::cout << "\ncompiling HLS code..." << std::endl;
         //kernel.compute_root();
-        output.tile(x, y, xo, yo, xi, yi, 256, 64);
+        output.tile(x, y, xo, yo, xi, yi, 480, 640);
         in_bounded.compute_at(output, xo);
 
         hw_output.compute_at(output, xo)
-            .tile(x, y, xo, yo, xi, yi, 256, 64);
+            .tile(x, y, xo, yo, xi, yi, 480, 640);
         hw_output.unroll(xi, 2);
 
         std::vector<Func> hw_bounds = hw_output.accelerate({in_bounded}, xi, xo);
-        hw_bounds[0].unroll(c).unroll(x).unroll(y);
+        hw_bounds[0].unroll(x).unroll(y);
 
-        blur_y.linebuffer().unroll(c).unroll(x).unroll(y);
+        //blur_y.linebuffer().unroll(c).unroll(x).unroll(y);
 
         //output.print_loop_nest();
         output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
@@ -133,8 +118,8 @@ public:
         output.compile_to_zynq_c("pipeline_zynq.c", args, "pipeline_zynq", target);
         output.compile_to_header("pipeline_zynq.h", args, "pipeline_zynq", target);
 
-        output.vectorize(xi, 16).unroll(c);
-        in_bounded.vectorize(_1, 16).unroll(_0);
+        output.vectorize(xi, 16);
+        in_bounded.vectorize(x, 16);
         output.fuse(xo, yo, xo).parallel(xo);
 
         output.compile_to_object("pipeline_zynq.o", args, "pipeline_zynq", target);
