@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
     Image<uint8_t> right_remap = load_image(argv[4]);
 
     Image<uint8_t> out_native(left.width(), left.height());
-    Image<uint8_t> out_zynq(256, 256);
+    Image<uint8_t> out_zynq(600*4, 400*8);
 
     printf("start.\n");
 
@@ -59,11 +59,6 @@ int main(int argc, char **argv) {
         for (int x = 0; x < out_zynq.width(); x++) {
             if (out_native(x, y) != 0 &&
                 out_native(x, y) != out_zynq(x, y)) {
-                /*
-                printf("out_native(%d, %d) = %d, but out_zynq(%d, %d) = %d\n",
-                       x, y, out_native(x, y),
-                       x, y, out_zynq(x, y));
-                */
                 fails++;
             }
 	}
@@ -73,13 +68,12 @@ int main(int argc, char **argv) {
     } else {
       printf("passed.\n");
     }
-
     printf("\nstart timing code...\n");
 
     // Timing code. Timing doesn't include copying the input data to
     // the gpu or copying the output back.
-    double min_t = benchmark_zynq(hwacc, 5, 10, [&]() {
-        pipeline_native(right, left, right_remap, left_remap, out_native);
+    double min_t = benchmark(1, 1, [&]() {
+            pipeline_native(right, left, right_remap, left_remap, out_native);
       });
     printf("CPU program runtime: %g\n", min_t * 1e3);
 

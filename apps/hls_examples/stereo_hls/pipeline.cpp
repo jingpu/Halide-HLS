@@ -232,14 +232,19 @@ MyPipelineOpt()
     output(x, y) = hw_output(x, y);
 
     // The comment constraints and schedules.
-    //output.bound(x, 0, 720);
-    //output.bound(y, 0, 405);
-
     // all inputs has three channels
     right.set_bounds(2, 0, 3);
     left.set_bounds(2, 0, 3);
     right_remap.set_bounds(2, 0, 3);
     left_remap.set_bounds(2, 0, 3);
+
+    /*
+    Expr out_width = output.output_buffer().width();
+    Expr out_height = output.output_buffer().height();
+    output
+        .bound(x, 0, (out_width/600)*600)
+        .bound(y, 0, (out_height/400)*400);
+    */
 
     // Arguments
     args = {right, left, right_remap, left_remap};
@@ -266,18 +271,16 @@ void compile_cpu() {
 void compile_hls() {
     std::cout << "\ncompiling HLS code..." << std::endl;
 
-    output.tile(x, y, xo, yo, x_in, y_in, 256, 256);
-
-    hw_output.compute_at(output, xo);
-    hw_output.tile(x, y, xo, yo, x_in, y_in, 256, 256);
-
+    output.tile(x, y, xo, yo, x_in, y_in, 600, 400);
     right_remapped.compute_at(hw_output, xo);
     left_remapped.compute_at(hw_output, xo);
-
     //right_padded.compute_at(hw_output, xo);
     //left_padded.compute_at(hw_output, xo);
     //right_remap_padded.compute_at(hw_output, xo);
     //left_remap_padded.compute_at(hw_output, xo);
+
+    hw_output.compute_at(output, xo);
+    hw_output.tile(x, y, xo, yo, x_in, y_in, 600, 400);
 
     //offset.update(0).unroll(search.x, 4);
     RVar search_xo, search_xi;
@@ -299,8 +302,6 @@ void compile_hls() {
     output.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
 
     // Create the Zynq platform target
-    //std::vector<Target::Feature> features({Target::HLS, Target::NoAsserts, Target::NoBoundsQuery});
-    //std::vector<Target::Feature> features({Target::HLS, Target::Debug});
     std::vector<Target::Feature> features({Target::HLS});
     Target target(Target::Linux, Target::ARM, 32, features);
     output.compile_to_zynq_c("pipeline_zynq.c", args, "pipeline_zynq", target);
@@ -313,9 +314,8 @@ void compile_hls() {
     output.fuse(xo, yo, xo).parallel(xo);
 
     //output.print_loop_nest();
-    //Module module = output.compile_to_module(args, "pipeline_zynq", target);
-    //compile_module_to_llvm_assembly(module, "pipeline_zynq.ll");
     output.compile_to_object("pipeline_zynq.o", args, "pipeline_zynq", target);
+    output.compile_to_assembly("pipeline_zynq.s", args, "pipeline_zynq", target);
     output.compile_to_lowered_stmt("pipeline_zynq.ir.html", args, HTML, target);
 }
 };
