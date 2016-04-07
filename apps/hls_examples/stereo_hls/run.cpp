@@ -24,8 +24,8 @@ int main(int argc, char **argv) {
     Image<uint8_t> right_remap = load_image(argv[4]);
 
     Image<uint8_t> out_native(left.width(), left.height());
-    //Image<uint8_t> out_hls(256, 256);
-    Image<uint8_t> out_hls(left.width(), left.height());
+    Image<uint8_t> out_hls(600, 400);
+    //Image<uint8_t> out_hls(left.width(), left.height());
 
 
     printf("start.\n");
@@ -38,7 +38,6 @@ int main(int argc, char **argv) {
 
     pipeline_hls(right, left, right_remap, left_remap, out_hls);
     save_image(out_hls, "out_hls.png");
-    //out_hls = load_image("out_hls.png");
 
     printf("finish running HLS code\n");
     printf("\nchecking results...\n");
@@ -59,13 +58,5 @@ int main(int argc, char **argv) {
     } else {
         printf("passed.\n");
     }
-
-    printf("\nstart timeing code...\n");
-    // Timing code. Timing doesn't include copying the input data to
-    // the gpu or copying the output back.
-    double min_t = benchmark(1, 10, [&]() {
-        pipeline_native(right, left, right_remap, left_remap, out_native);
-      });
-    printf("CPU program runtime: %g\n", min_t * 1e3);
     return 0;
 }

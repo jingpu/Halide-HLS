@@ -30,11 +30,11 @@ run_cuda: pipeline_native.o pipeline_cuda.o run_cuda.cpp
 	$(CXX) -O3 $(CXXFLAGS) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS) `pkg-config --libs opencv`
 
 out_zynq.png: run_zynq
-	HL_NUM_THREADS=3 ./run_zynq ../../images/left0224.png ../../images/left-remap.png ../../images/right0224.png ../../images/right-remap.png
-	#HL_NUM_THREADS=3 ./run_zynq ../../images/benchmark_1080p_rgb.png ../../images/benchmark_1080p_rgb.png ../../images/benchmark_1080p_rgb.png ../../images/benchmark_1080p_rgb.png
+	#HL_NUM_THREADS=3 ./run_zynq ../../images/left0224.png ../../images/left-remap.png ../../images/right0224.png ../../images/right-remap.png
+	HL_NUM_THREADS=3 ./run_zynq ../../images/benchmark_8mp_rgb.png ../../images/benchmark_8mp_rgb.png ../../images/benchmark_8mp_rgb.png ../../images/benchmark_8mp_rgb.png
 
 out_cuda.png: run_cuda
-	CUDA_LAUNCH_BLOCKING=1 HL_NUM_THREADS=4 ./run_cuda ../../images/benchmark_1080p_rgb.png ../../images/benchmark_1080p_rgb.png ../../images/benchmark_1080p_rgb.png ../../images/benchmark_1080p_rgb.png
+	CUDA_LAUNCH_BLOCKING=1 HL_NUM_THREADS=4 ./run_cuda ../../images/benchmark_8mp_rgb.png ../../images/benchmark_8mp_rgb.png ../../images/benchmark_8mp_rgb.png ../../images/benchmark_8mp_rgb.png
 
 clean:
 	rm -f pipeline run run_zynq run_cuda

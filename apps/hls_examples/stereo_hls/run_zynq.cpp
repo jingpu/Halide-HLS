@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
     Image<uint8_t> right_remap = load_image(argv[4]);
 
     Image<uint8_t> out_native(left.width(), left.height());
-    Image<uint8_t> out_zynq(256, 256);
+    Image<uint8_t> out_zynq(600, 400);
 
     printf("start.\n");
 
