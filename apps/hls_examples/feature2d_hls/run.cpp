@@ -117,7 +117,7 @@ extern "C" int brief(buffer_t *input, buffer_t *img, int col, int row, float thr
         //Mat cv_input = imread("../../images/gray_small.png", CV_LOAD_IMAGE_GRAYSCALE ); //TODO
         Mat sum;
         integral(input_trans, sum, CV_32S);
- 
+        printf("integral %d\n", sum.at<int32_t>(1,3)); 
         uint8_t *dst = (uint8_t *)(out->host);
         memset(dst, 0, num_kpt*16*sizeof(uint8_t));
         for (int i = 0; i < num_kpt ; ++i) {
@@ -142,8 +142,8 @@ int main(int argc, char **argv) {
     Image<uint8_t> out_native1(16, nfeatures);
     Image<float> out_corners0(input0.width(), input0.height(), input0.channels());
     Image<float> out_corners1(input1.width(), input1.height(), input1.channels());
-    Image<float> out_kpt0(input0.width(), input0.height(), input0.channels());
-    Image<float> out_kpt1(input1.width(), input1.height(), input1.channels());
+    //Image<float> out_kpt0(input0.width(), input0.height(), input0.channels());
+    //Image<float> out_kpt1(input1.width(), input1.height(), input1.channels());
     //Image<uint8_t> out_native(input.width(), input.height(), input.channels());
     //Image<uint8_t> out_hls(input.width(), input.height(), input.channels());
 
@@ -154,8 +154,8 @@ int main(int argc, char **argv) {
     pipeline_native(input1, out_native1);
     pipeline_corners(input1, out_corners1);
     //save_image(out_native, "out.png");
-    pipeline_kpt(input0, out_kpt0);
-    pipeline_kpt(input1, out_kpt1);
+    //pipeline_kpt(input0, out_kpt0);
+    //pipeline_kpt(input1, out_kpt1);
      
     printf("finished running native code\n");
 
@@ -192,7 +192,7 @@ int main(int argc, char **argv) {
             }
         }
     }
-*/
+
     for (int y = 0; y < out_kpt0.height(); y++) {
         for (int x = 0; x < out_kpt0.width(); x++) {
             if (fabs(out_kpt0(x, y, 0) - out_kpt1(out_kpt0.width()-x-1, y, 0)) > 1e-4) {
@@ -203,7 +203,7 @@ int main(int argc, char **argv) {
             }
         }
     }
-
+*/
 
     std::vector<KeyPoint> keypoints0;
     std::vector<KeyPoint> keypoints1;

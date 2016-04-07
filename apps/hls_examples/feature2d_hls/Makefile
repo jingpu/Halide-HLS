@@ -17,7 +17,7 @@ pipeline_hls.cpp pipeline_native.o pipeline_cuda.o: pipeline
 #run: run.cpp pipeline_hls.cpp hls_target.cpp pipeline_native.o
 #	$(CXX) $(CXXFLAGS) -O1 -DNDEBUG $(HLS_CXXFLAGS) -g -Wall -Werror $^ -lpthread -ldl $(PNGFLAGS) -o $@
 
-run: run.cpp pipeline_native.o pipeline_corners.o pipeline_kpt.o 
+run: run.cpp pipeline_native.o pipeline_corners.o  
 	$(CXX) $(CXXFLAGS) -O1 -DNDEBUG $(HLS_CXXFLAGS) -g -Wall -Werror $^ -lpthread -ldl $(PNGFLAGS) -o $@ $(PNGFLAGS) `pkg-config --libs opencv`
 
 

@@ -111,18 +111,18 @@ extern "C" int brief(buffer_t *input, buffer_t *img, int col, int row, float thr
         gray_img -= img->min[0] * img->stride[0];
         gray_img -= img->min[1] * img->stride[1];
 
-        Mat cv_input = Mat(img->extent[0], img->extent[1], CV_8UC1, gray_img);
-        Mat input_trans = cv_input.t();
+        Mat cv_input = Mat(img->extent[1], img->extent[0], CV_8UC1, gray_img);
+        //Mat input_trans = cv_input.t();
         //Mat cv_input = imread("../../images/gray_small.png", CV_LOAD_IMAGE_GRAYSCALE ); //TODO
-        Mat sum;
-        integral(input_trans, sum, CV_32S);
+        //Mat sum;
+        //integral(input_trans, sum, CV_32S);
  
         uint8_t *dst = (uint8_t *)(out->host);
         memset(dst, 0, num_kpt*16*sizeof(uint8_t));
         for (int i = 0; i < num_kpt ; ++i) {
             uchar* desc = dst + 16 * i;
             const KeyPoint& pt = keypoints[i];
-            compute_desc(sum, pt, desc);  
+            compute_desc(cv_input, pt, desc);  
         }
     }
     return 0;
@@ -137,18 +137,29 @@ int main(int argc, char **argv) {
     int iter = 1;
 
     Image<uint8_t> input = load_image(argv[1]);
+    Image<int32_t> intg(input.width(), input.height());
     Image<uint8_t> out_native(16, nfeatures);
     Image<uint8_t> out_cuda(16, nfeatures);
+
+    Mat cv_img = imread(argv[1], CV_LOAD_IMAGE_GRAYSCALE);
+    Mat sum;
+    integral(cv_img, sum, CV_32S);
+    
+    for (int y = 0; y < input.height(); y++) {
+        for (int x = 0; x < input.width(); x++) {
+            intg(x, y) = sum.at<int32_t>(y, x);
+        }
+    }
 
     printf("\nstart timing code ...\n");
 
     double min_t = benchmark(iter, 10, [&]() {
-       pipeline_native(input, out_native);
+       pipeline_native(input, intg, out_native);
     });
     printf("CPU program runtime: %g\n", min_t * 1e3);
 
     double min_t3 = benchmark(iter, 10, [&]() {
-       pipeline_cuda(input, out_cuda);
+       pipeline_cuda(input, intg, out_cuda);
     });
     printf("CUDA program runtime: %g\n", min_t3 * 1e3);
 

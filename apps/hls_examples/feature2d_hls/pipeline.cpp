@@ -12,13 +12,14 @@ int Ksize = 3;
 
 
 float k = 0.04;
-float threshold = 100;
+float threshold = 800;
 
 
 class MyPipeline {
 
 public:
     ImageParam input;
+    ImageParam intg;
     //Param<float> k,  threshold;
     std::vector<Argument> args;
     
@@ -35,7 +36,7 @@ public:
     RDom box, maxWin;
 
   MyPipeline()
-    : input(UInt(8), 2), padded("padded"),
+    : input(UInt(8), 2), intg(Int(32), 2), padded("padded"),
       grad_x("grad_x"), grad_y("grad_y"),
       grad_xx("grad_xx"), grad_yy("grad_yy"), grad_xy("grad_xy"),
       grad_gx("grad_gx"), grad_gy("grad_gy"), grad_gxy("grad_gxy"),
@@ -85,7 +86,7 @@ public:
     //kpt(x, y) = lgxy;
     //corners(x, y) = cim(x,y);
 
-    output.define_extern("brief", {corners, input, input.width(), input.height(), threshold}, UInt(8), 2);
+    output.define_extern("brief", {corners, intg, input.width(), input.height(), threshold}, UInt(8), 2);
 
     //hw_output(x, y) = brief(x, y);
 
@@ -93,7 +94,7 @@ public:
 
     // Arguments
     //args = {input, k, threshold};
-    args = {input};
+    args = {input, intg};
   }
 
   void compile_cpu() {
@@ -141,7 +142,7 @@ public:
     //output.compute_root(); //.gpu_tile(x, y, 32, 16);
     cim.compute_root().gpu_tile(x, y, 32, 16);
     corners.compute_root();
-    //brief.compute_root();
+    //output.compute_root();
     //conv1.compute_at(output, Var::gpu_blocks()).gpu_threads(x, y, c);
 
     //output.print_loop_nest();
