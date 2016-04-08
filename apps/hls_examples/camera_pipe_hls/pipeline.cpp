@@ -605,7 +605,7 @@ public:
 
         output_shuffled(c, z, x, y) = hw_output(c, z, x, y);
 
-        processed(c, x, y) = output_shuffled(c, cast<int>(x%2 + (y%2)*2), x/2, y/2);
+        processed(c, x, y) = output_shuffled(c, x%2 + (y%2)*2, x/2, y/2);
 
         // Schedule
         // We can generate slightly better code if we know the output is a whole number of tiles.
@@ -647,7 +647,7 @@ public:
             .unroll(c).unroll(z);
         //corrected.linebuffer()
         //    .reorder(c, z, x, y).unroll(c);
-        hw_bounds[0].unroll(c);
+        hw_bounds[0].unroll(c).unroll(z, 2);;
 
         //processed.print_loop_nest();
         processed.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
@@ -666,6 +666,262 @@ public:
         processed.unroll(c).unroll(yii).vectorize(xii);
 
         processed.fuse(xo, yo, xo).parallel(xo);
+
+        processed.compile_to_object("pipeline_zynq.o", args, "pipeline_zynq", target);
+        processed.compile_to_lowered_stmt("pipeline_zynq.ir.html", args, HTML, target);
+        processed.compile_to_assembly("pipeline_zynq.s", args, "pipeline_zynq", target);
+    }
+};
+
+class MyPipelineOpt2 {
+    int schedule;
+    ImageParam input;
+
+    std::vector<Argument> args;
+
+    Func shifted;
+    Func processed;
+    Func denoised;
+    Func deinterleaved;
+    Func demosaiced;
+    Func corrected;
+    Func hw_output;
+    Func curve;
+
+    Func hot_pixel_suppression(Func input) {
+        Expr a = max(max(input(x-2, y), input(x+2, y)),
+                     max(input(x, y-2), input(x, y+2)));
+        Expr b = min(min(input(x-2, y), input(x+2, y)),
+                     min(input(x, y-2), input(x, y+2)));
+
+        Func denoised("denoised");
+        denoised(x, y) = clamp(input(x, y), b, a);
+
+        return denoised;
+    }
+
+    Func interleave_x(Func a, Func b) {
+        Func out;
+        out(x, y) = select((x%2)==0, a(x, y), b(x-1, y));
+        return out;
+    }
+
+    Func interleave_y(Func a, Func b) {
+        Func out;
+        out(x, y) = select((y%2)==0, a(x, y), b(x, y-1));
+        return out;
+    }
+
+    Func demosaic(Func raw) {
+        // The algorithm is optimized for HLS schedule
+        // such that the bound analysis can derive a constant window
+        // and shift step without needed to unroll 'demosaic' into
+        // a 2x2 grid.
+        //
+        // The chances made from the original is that there is no
+        // explict downsample and upsample in 'deinterleave' and
+        // 'interleave', respectively.
+        // All the intermediate functions are the same size as the
+        // raw image although only pixels at even coordinates are used.
+
+        Func r_r, g_gr, g_gb, b_b;
+        g_gr(x, y) = raw(x, y);//deinterleaved(x, y, 0);
+        r_r(x, y)  = raw(x+1, y);//deinterleaved(x, y, 1);
+        b_b(x, y)  = raw(x, y+1);//deinterleaved(x, y, 2);
+        g_gb(x, y) = raw(x+1, y+1);//deinterleaved(x, y, 3);
+
+
+        // These are the ones we need to interpolate
+        Func b_r, g_r, b_gr, r_gr, b_gb, r_gb, r_b, g_b;
+
+        Expr gv_r  = avg(g_gb(x, y-2), g_gb(x, y));
+        Expr gvd_r = absd(g_gb(x, y-2), g_gb(x, y));
+        Expr gh_r  = avg(g_gr(x+2, y), g_gr(x, y));
+        Expr ghd_r = absd(g_gr(x+2, y), g_gr(x, y));
+
+        g_r(x, y)  = select(ghd_r < gvd_r, gh_r, gv_r);
+
+        Expr gv_b  = avg(g_gr(x, y+2), g_gr(x, y));
+        Expr gvd_b = absd(g_gr(x, y+2), g_gr(x, y));
+        Expr gh_b  = avg(g_gb(x-2, y), g_gb(x, y));
+        Expr ghd_b = absd(g_gb(x-2, y), g_gb(x, y));
+
+        g_b(x, y)  = select(ghd_b < gvd_b, gh_b, gv_b);
+
+        Expr correction;
+        correction = g_gr(x, y) - avg(g_r(x, y), g_r(x-2, y));
+        r_gr(x, y) = correction + avg(r_r(x-2, y), r_r(x, y));
+
+        // Do the same for other reds and blues at green sites
+        correction = g_gr(x, y) - avg(g_b(x, y), g_b(x, y-2));
+        b_gr(x, y) = correction + avg(b_b(x, y), b_b(x, y-2));
+
+        correction = g_gb(x, y) - avg(g_r(x, y), g_r(x, y+2));
+        r_gb(x, y) = correction + avg(r_r(x, y), r_r(x, y+2));
+
+        correction = g_gb(x, y) - avg(g_b(x, y), g_b(x+2, y));
+        b_gb(x, y) = correction + avg(b_b(x, y), b_b(x+2, y));
+
+        correction = g_b(x, y)  - avg(g_r(x, y), g_r(x-2, y+2));
+        Expr rp_b  = correction + avg(r_r(x, y), r_r(x-2, y+2));
+        Expr rpd_b = absd(r_r(x, y), r_r(x-2, y+2));
+
+        correction = g_b(x, y)  - avg(g_r(x-2, y), g_r(x, y+2));
+        Expr rn_b  = correction + avg(r_r(x-2, y), r_r(x, y+2));
+        Expr rnd_b = absd(r_r(x-2, y), r_r(x, y+2));
+
+        r_b(x, y)  = select(rpd_b < rnd_b, rp_b, rn_b);
+
+        // Same thing for blue at red
+        correction = g_r(x, y)  - avg(g_b(x, y), g_b(x+2, y-2));
+        Expr bp_r  = correction + avg(b_b(x, y), b_b(x+2, y-2));
+        Expr bpd_r = absd(b_b(x, y), b_b(x+2, y-2));
+
+        correction = g_r(x, y)  - avg(g_b(x+2, y), g_b(x, y-2));
+        Expr bn_r  = correction + avg(b_b(x+2, y), b_b(x, y-2));
+        Expr bnd_r = absd(b_b(x+2, y), b_b(x, y-2));
+
+        b_r(x, y)  =  select(bpd_r < bnd_r, bp_r, bn_r);
+
+        // Interleave the resulting channels
+        Func r = interleave_y(interleave_x(r_gr, r_r),
+                              interleave_x(r_b, r_gb));
+        Func g = interleave_y(interleave_x(g_gr, g_r),
+                              interleave_x(g_b, g_gb));
+        Func b = interleave_y(interleave_x(b_gr, b_r),
+                              interleave_x(b_b, b_gb));
+
+
+        Func output("demosaiced");
+        output(x, y, c) = select(c == 0, r(x, y),
+                                 c == 1, g(x, y),
+                                 b(x, y));
+
+        return output;
+    }
+
+
+    Func color_correct(Func input, int32_t matrix[3][4]) {
+        Expr ir = cast<int32_t>(input(x, y, 0));
+        Expr ig = cast<int32_t>(input(x, y, 1));
+        Expr ib = cast<int32_t>(input(x, y, 2));
+
+        Expr r = matrix[0][3] + matrix[0][0] * ir + matrix[0][1] * ig + matrix[0][2] * ib;
+        Expr g = matrix[1][3] + matrix[1][0] * ir + matrix[1][1] * ig + matrix[1][2] * ib;
+        Expr b = matrix[2][3] + matrix[2][0] * ir + matrix[2][1] * ig + matrix[2][2] * ib;
+
+        r = cast<int16_t>(r/256);
+        g = cast<int16_t>(g/256);
+        b = cast<int16_t>(b/256);
+        corrected(x, y, c) = select(c == 0, r,
+                                    select(c == 1, g, b));
+
+        return corrected;
+    }
+
+
+    Func apply_curve(Func input, float gamma, float contrast) {
+        // copied from FCam
+        //Func curve("curve");
+
+        Expr xf = clamp(cast<float>(x)/1024.0f, 0.0f, 1.0f);
+        Expr g = pow(xf, 1.0f/gamma);
+        Expr b = 2.0f - (float) pow(2.0f, contrast/100.0f);
+        Expr a = 2.0f - 2.0f*b;
+        Expr val = select(g > 0.5f,
+                        1.0f - (a*(1.0f-g)*(1.0f-g) + b*(1.0f-g)),
+                        a*g*g + b*g);
+
+        curve(x) = cast<uint8_t>(clamp(val*256.0f, 0.0f, 255.0f));
+        curve.compute_root(); // It's a LUT, compute it once ahead of time.
+
+        if (schedule == 3) {
+            // GPU schedule
+            curve.gpu_tile(x, 256);
+        }
+
+        Func hw_output("hw_output");
+        hw_output(c, x, y) = curve(input(x, y, c));
+
+        return hw_output;
+    }
+
+
+public:
+    MyPipelineOpt2(int _schedule, int32_t matrix[3][4], float gamma, float contrast)
+        : schedule(_schedule), input(UInt(16), 2), curve("curve")
+    {
+        // The camera pipe is specialized on the 2592x1968 images that
+        // come in, so we'll just use an image instead of a uniform image.
+
+        // shift things inwards to give us enough padding on the
+        // boundaries so that we don't need to check bounds. We're going
+        // to make a 2560x1920 output image, just like the FCam pipe, so
+        // shift by 16, 12
+
+        shifted(x, y) = input(x+16, y+12);
+
+        denoised = hot_pixel_suppression(shifted);
+        //deinterleaved = deinterleave(denoised);
+        demosaiced = demosaic(denoised);
+        corrected = color_correct(demosaiced, matrix);
+        hw_output = apply_curve(corrected, gamma, contrast);
+
+        processed(x, y, c) = hw_output(c, x, y);
+
+        // Schedule
+        // We can generate slightly better code if we know the output is a whole number of tiles.
+        Expr out_width = processed.output_buffer().width();
+        Expr out_height = processed.output_buffer().height();
+        processed
+            .bound(x, 0, (out_width/640)*640)
+            .bound(y, 0, (out_height/480)*480)
+            .bound(c, 0, 3); // bound color loop 0-3, properly
+
+        args = {input};
+    }
+
+    void compile_hls() {
+        assert(schedule == 2);
+        std::cout << "\ncompiling HLS code..." << std::endl;
+
+        // Block in chunks over tiles
+        processed.tile(x, y, xo, yo, xi, yi, 640, 480)
+            .reorder(c, xi, yi, xo, yo);
+        shifted.compute_at(processed, xo);
+        hw_output.compute_at(processed, xo);
+
+        hw_output.tile(x, y, xo, yo, xi, yi, 640, 480)
+            .reorder(c, xi, yi, xo, yo);
+        hw_output.unroll(xi, 2);
+        std::vector<Func> hw_bounds = hw_output.accelerate({shifted}, xi, xo);
+
+        curve.compute_at(hw_bounds[0], Var::outermost())
+            .store_at(hw_bounds[0], Var::outermost());
+
+        denoised.linebuffer()
+            .unroll(x).unroll(y);
+        demosaiced.linebuffer()
+            .unroll(c).unroll(x).unroll(y);
+        hw_bounds[0].unroll(c).unroll(x).unroll(y);
+
+        //processed.print_loop_nest();
+        processed.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
+        processed.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
+        processed.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
+
+        std::vector<Target::Feature> features({Target::HLS});
+        Target target(Target::Linux, Target::ARM, 32, features);
+        processed.compile_to_zynq_c("pipeline_zynq.c", args, "pipeline_zynq", target);
+        processed.compile_to_header("pipeline_zynq.h", args, "pipeline_zynq", target);
+
+        shifted.vectorize(x, 8);
+        processed
+            .vectorize(xi, 16).unroll(c);
+        processed.fuse(xo, yo, xo).parallel(xo);
+
+        //shifted.set_stride(0, 3).set_stride(2, 1).set_bounds(2, 0, 3);
+        processed.output_buffer().set_stride(0, 3).set_stride(2, 1);
 
         processed.compile_to_object("pipeline_zynq.o", args, "pipeline_zynq", target);
         processed.compile_to_lowered_stmt("pipeline_zynq.ir.html", args, HTML, target);
@@ -710,7 +966,7 @@ int main(int argc, char **argv) {
     MyPipeline p1(1, matrix, gamma, contrast);
     p1.compile_cpu();
 
-    MyPipelineOpt p2(2, matrix, gamma, contrast);
+    MyPipelineOpt2 p2(2, matrix, gamma, contrast);
     p2.compile_hls();
 
     MyPipeline p3(3, matrix, gamma, contrast);
