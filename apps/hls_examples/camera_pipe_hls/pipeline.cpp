@@ -884,6 +884,7 @@ public:
     void compile_hls() {
         assert(schedule == 2);
         std::cout << "\ncompiling HLS code..." << std::endl;
+        //processed.output_buffer().set_stride(0, 3).set_stride(2, 1);
 
         // Block in chunks over tiles
         processed.tile(x, y, xo, yo, xi, yi, 640, 480)
@@ -921,7 +922,6 @@ public:
         processed.fuse(xo, yo, xo).parallel(xo);
 
         //shifted.set_stride(0, 3).set_stride(2, 1).set_bounds(2, 0, 3);
-        processed.output_buffer().set_stride(0, 3).set_stride(2, 1);
 
         processed.compile_to_object("pipeline_zynq.o", args, "pipeline_zynq", target);
         processed.compile_to_lowered_stmt("pipeline_zynq.ir.html", args, HTML, target);

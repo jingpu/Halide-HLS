@@ -25,11 +25,12 @@ int main(int argc, char **argv) {
     printf("finish running native code\n");
 
     pipeline_hls(input, out_hls);
+    save_image(out_hls, "out_hls.png");
 
     printf("finish running HLS code\n");
 
-    for (int y = 0; y < out_hls.extent(2); y++) {
-        for (int x = 0; x < out_hls.extent(1); x++) {
+    for (int y = 0; y < out_hls.height(); y++) {
+        for (int x = 0; x < out_hls.width(); x++) {
             for (int c = 0; c < 3; c++) {
                 if (out_native(x, y, c) != out_hls(x, y, c)) {
                     printf("out_native(%d, %d, %d) = %d, but out_hls(%d, %d, %d) = %d\n",
