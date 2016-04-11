@@ -9,7 +9,10 @@ include ../hls_support/Makefile.inc
 all: out.png
 
 pipeline: pipeline.cpp
-	$(CXX) $(CXXFLAGS) -Wall -g $^ $(LIB_HALIDE) -o $@ $(LDFLAGS) -ltinfo
+	$(CXX) $(CXXFLAGS) -Wall -g $^ $(LIB_HALIDE) -o $@ $(LDFLAGS) -ltinfo 
+
+pipeline_jit: pipeline_jit.cpp
+	$(CXX) -O3  $(CXXFLAGS) -Wall -g $^ $(LIB_HALIDE) -rdynamic  -o $@ $(LDFLAGS) -ltinfo $(PNGFLAGS)  `pkg-config --libs opencv`
 
 pipeline_hls.cpp pipeline_native.o pipeline_cuda.o: pipeline
 	HL_DEBUG_CODEGEN=0 ./pipeline
@@ -21,8 +24,8 @@ run: run.cpp pipeline_native.o pipeline_corners.o
 	$(CXX) $(CXXFLAGS) -O1 -DNDEBUG $(HLS_CXXFLAGS) -g -Wall -Werror $^ -lpthread -ldl $(PNGFLAGS) -o $@ $(PNGFLAGS) `pkg-config --libs opencv`
 
 
-run_cuda: pipeline_native.o pipeline_cuda.o run_cuda.cpp
-	$(CXX) -O3 $(CXXFLAGS) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS) `pkg-config --libs opencv`
+run_cuda: pipeline_native.o pipeline_cuda.o run_cuda.cpp pipeline_corners.o
+	$(CXX) -O3 $(CXXFLAGS) -Wall -Werror $^ -lpthread -ldl  -o $@  $(PNGFLAGS) `pkg-config --libs opencv`
 
 run_integral: run_integral.cpp
 	$(CXX) -O3 $(CXXFLAGS) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS) `pkg-config --libs opencv`

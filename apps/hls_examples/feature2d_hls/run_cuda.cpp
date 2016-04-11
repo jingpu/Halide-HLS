@@ -5,8 +5,11 @@
 #include <algorithm>
 #include <vector>
 #include <iostream>
+#include <sys/time.h>
+//#include <omp.h>
 
 #include "pipeline_native.h"
+#include "pipeline_corners.h"
 #include "pipeline_cuda.h"
 
 #include "benchmark.h"
@@ -20,6 +23,12 @@
 
 using namespace Halide::Tools;
 using namespace cv;
+
+extern "C" void halide_print(void *user_context, const char *msg) {
+   printf("test");
+   printf("%s\n", msg);
+}
+
 
 struct KeypointResponseGreater
 {
@@ -79,43 +88,65 @@ inline void compute_desc(const Mat& sum, const KeyPoint& pt, uchar* desc)
 }
 
 extern "C" int brief(buffer_t *input, buffer_t *img, int col, int row, float threshold, buffer_t *out) 
-{
+{   //struct timeval t3, t4;
+    //gettimeofday(&t3, NULL);
+ 
     if (input->host == nullptr) {
+ 
    	input->min[0] = 0;
         input->min[1] = 0;
         input->extent[0] = col;
         input->extent[1] = row;
+
+
     }else {
+ 
         assert(out->host);
         float *corners = (float *)input->host;
         corners -= input->min[0] * input->stride[0];
         corners -= input->min[1] * input->stride[1];
+
+        //struct timeval t1, t2;
+        //gettimeofday(&t1, NULL);
         std::vector<KeyPoint> keypoints;
+        keypoints.reserve(128);
         for (int y = 28; y < row-28; y++) {
             for (int x = 28; x < col-28; x++) {
                 float value = corners[x * input->stride[0] + y * input->stride[1]];
                 if (value >= threshold) {
                     KeyPoint kpt((float)x, (float)y, 4, -1, value);
                     keypoints.push_back(kpt);
+                    x++;
                 }
             }
         }
+        //gettimeofday(&t2, NULL);
+
+        //double time = (t2.tv_sec - t1.tv_sec) * 1000.0 +
+        //   (t2.tv_usec - t1.tv_usec) / (1000.0);
+        //printf("loop time: %f\n", time);
+
         //printf("keypoints number: %d\n", (int)keypoints.size());
         //printf("threshold: %u\n", (uint8_t)threshold);
+
+        //gettimeofday(&t1, NULL);
         int num_kpt = out->extent[1];
         std::nth_element(keypoints.begin(), keypoints.begin() + num_kpt, keypoints.end(), KeypointResponseGreater());
         keypoints.resize(num_kpt);
         
+        //gettimeofday(&t2, NULL);
+        //time = (t2.tv_sec - t1.tv_sec) * 1000.0 +
+        //   (t2.tv_usec - t1.tv_usec) / (1000.0);
+        //printf("sort time: %f\n", time);
+
+       
+        //gettimeofday(&t1, NULL);
         assert(img->host);
         uint8_t *gray_img = (uint8_t *)img->host;
         gray_img -= img->min[0] * img->stride[0];
         gray_img -= img->min[1] * img->stride[1];
 
         Mat cv_input = Mat(img->extent[1], img->extent[0], CV_8UC1, gray_img);
-        //Mat input_trans = cv_input.t();
-        //Mat cv_input = imread("../../images/gray_small.png", CV_LOAD_IMAGE_GRAYSCALE ); //TODO
-        //Mat sum;
-        //integral(input_trans, sum, CV_32S);
  
         uint8_t *dst = (uint8_t *)(out->host);
         memset(dst, 0, num_kpt*16*sizeof(uint8_t));
@@ -124,7 +155,19 @@ extern "C" int brief(buffer_t *input, buffer_t *img, int col, int row, float thr
             const KeyPoint& pt = keypoints[i];
             compute_desc(cv_input, pt, desc);  
         }
-    }
+        //gettimeofday(&t2, NULL);
+        //time = (t2.tv_sec - t1.tv_sec) * 1000.0 +
+        //   (t2.tv_usec - t1.tv_usec) / (1000.0);
+        //printf("desc time: %f\n", time);
+
+
+    }        
+    //gettimeofday(&t4, NULL);
+    //double time = (t4.tv_sec - t3.tv_sec) * 1000.0 +
+    //   (t4.tv_usec - t3.tv_usec) / (1000.0);
+    //printf("total time: %f\n", time);
+
+
     return 0;
 } 
 
@@ -140,6 +183,7 @@ int main(int argc, char **argv) {
     Image<int32_t> intg(input.width(), input.height());
     Image<uint8_t> out_native(16, nfeatures);
     Image<uint8_t> out_cuda(16, nfeatures);
+    Image<float> out_corners(input.width(), input.height());
 
     Mat cv_img = imread(argv[1], CV_LOAD_IMAGE_GRAYSCALE);
     Mat sum;
@@ -157,6 +201,12 @@ int main(int argc, char **argv) {
        pipeline_native(input, intg, out_native);
     });
     printf("CPU program runtime: %g\n", min_t * 1e3);
+
+    /*double min_t1 = benchmark(iter, 10, [&]() {
+       pipeline_corners(input, intg, out_corners);
+    });
+    printf("CPU Harris program runtime: %g\n", min_t1 * 1e3);
+    */
 
     double min_t3 = benchmark(iter, 10, [&]() {
        pipeline_cuda(input, intg, out_cuda);
