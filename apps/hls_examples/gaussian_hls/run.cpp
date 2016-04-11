@@ -26,12 +26,6 @@ public:
             for(int x = 0; x < res.extent(1); x++)
                 for(int y = 0; y < res.extent(2); y++)
                     res(c, x, y) = im(x, y, c);
-        /*
-                    if (c==0)
-                        res(c, x, y) = (uint8_t)x+y;
-                    else
-                        res(c, x, y) = 0;
-        */
         return res;
     }
 private:
@@ -54,20 +48,14 @@ void my_save_image(ImageType &im, const std::string &filename) {
 
 
 int main(int argc, char **argv) {
-
-    if (argc < 3) {
-        printf("Usage: ./run input.png output.png\n");
-        return 0;
-    }
-
-    Image<uint8_t> input = my_load_image(argv[1]);
-    Image<uint8_t> out_native(3, input.extent(1)-8, input.extent(2)-8);
-    Image<uint8_t> out_hls(3, 512, 512);
+    Image<uint8_t> input = load_image(argv[1]);
+    Image<uint8_t> out_native(input.width()-8, input.height()-8);
+    Image<uint8_t> out_hls(480, 640);
 
     printf("start.\n");
 
     pipeline_native(input, out_native);
-    my_save_image(out_native, argv[2]);
+    save_image(out_native, "out.png");
 
     printf("finish running native code\n");
     pipeline_hls(input, out_hls);

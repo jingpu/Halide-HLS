@@ -14,25 +14,6 @@
 
 using namespace Halide::Tools;
 
-class my_load_image {
-public:
-    my_load_image(const std::string &f) : filename(f) {}
-    template<typename ImageType>
-    inline operator ImageType() {
-        ImageType im;
-        (void) load<ImageType, Internal::CheckFail>(filename, &im);
-        // shuffle data
-        ImageType res(im.channels(), im.width(), im.height());
-        for(int c = 0; c < res.extent(0); c++)
-            for(int x = 0; x < res.extent(1); x++)
-                for(int y = 0; y < res.extent(2); y++)
-                    res(c, x, y) = im(x, y, c);
-        return res;
-    }
-private:
-  const std::string filename;
-};
-
 template<typename ImageType>
 void my_save_image(ImageType &im, const std::string &filename) {
     int width = im.extent(1);
@@ -61,11 +42,11 @@ int main(int argc, char **argv) {
         return(0);
     }
 
-    Image<uint8_t> input = load_image(argv[1]);
-    //Image<uint8_t> out_native(3, input.extent(1)-8, input.extent(2)-8);
-    //Image<uint8_t> out_zynq(3, input.extent(1)-8, input.extent(2)-8);
-    Image<uint8_t> out_native(2400, 3200);
-    Image<uint8_t> out_zynq(480, 640);
+    Image<uint16_t> input = load_image(argv[1]);
+    fprintf(stderr, "%d %d\n", input.width(), input.height());
+    Image<uint8_t> out_native(2560, 1920, 3);
+    Image<uint8_t> out_zynq(2560, 1920, 3, 0, true);
+    //Image<uint8_t> out_zynq(4, 640, 480);
 
     printf("start.\n");
 
@@ -84,14 +65,14 @@ int main(int argc, char **argv) {
     unsigned fails = 0;
     for (int y = 0; y < out_zynq.height(); y++) {
         for (int x = 0; x < out_zynq.width(); x++) {
-            for (int c = 0; c < out_zynq.channels(); c++) {
+            for (int c = 0; c < 3; c++) {
                 if (out_native(x, y, c) != out_zynq(x, y, c)) {
-                    printf("out_native(%d, %d, %d) = %d, but out_c(%d, %d, %d) = %d\n",
+                    printf("out_native(%d, %d, %d) = %d, but out_zynq(%d, %d, %d) = %d\n",
                            x, y, c, out_native(x, y, c),
                            x, y, c, out_zynq(x, y, c));
                     fails++;
                 }
-          }
+            }
 	}
     }
     if (!fails) {
@@ -111,7 +92,7 @@ int main(int argc, char **argv) {
 
     // Timing code. Timing doesn't include copying the input data to
     // the gpu or copying the output back.
-    double min_t2 = benchmark(5, 10, [&]() {
+    double min_t2 = benchmark(5, 20, [&]() {
             pipeline_zynq(input, out_zynq, hwacc, cma);
         });
     printf("accelerator program runtime: %g\n", min_t2 * 1e3);
