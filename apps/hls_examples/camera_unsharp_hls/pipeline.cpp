@@ -683,6 +683,7 @@ public:
         processed.fuse(xo, yo, xo).parallel(xo);
 
         //shifted.set_stride(0, 3).set_stride(2, 1).set_bounds(2, 0, 3);
+        processed.output_buffer().set_stride(0, 3).set_stride(2, 1);
 
         processed.compile_to_object("pipeline_zynq.o", args, "pipeline_zynq", target);
         processed.compile_to_lowered_stmt("pipeline_zynq.ir.html", args, HTML, target);

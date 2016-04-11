@@ -57,7 +57,7 @@ int main(int argc, char **argv) {
     //printf("cpu program results loaded.\n");
 
     pipeline_zynq(input, out_zynq, hwacc, cma);
-    my_save_image(out_zynq, "out_zynq.png");
+    save_image(out_zynq, "out_zynq.png");
     printf("accelerator program results saved.\n");
 
     printf("checking results...\n");
