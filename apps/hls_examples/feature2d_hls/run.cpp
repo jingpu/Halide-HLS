@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <vector>
 #include <iostream>
+#include <sys/time.h>
 
 //#include "pipeline_hls.h"
 #include "pipeline_native.h"
@@ -81,16 +82,24 @@ inline void compute_desc(const Mat& sum, const KeyPoint& pt, uchar* desc)
 
 extern "C" int brief(buffer_t *input, buffer_t *img, int col, int row, float threshold, buffer_t *out) 
 {
-    if (input->host == nullptr) {
-   	input->min[0] = 0;
-        input->min[1] = 0;
-        input->extent[0] = col;
-        input->extent[1] = row;
+    if (input->host == nullptr || img->host == nullptr) {
+        if (input->host == nullptr) {
+            input->min[0] = 0;
+            input->min[1] = 0;
+            input->extent[0] = col;
+            input->extent[1] = row;
+        }else if (img->host == nullptr){
+            img->min[0] = 0;
+            img->min[1] = 0;
+            img->extent[0] = col;
+            img->extent[1] = row;
+        }
     }else {
         assert(out->host);
         float *corners = (float *)input->host;
         corners -= input->min[0] * input->stride[0];
         corners -= input->min[1] * input->stride[1];
+
         std::vector<KeyPoint> keypoints;
         for (int y = 28; y < row-28; y++) {
             for (int x = 28; x < col-28; x++) {
@@ -108,22 +117,21 @@ extern "C" int brief(buffer_t *input, buffer_t *img, int col, int row, float thr
         keypoints.resize(num_kpt);
         
         assert(img->host);
-        uint8_t *gray_img = (uint8_t *)img->host;
+        uint32_t *gray_img = (uint32_t *)img->host;
         gray_img -= img->min[0] * img->stride[0];
         gray_img -= img->min[1] * img->stride[1];
 
-        Mat cv_input = Mat(img->extent[0], img->extent[1], CV_8UC1, gray_img);
-        Mat input_trans = cv_input.t();
-        //Mat cv_input = imread("../../images/gray_small.png", CV_LOAD_IMAGE_GRAYSCALE ); //TODO
-        Mat sum;
-        integral(input_trans, sum, CV_32S);
-        printf("integral %d\n", sum.at<int32_t>(1,3)); 
+        Mat cv_input = Mat(img->extent[1], img->extent[0], CV_32S, gray_img);
+        //Mat input_trans = cv_input.t();
+        //Mat sum;
+        //integral(input_trans, sum, CV_32S);
+        //printf("integral %d\n", sum.at<int32_t>(1,3)); 
         uint8_t *dst = (uint8_t *)(out->host);
         memset(dst, 0, num_kpt*16*sizeof(uint8_t));
         for (int i = 0; i < num_kpt ; ++i) {
             uchar* desc = dst + 16 * i;
             const KeyPoint& pt = keypoints[i];
-            compute_desc(sum, pt, desc);  
+            compute_desc(cv_input, pt, desc);  
         }
     }
     return 0;
@@ -133,11 +141,14 @@ extern "C" int brief(buffer_t *input, buffer_t *img, int col, int row, float thr
 int main(int argc, char **argv) {
 
     //float k = 0.04;
-    float threshold = 100;
+    float threshold = 1000;
     int nfeatures = 20;
 
     Image<uint8_t> input0 = load_image(argv[1]);
     Image<uint8_t> input1 = load_image(argv[2]);
+    Image<int32_t> intg0(input0.width(), input0.height());
+    Image<int32_t> intg1(input1.width(), input1.height());
+
     Image<uint8_t> out_native0(16, nfeatures);
     Image<uint8_t> out_native1(16, nfeatures);
     Image<float> out_corners0(input0.width(), input0.height(), input0.channels());
@@ -147,12 +158,32 @@ int main(int argc, char **argv) {
     //Image<uint8_t> out_native(input.width(), input.height(), input.channels());
     //Image<uint8_t> out_hls(input.width(), input.height(), input.channels());
 
+    Mat cv_img0 = imread(argv[1], CV_LOAD_IMAGE_GRAYSCALE);
+    Mat cv_img1 = imread(argv[2], CV_LOAD_IMAGE_GRAYSCALE);
+    Mat sum0, sum1;
+    integral(cv_img0, sum0, CV_32S);
+    integral(cv_img1, sum1, CV_32S);
+
+    for (int y = 0; y < input0.height(); y++) {
+        for (int x = 0; x < input0.width(); x++) {
+            intg0(x, y) = sum0.at<int32_t>(y, x);
+        }
+    }
+    for (int y = 0; y < input1.height(); y++) {
+        for (int x = 0; x < input1.width(); x++) {
+            intg1(x, y) = sum1.at<int32_t>(y, x);
+        }
+    }
+
+
     printf("start.\n");
 
-    pipeline_native(input0, out_native0);
-    pipeline_corners(input0, out_corners0);
-    pipeline_native(input1, out_native1);
-    pipeline_corners(input1, out_corners1);
+    pipeline_native(input0, intg0, out_native0);
+    pipeline_native(input1, intg1, out_native1);
+    printf("finish native\n");
+    pipeline_corners(input0, intg0, out_corners0);
+    pipeline_corners(input1, intg1, out_corners1);
+    printf("finish corner\n");
     //save_image(out_native, "out.png");
     //pipeline_kpt(input0, out_kpt0);
     //pipeline_kpt(input1, out_kpt1);
@@ -244,8 +275,6 @@ int main(int argc, char **argv) {
     matcher.match(desc0.t(), desc1.t(), matches);
 
     Mat img_matches;
-    Mat cv_img0 = imread(argv[1], CV_LOAD_IMAGE_GRAYSCALE);
-    Mat cv_img1 = imread(argv[2], CV_LOAD_IMAGE_GRAYSCALE);
     drawMatches(cv_img0, keypoints0, cv_img1, keypoints1, matches, img_matches);
 
     imshow("Matches", img_matches);
@@ -264,24 +293,5 @@ int main(int argc, char **argv) {
     Mat H = findHomography( obj, scene);
     std::cout << H << std::endl;
 
-/*    pipeline_hls(input, out_hls);
-    save_image(out_hls, "out_hls.png");
-
-    printf("finished running HLS code\n");
-
-    bool success = true;
-    for (int y = 0; y < out_native.height(); y++) {
-        for (int x = 0; x < out_native.width(); x++) {
-            if (fabs(out_native(x, y, 0) - out_hls(x, y, 0)) > 1e-4) {
-                printf("out_native(%d, %d, 0) = %d, but out_c(%d, %d, 0) = %d\n",
-                       x, y, out_native(x, y, 0),
-                       x, y, out_hls(x, y, 0));
-		success = false;
-            }
-	}
-    }
-    if (success)
-        return 0;
-    else return 1;*/
     return 0;
 }

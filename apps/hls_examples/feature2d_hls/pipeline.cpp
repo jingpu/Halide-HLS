@@ -12,8 +12,9 @@ int Ksize = 3;
 
 
 float k = 0.04;
-float threshold = 800;
-
+//float threshold = 20000000;
+float threshold = 1000;
+ 
 
 class MyPipeline {
 
@@ -82,16 +83,15 @@ public:
         cim(x, y) > cim(x+1, y) && cim(x, y) > cim(x-1, y+1) &&
         cim(x, y) > cim(x, y+1) && cim(x, y) > cim(x+1, y+1);
     corners(x, y) = select( is_max , cim(x, y), 0);
-    //kpt(x, y) = select( (cim(x, y) >= threshold), cim(x,y), 0);
-    //kpt(x, y) = lgxy;
     //corners(x, y) = cim(x,y);
 
     output.define_extern("brief", {corners, intg, input.width(), input.height(), threshold}, UInt(8), 2);
+    /*brief.define_extern("brief", {corners, intg, input.width(), input.height(), threshold}, UInt(8), 2);
 
-    //hw_output(x, y) = brief(x, y);
+    hw_output(x, y) = brief(x, y);
 
-    //output(x, y) = hw_output(x, y);
-
+    output(x, y) = hw_output(x, y);
+     */
     // Arguments
     //args = {input, k, threshold};
     args = {input, intg};
@@ -117,20 +117,21 @@ public:
 
     corners.fuse(xo, yo, xo).parallel(xo).vectorize(xi, 4); 
     //output.fuse(xo, yo, xo).parallel(xo).vectorize(xi, 4); 
-    //original.compute_root();
-    //original.output_buffer().set_bounds(0, 0, input.width());
-    //original.output_buffer().set_bounds(1, 0, input.height());
     
     corners.compute_root();
     //brief.compute_root();
+
+    Target target = get_target_from_environment();
+    target.set_feature(Target::Profile);
     //output.print_loop_nest();
-    //kpt.compile_to_lowered_stmt("pipeline_padded.ir.html", args, HTML);
-    output.compile_to_header("pipeline_native.h", args, "pipeline_native");
-    output.compile_to_object("pipeline_native.o", args, "pipeline_native");
-    //corners.compile_to_header("pipeline_corners.h", args, "pipeline_corners");
-    //corners.compile_to_object("pipeline_corners.o", args, "pipeline_corners");
-    //kpt.compile_to_header("pipeline_kpt.h", args, "pipeline_kpt");
-    //kpt.compile_to_object("pipeline_kpt.o", args, "pipeline_kpt");
+    //corners.compile_to_lowered_stmt("pipeline_corners.ir.html", args, HTML);
+    output.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML, target);
+   
+  
+    output.compile_to_header("pipeline_native.h", args, "pipeline_native", target);
+    output.compile_to_object("pipeline_native.o", args, "pipeline_native", target);
+    corners.compile_to_header("pipeline_corners.h", args, "pipeline_corners", target);
+    corners.compile_to_object("pipeline_corners.o", args, "pipeline_corners", target);
   }
 
   void compile_gpu() {
