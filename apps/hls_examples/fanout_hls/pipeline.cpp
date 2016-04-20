@@ -47,11 +47,12 @@ public:
         // HLS schedule: make a hw pipeline producing 'hw_output', taking
         // inputs of 'clamped', buffering intermediates at (output, xo) loop
         // level
+        A.compute_root();
         hw_output.compute_root();
         hw_output.split(x, xo, xi, 64);
-        std::vector<Func> hw_bounds = hw_output.accelerate({A}, xi, xo);
+        hw_output.accelerate({A}, xi, xo);
 
-        hw_bounds[1].linebuffer().fifo_depth(hw_bounds[0], 4).fifo_depth(C, 2);
+        A.fifo_depth(hw_output, 4).fifo_depth(C, 2);
         B.linebuffer();
         C.linebuffer();
 

@@ -19,7 +19,6 @@
 #include "FindCalls.h"
 #include "Function.h"
 #include "FuseGPUThreadLoops.h"
-#include "GroupHWPipeline.h"
 #include "InjectHostDevBufferCopies.h"
 #include "InjectImageIntrinsics.h"
 #include "InjectOpenGLIntrinsics.h"
@@ -49,7 +48,6 @@
 #include "UnifyDuplicateLets.h"
 #include "UniquifyVariableNames.h"
 #include "UnrollLoops.h"
-#include "UpdateKBufferSlices.h"
 #include "VaryingAttributes.h"
 #include "VectorizeLoops.h"
 
@@ -150,11 +148,8 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
 
         for(const HWKernelDAG &dag : dags) {
             s = stream_opt(s, dag);
-            s = group_hw_pipeline(s, dag);
-            s = replace_image_param(s, dag);
+            //s = replace_image_param(s, dag);
         }
-
-        s = update_kbuffer_slices(s, env);
 
         debug(2) << "Lowering after HLS optimization:\n" << s << '\n';
     }

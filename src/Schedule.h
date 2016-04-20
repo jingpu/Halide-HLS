@@ -236,6 +236,15 @@ public:
     std::string &accelerate_exit();
     // @}
 
+    /** The compute and store levels of the accelerated pipeline. */
+    // @{
+    LoopLevel &accelerate_compute_level();
+    const LoopLevel &accelerate_compute_level() const;
+    LoopLevel &accelerate_store_level();
+    const LoopLevel &accelerate_store_level() const;
+    // @}
+
+
     /** Are race conditions permitted? */
     // @{
     bool allow_race_conditions() const;

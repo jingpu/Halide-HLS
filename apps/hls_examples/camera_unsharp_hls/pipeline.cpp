@@ -554,7 +554,6 @@ class MyPipelineOpt2 {
                         a*g*g + b*g);
 
         curve(x) = cast<uint8_t>(clamp(val*256.0f, 0.0f, 255.0f));
-        curve.compute_root(); // It's a LUT, compute it once ahead of time.
 
         if (schedule == 3) {
             // GPU schedule
@@ -654,18 +653,18 @@ public:
         hw_output.tile(x, y, xo, yo, xi, yi, 640, 480)
             .reorder(c, xi, yi, xo, yo);
         //hw_output.unroll(xi, 2);
-        std::vector<Func> hw_bounds = hw_output.accelerate({shifted}, xi, xo);
+        hw_output.accelerate({shifted}, xi, xo);
 
-        curve.compute_at(rgb, Var::outermost())
-            .store_at(rgb, Var::outermost());
+        //curve.compute_at(rgb, Var::outermost());
+
 
         denoised.linebuffer()
             .unroll(x).unroll(y);
         demosaiced.linebuffer()
             .unroll(c).unroll(x).unroll(y);
         rgb.linebuffer().unroll(c).unroll(x).unroll(y)
-            .fifo_depth(hw_bounds[0], 480*9);
-        hw_bounds[0].unroll(c);  // hw output bound
+            .fifo_depth(hw_output, 480*9);
+        hw_output.unroll(c);  // hw output bound
 
         //processed.print_loop_nest();
         processed.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);

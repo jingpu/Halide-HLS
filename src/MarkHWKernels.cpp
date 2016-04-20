@@ -27,8 +27,8 @@ class MarkHWKernels : public IRVisitor {
         if (f.schedule().is_hw_kernel() == false) {
             f.schedule().is_hw_kernel() = true;
             f.schedule().accelerate_exit() = exit_name;
-
             marked_functions.push_back(f);
+            debug(4) << "Function " << f.name() << " is marked as hw_kernel.\n";
         }
     }
 

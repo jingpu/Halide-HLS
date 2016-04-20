@@ -297,7 +297,6 @@ SOURCE_FILES = \
   Function.cpp \
   FuseGPUThreadLoops.cpp \
   Generator.cpp \
-  GroupHWPipeline.cpp \
   Image.cpp \
   InjectHostDevBufferCopies.cpp \
   InjectImageIntrinsics.cpp \
@@ -361,7 +360,6 @@ SOURCE_FILES = \
   UnifyDuplicateLets.cpp \
   UniquifyVariableNames.cpp \
   UnrollLoops.cpp \
-  UpdateKBufferSlices.cpp \
   Util.cpp \
   Var.cpp \
   VaryingAttributes.cpp \

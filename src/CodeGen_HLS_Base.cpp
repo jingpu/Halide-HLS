@@ -20,7 +20,7 @@ using std::vector;
 using std::ostringstream;
 using std::to_string;
 
-string CodeGen_HLS_Base::print_stencil_type(Stencil_Type stencil_type, bool is_axi) {
+string CodeGen_HLS_Base::print_stencil_type(Stencil_Type stencil_type) {
     ostringstream oss;
     // C: Stencil<uint16_t, 1, 1, 1> stencil_var;
     // C: hls::stream<Stencil<uint16_t, 1, 1, 1> > stencil_stream_var;
@@ -36,15 +36,20 @@ string CodeGen_HLS_Base::print_stencil_type(Stencil_Type stencil_type, bool is_a
         oss << ">";
         break;
     case Stencil_Type::StencilContainerType::Stream :
-        if (is_axi) {
-            oss << "hls::stream<AxiPackedStencil<";
-        } else {
-            oss << "hls::stream<PackedStencil<";
-        }
+        oss << "hls::stream<PackedStencil<";
         oss << print_type(stencil_type.elemType);
 
-        for(size_t i = 0; i < stencil_type.bounds.size(); i++) {
-            const Range &range = stencil_type.bounds[i];
+        for(const auto &range : stencil_type.bounds) {
+            internal_assert(is_one(simplify(range.min == 0)));
+            oss << ", " << range.extent;
+        }
+        oss << "> >";
+        break;
+    case Stencil_Type::StencilContainerType::AxiStream :
+        oss << "hls::stream<AxiPackedStencil<";
+        oss << print_type(stencil_type.elemType);
+
+        for(const auto &range : stencil_type.bounds) {
             internal_assert(is_one(simplify(range.min == 0)));
             oss << ", " << range.extent;
         }
@@ -135,7 +140,7 @@ void CodeGen_HLS_Base::visit(const Call *op) {
 
             // emit code declaring the packed stencil
             do_indent();
-            stream << "AxiPacked" << print_stencil_type(stencil_type)
+            stream << "AxiPacked" << print_stencil_type(stencil_type) << " "
                    << print_name(packed_stencil_name) << " = "
                    << print_name(stencil_name) << ";\n";
 

@@ -75,11 +75,6 @@ CodeGen_HLS_Testbench::CodeGen_HLS_Testbench(ostream &tb_stream)
 CodeGen_HLS_Testbench::~CodeGen_HLS_Testbench() {
 }
 
-string CodeGen_HLS_Testbench::print_stencil_type(Stencil_Type stencil_type, bool is_axi) {
-    // always assume AXI interface
-    return CodeGen_HLS_Base::print_stencil_type(stencil_type, true);
-}
-
 void CodeGen_HLS_Testbench::visit(const ProducerConsumer *op) {
     if (starts_with(op->name, "_hls_target.")) {
         // steps over the start_hwacc() call
@@ -133,14 +128,92 @@ void CodeGen_HLS_Testbench::visit(const Allocate *op) {
 }
 
 void CodeGen_HLS_Testbench::visit(const Call *op) {
-    if (op->name == "slice_kbuf" ||
-        op->name == "create_kbuf") {
+    if (op->name == "stream_subimage") {
+        // add intrinsic functions to convert memory buffers to streams
+        // syntax:
+        //   stream_subimage(direction, stream_name, address_of_subimage_origin, call_to_image
+        //                   dim_0_stride, dim_0_extent, ...)
+        // Note that codegen only uses the address of subimage_origin, and
+        // call to call_to_image is here to avoid skip_stage optimization
+        internal_assert(op->args.size() >= 6 && op->args.size() <= 12);
+        const StringImm *direction = op->args[0].as<StringImm>();
+        string a1 = print_expr(op->args[1]);
+        string a2 = print_expr(op->args[2]);
+        do_indent();
+        if (direction->value == "buffer_to_stream") {
+            stream << "subimage_to_stream(";
+        } else if (direction->value == "stream_to_buffer") {
+            stream << "stream_to_subimage(";
+        } else {
+            internal_error;
+        }
+        stream << a1 << ", " << a2;
+        // skip args[3]
+        for (size_t i = 4; i < op->args.size(); i++) {
+            stream << ", " << print_expr(op->args[i]);
+        }
+        stream <<");\n";
+        id = "0"; // skip evaluation
+    } else if (op->name == "create_kbuf") {
         // skips. this intrinsic call only used in Zynq codegen
         id = "0"; // skip evaluation
         return;
     } else {
         CodeGen_HLS_Base::visit(op);
     }
+}
+
+void CodeGen_HLS_Testbench::visit(const Realize *op) {
+    if (ends_with(op->name, ".stream")) {
+        // create a AXI stream type
+        internal_assert(op->types.size() == 1);
+        allocations.push(op->name, {op->types[0], "null"});
+        Stencil_Type stream_type({Stencil_Type::StencilContainerType::AxiStream,
+                    op->types[0], op->bounds, 1});
+        stencils.push(op->name, stream_type);
+
+        // emits the declaration for the stream
+        do_indent();
+        stream << print_stencil_type(stream_type) << ' ' << print_name(op->name) << ";\n";
+        stream << print_stencil_pragma(op->name);
+
+        // traverse down
+        op->body.accept(this);
+
+        // We didn't generate free stmt inside for stream type
+        allocations.pop(op->name);
+        stencils.pop(op->name);
+
+    } else {
+        CodeGen_HLS_Base::visit(op);
+    }
+}
+
+void CodeGen_HLS_Testbench::visit(const Block *op) {
+    // emit stream_to_buffer call after the bulk of IR containing hardware pipeline
+    // This is ugly right now, as the HLS simulation model and DMA programming model
+    // are different on the order of pipeline IR and stream_to_buffer call..
+    const Evaluate *eval = op->first.as<Evaluate>();
+    if (!eval) {
+        CodeGen_HLS_Base::visit(op);
+        return;
+    }
+    const Call *call = eval->value.as<Call>();
+    if (!call) {
+        CodeGen_HLS_Base::visit(op);
+        return;
+    }
+    if (call->name == "stream_subimage") {
+        const StringImm *direction = call->args[0].as<StringImm>();
+        if (direction->value == "stream_to_buffer") {
+            internal_assert(op->rest.defined());
+            op->rest.accept(this);
+            op->first.accept(this);
+            return;
+        }
+    }
+    CodeGen_HLS_Base::visit(op);
+    return;
 }
 
 }

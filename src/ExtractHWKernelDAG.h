@@ -54,7 +54,8 @@ struct HWKernelDAG {
     std::string name;
     std::map<std::string, HWKernel> kernels;
     std::set<std::string> input_kernels;
-    std::vector<std::string> loop_vars;
+    std::set<std::string> loop_vars;   // FIXME we use loop_vars name to figure out the location to start Stream transformation. Need better way.
+    LoopLevel compute_level, store_level;
 };
 
 std::ostream &operator<<(std::ostream &out, const HWKernel &k);

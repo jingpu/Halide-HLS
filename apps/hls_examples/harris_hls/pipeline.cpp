@@ -137,8 +137,7 @@ public:
 
         hw_output.tile(x, y, xo, yo, xi, yi, 480, 640);
         hw_output.unroll(xi, 2);
-        std::vector<Func> hw_bounds = hw_output.accelerate({padded}, xi, xo);
-        hw_bounds[0].unroll(x);
+        hw_output.accelerate({padded}, xi, xo);
 
         grad_x.linebuffer().unroll(x);
         grad_y.linebuffer().unroll(x);

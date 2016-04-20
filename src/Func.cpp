@@ -1137,87 +1137,38 @@ Func &Func::store_root() {
     return *this;
 }
 
-vector<Func> Func::accelerate(const vector<std::reference_wrapper<Func>> &inputs,
+Func &Func::accelerate(vector<Func> inputs,
                        Var compute_var, Var store_var) {
-    // Note INPUTS need to be passed by reference because the
-    // insert_buffer_before() method will allocate new FunctionContents,
-    // which need to be updated back to the pointers in inputs.
-
     /*
       This method prepares enough information on related function schedules,
       in order to draw the boundaries of the accelerator in the DAG of functinos.
-
-      The accelerator generated uses streaming (AXI-stream) interfaces for data,
-      which requires DMAs to transport the data in (software) system memory to
-      accelerator ports. Therefore, in Halide IR, we need additional functions
-      to emulate the behavior of DMAs, which simply copies the function values
-      of the preceding functions.
-
-      In practice, we add buffer functions (representing the data streams on
-      accelerator ports) before the output (this) function and after input
-      functions. Here is an example.
-
-      Origianl Algorthm:
-            in0 \
-                 > f1 -> f2 -> out (this function)
-            in1 /
-
-      After buffer insertion:
-            __auto_insert__in0 -> in0 \
-                                       > f1 -> f2 -> __auto_insert__out -> out
-            __auto_insert__in1 -> in1 /
-                  |                |                         |              |
-                  |  input  DMAs   |  accelerator hardware   | output DMA   |
-
-      Note though the functions before inputs have the prefix of "__auto_insert__"
-      in their name, they are actually the original input functions, which keep
-      all the original function values and schedules. We cannot give new names
-      to the inserted input functions because Halide use function names to resolve
-      function references. In this case, functions references in f1 (edges from in0
-      and in1 to f1) would lose if we changed the in0's and in1's names.
      */
     invalidate_cache();
-    vector<Func> res;
-
-    // inserts a buffer function before the this function,
-    // which represents the physical output of the accelerator
-    Function hw_out = func.insert_buffer_before("__auto_insert__" + name());
-    res.push_back(Func(hw_out));
 
     for (size_t i = 0; i < inputs.size(); i++) {
-        // inserts a buffer function after the input function passed in,
-        // which represents the physical input of the accelerator
-        Func &input = inputs[i].get();
-        Function hw_in = input.func.insert_buffer_after("__auto_insert__" + input.name());
-        res.push_back(Func(hw_in));
-
+        Function hw_in = inputs[i].function();
         // save the hw inputs of the accelerator pipeline in the schedule
-        hw_out.schedule().accelerate_inputs().insert(hw_in.name());
+        func.schedule().accelerate_inputs().insert(hw_in.name());
 
         // mark the hw input as linebuffered and store in kernel buffer slice
-        hw_in.schedule().is_linebuffered() = true;
-        hw_in.schedule().is_kernel_buffer_slice() = true;
+        hw_in.schedule().is_kernel_buffer_slice() = true;  // FIXME
         // stores input in the kernel buffer
-        input.func.schedule().is_kernel_buffer() = true;
+        hw_in.schedule().is_kernel_buffer() = true;
     }
 
     // schedule the compute and store levels of the hw_out,
     // which later becomes the constraints of the accelerator pipeline.
-    // In other word, we constrain the compute and store levels
-    // of all linebuffered functions in the pipeline to be the same
-    // as the hw_out.
-    // The looplevel is always relative to this Func
-    hw_out.schedule().compute_level() = LoopLevel(name(), compute_var.name());
-    hw_out.schedule().store_level() = LoopLevel(name(), store_var.name());
-    hw_out.schedule().is_accelerated() = true;
+    func.schedule().is_accelerated() = true;
+    func.schedule().accelerate_compute_level() = LoopLevel(name(), compute_var.name());
+    func.schedule().accelerate_store_level() = LoopLevel(name(), store_var.name());
 
     // hw_out is stored in kernel buffer slice, this function store in kernel buffer
-    hw_out.schedule().is_kernel_buffer_slice() = true;
-    this->func.schedule().is_kernel_buffer() = true;
+    func.schedule().is_kernel_buffer_slice() = true;
+    func.schedule().is_kernel_buffer() = true;
 
     // mark all the halide functions in the pipeline to be "hw_kernel"
-    mark_hw_kernels(hw_out, hw_out.schedule().accelerate_inputs());
-    return res;
+    mark_hw_kernels(func, func.schedule().accelerate_inputs());
+    return *this;
 }
 
 Func &Func::linebuffer() {

@@ -25,7 +25,7 @@ public:
         : CodeGen_C(dest, is_header, include_guard, additional_headers) {}
 
     struct Stencil_Type {
-        typedef enum {Stencil, Stream} StencilContainerType;
+        typedef enum {Stencil, Stream, AxiStream} StencilContainerType;
         StencilContainerType type;
         Type elemType;  // type of the element
         Region bounds;  // extent of each dimension
@@ -35,7 +35,7 @@ public:
 protected:
     Scope<Stencil_Type> stencils;  // scope of stencils and streams of stencils
 
-    virtual std::string print_stencil_type(Stencil_Type s, bool is_axi = false);
+    virtual std::string print_stencil_type(Stencil_Type s);
     virtual std::string print_name(const std::string &name);
     virtual std::string print_stencil_pragma(const std::string &name);
 

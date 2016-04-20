@@ -12,8 +12,8 @@ template <typename T, size_t EXTENT_0, size_t EXTENT_1, size_t EXTENT_2, size_t 
 
 #ifndef AP_INT_MAX_W
 //#define AP_INT_MAX_W 32768
-//#define AP_INT_MAX_W 10880
-#define AP_INT_MAX_W 2048
+#define AP_INT_MAX_W 4554
+//#define AP_INT_MAX_W 2048
 #endif
 
 #include <ap_int.h>
@@ -257,5 +257,79 @@ void buffer_to_stencil(const buffer_t *buffer,
         stencil(idx_0, idx_1, idx_2, idx_3) = *address;
     }
 }
+
+template <typename T, size_t EXTENT_0, size_t EXTENT_1, size_t EXTENT_2, size_t EXTENT_3>
+void subimage_to_stream(hls::stream<AxiPackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &stream,
+                        void *subimage,
+                        int stride_0, int subimage_extent_0,
+                        int stride_1 = 1, int subimage_extent_1 = 1,
+                        int stride_2 = 1, int subimage_extent_2 = 1,
+                        int stride_3 = 1, int subimage_extent_3 = 1) {
+    assert(subimage_extent_0 % EXTENT_0 == 0);
+    assert(subimage_extent_1 % EXTENT_1 == 0);
+    assert(subimage_extent_2 % EXTENT_2 == 0);
+    assert(subimage_extent_3 % EXTENT_3 == 0);
+    for(size_t idx_3 = 0; idx_3 < subimage_extent_3; idx_3 += EXTENT_3)
+    for(size_t idx_2 = 0; idx_2 < subimage_extent_2; idx_2 += EXTENT_2)
+    for(size_t idx_1 = 0; idx_1 < subimage_extent_1; idx_1 += EXTENT_1)
+    for(size_t idx_0 = 0; idx_0 < subimage_extent_0; idx_0 += EXTENT_0) {
+        Stencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> stencil;
+        for(size_t st_idx_3 = 0; st_idx_3 < EXTENT_3; st_idx_3++)
+        for(size_t st_idx_2 = 0; st_idx_2 < EXTENT_2; st_idx_2++)
+        for(size_t st_idx_1 = 0; st_idx_1 < EXTENT_1; st_idx_1++)
+        for(size_t st_idx_0 = 0; st_idx_0 < EXTENT_0; st_idx_0++) {
+            int offset = (idx_0 + st_idx_0) * stride_0 +
+                (idx_1 + st_idx_1) * stride_1 +
+                (idx_2 + st_idx_2) * stride_2 +
+                (idx_3 + st_idx_3) * stride_3;
+            stencil(st_idx_0, st_idx_1, st_idx_2, st_idx_3) = *((T *)subimage + offset);
+        }
+        stream.write(stencil);
+    }
+}
+
+template <typename T, size_t EXTENT_0, size_t EXTENT_1, size_t EXTENT_2, size_t EXTENT_3>
+void stream_to_subimage(hls::stream<AxiPackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &stream,
+                        void *subimage,
+                        int stride_0, int subimage_extent_0,
+                        int stride_1 = 1, int subimage_extent_1 = 1,
+                        int stride_2 = 1, int subimage_extent_2 = 1,
+                        int stride_3 = 1, int subimage_extent_3 = 1) {
+    assert(subimage_extent_0 % EXTENT_0 == 0);
+    assert(subimage_extent_1 % EXTENT_1 == 0);
+    assert(subimage_extent_2 % EXTENT_2 == 0);
+    assert(subimage_extent_3 % EXTENT_3 == 0);
+    for(size_t idx_3 = 0; idx_3 < subimage_extent_3; idx_3 += EXTENT_3)
+    for(size_t idx_2 = 0; idx_2 < subimage_extent_2; idx_2 += EXTENT_2)
+    for(size_t idx_1 = 0; idx_1 < subimage_extent_1; idx_1 += EXTENT_1)
+    for(size_t idx_0 = 0; idx_0 < subimage_extent_0; idx_0 += EXTENT_0) {
+        AxiPackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> axi_stencil = stream.read();
+        Stencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> stencil = axi_stencil;
+        for(size_t st_idx_3 = 0; st_idx_3 < EXTENT_3; st_idx_3++)
+        for(size_t st_idx_2 = 0; st_idx_2 < EXTENT_2; st_idx_2++)
+        for(size_t st_idx_1 = 0; st_idx_1 < EXTENT_1; st_idx_1++)
+        for(size_t st_idx_0 = 0; st_idx_0 < EXTENT_0; st_idx_0++) {
+            int offset = (idx_0 + st_idx_0) * stride_0 +
+                (idx_1 + st_idx_1) * stride_1 +
+                (idx_2 + st_idx_2) * stride_2 +
+                (idx_3 + st_idx_3) * stride_3;
+            *((T *)subimage + offset) = stencil(st_idx_0, st_idx_1, st_idx_2, st_idx_3);
+        }
+        // check TLAST
+        if (idx_3 == subimage_extent_3 - EXTENT_3 &&
+            idx_2 == subimage_extent_2 - EXTENT_2 &&
+            idx_1 == subimage_extent_1 - EXTENT_1 &&
+            idx_0 == subimage_extent_0 - EXTENT_0) {
+            if(axi_stencil.last != 1) {
+                printf("TLAS check failed.\n");
+            }
+        } else {
+            if(axi_stencil.last != 0) {
+                printf("TLAS check failed.\n");
+            }
+        }
+    }
+}
+
 
 #endif

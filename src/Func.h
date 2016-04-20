@@ -1476,15 +1476,9 @@ public:
      * In addition, compute_var and store_var, specify
      * the compute and store levels of all linebuffered
      * functions in the pipeline w.r.t this function.
-     *
-     * This method inserts buffer functions at the accelerator
-     * boundary (inputs and output). The function points of newly
-     * created function are returned in a vector. The first element
-     * is the output buffer functions, and the rests are in the
-     * order as the inputs argument.
      */
-    EXPORT std::vector<Func> accelerate(const std::vector<std::reference_wrapper<Func>> &inputs,
-                                        Var compute_var, Var store_var);
+    EXPORT Func &accelerate(std::vector<Func> inputs,
+                            Var compute_var, Var store_var);
 
     /** Schedule a function to be linebuffered.
      */

@@ -26,6 +26,7 @@ struct ScheduleContents {
     bool is_linebuffered;
     std::set<std::string> accelerate_inputs;
     std::string accelerate_exit;
+    LoopLevel accelerate_compute_level, accelerate_store_level;
     std::map<std::string, int> fifo_depths;   // key is the name of the consumer
     bool is_kernel_buffer;
     bool is_kernel_buffer_slice;
@@ -200,6 +201,26 @@ std::string Schedule::accelerate_exit() const{
 
 std::string &Schedule::accelerate_exit() {
     return contents.ptr->accelerate_exit;
+}
+
+LoopLevel &Schedule::accelerate_compute_level() {
+    internal_assert(is_accelerated());
+    return contents.ptr->accelerate_compute_level;
+}
+
+const LoopLevel &Schedule::accelerate_compute_level() const {
+    internal_assert(is_accelerated());
+    return contents.ptr->accelerate_compute_level;
+}
+
+LoopLevel &Schedule::accelerate_store_level() {
+    internal_assert(is_accelerated());
+    return contents.ptr->accelerate_store_level;
+}
+
+const LoopLevel &Schedule::accelerate_store_level() const {
+    internal_assert(is_accelerated());
+    return contents.ptr->accelerate_store_level;
 }
 
 bool &Schedule::allow_race_conditions() {

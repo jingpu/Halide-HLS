@@ -354,10 +354,10 @@ public:
         hw_output.tile(x, y, tx, ty, xi, yi, 128, 128)
             .tile(xi, yi, x_grid, y_grid, x_in, y_in, 2, 2)
             .reorder(x_in, y_in, c, x_grid, y_grid, tx, ty);
-        std::vector<Func> hw_bounds = hw_output.accelerate({shifted}, x_grid, tx);
+        hw_output.accelerate({shifted}, x_grid, tx);
 
-        curve.compute_at(hw_bounds[0], Var::outermost())
-            .store_at(hw_bounds[0], Var::outermost());
+        curve.compute_at(hw_output, Var::outermost())
+            .store_at(hw_output, Var::outermost());
 
         deinterleaved.linebuffer().unroll(c);
         deinterleaved.fifo_depth(demosaiced, 70);
@@ -636,10 +636,10 @@ public:
 
         hw_output.tile(x, y, xo, yo, xi, yi, 320, 240)
             .reorder(c, z, xi, yi, xo, yo);
-        std::vector<Func> hw_bounds = hw_output.accelerate({input_shuffled}, xi, xo);
+        hw_output.accelerate({input_shuffled}, xi, xo);
 
-        curve.compute_at(hw_bounds[0], Var::outermost())
-            .store_at(hw_bounds[0], Var::outermost());
+        curve.compute_at(hw_output, Var::outermost())
+            .store_at(hw_output, Var::outermost());
 
         deinterleaved.linebuffer().unroll(c);
         //deinterleaved.fifo_depth(demosaiced, 360);
@@ -647,7 +647,7 @@ public:
             .unroll(c).unroll(z);
         //corrected.linebuffer()
         //    .reorder(c, z, x, y).unroll(c);
-        hw_bounds[0].unroll(c).unroll(z, 2);;
+        hw_output.unroll(c).unroll(z, 2);;
 
         //processed.print_loop_nest();
         processed.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
@@ -833,7 +833,6 @@ class MyPipelineOpt2 {
                         a*g*g + b*g);
 
         curve(x) = cast<uint8_t>(clamp(val*256.0f, 0.0f, 255.0f));
-        curve.compute_root(); // It's a LUT, compute it once ahead of time.
 
         if (schedule == 3) {
             // GPU schedule
@@ -895,16 +894,15 @@ public:
         hw_output.tile(x, y, xo, yo, xi, yi, 640, 480)
             .reorder(c, xi, yi, xo, yo);
         hw_output.unroll(xi, 2);
-        std::vector<Func> hw_bounds = hw_output.accelerate({shifted}, xi, xo);
+        hw_output.accelerate({shifted}, xi, xo);
 
-        curve.compute_at(hw_bounds[0], Var::outermost())
-            .store_at(hw_bounds[0], Var::outermost());
+        //curve.compute_at(hw_output, xi);
 
         denoised.linebuffer()
             .unroll(x).unroll(y);
         demosaiced.linebuffer()
             .unroll(c).unroll(x).unroll(y);
-        hw_bounds[0].unroll(c).unroll(x).unroll(y);
+        hw_output.unroll(c);
 
         //processed.print_loop_nest();
         processed.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);

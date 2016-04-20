@@ -1160,8 +1160,8 @@ Stmt schedule_functions(const vector<Function> &outputs,
         if (f.schedule().is_hw_kernel() && f.schedule().is_linebuffered()) {
             internal_assert(env.count(f.schedule().accelerate_exit()));
             Function func_exit = env.find(f.schedule().accelerate_exit())->second;
-            f.schedule().compute_level() = func_exit.schedule().compute_level();
-            f.schedule().store_level() = func_exit.schedule().store_level();
+            f.schedule().compute_level() = func_exit.schedule().accelerate_compute_level();
+            f.schedule().store_level() = func_exit.schedule().accelerate_store_level();
         }
 
         validate_schedule(f, s, target, is_output);

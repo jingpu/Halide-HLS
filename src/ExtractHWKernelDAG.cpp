@@ -161,7 +161,7 @@ ostream &operator<<(ostream &out, const HWKernel &k) {
 }
 
 vector<StencilDimSpecs>
-extract_stencil_specs(Box box, const vector<string> &scan_loops,
+extract_stencil_specs(Box box, const set<string> &scan_loops,
                       const Scope<Expr> &stencil_bounds,
                       const Scope<Expr> &store_bounds) {
     vector<StencilDimSpecs> res;
@@ -184,9 +184,10 @@ extract_stencil_specs(Box box, const vector<string> &scan_loops,
         dim_specs.step = dim_specs.size;
         dim_specs.loop_var = "undef";
         // look for loop var that slides along this dimensions
-        for (size_t j = 0; j < scan_loops.size(); j++) {
-            if (expr_uses_var(min, scan_loops[j])) {
-                dim_specs.loop_var = scan_loops[j];
+        //for (size_t j = 0; j < scan_loops.size(); j++) {
+        for (const string& scan_loop : scan_loops) {
+            if (expr_uses_var(min, scan_loop)) {
+                dim_specs.loop_var = scan_loop;
                 Expr step = simplify(finite_difference(min, dim_specs.loop_var));
                 const IntImm *step_int = step.as<IntImm>();
                 internal_assert(step_int) << "stencil window step is not a const.\n";
@@ -303,12 +304,12 @@ class BuildDAGForFunction : public IRVisitor {
     Function func;
     const map<string, Function> &env;
     const vector<BoundsInference_Stage> &inlined_stages;
-    const LoopLevel &compute_level = func.schedule().compute_level();
-    const LoopLevel &store_level = func.schedule().store_level();
+    const LoopLevel &compute_level;
+    const LoopLevel &store_level;
 
     HWKernelDAG dag;
     bool is_scan_loops;
-    vector<string> scan_loops; // collection of loops vars that func windows scan along
+    set<string> scan_loops; // collection of loops vars that func windows scan along
     map<string, Expr> loop_mins, loop_maxes;
 
 
@@ -326,9 +327,9 @@ class BuildDAGForFunction : public IRVisitor {
     void visit(const For *op) {
         // scan loops are loops between store level (exclusive) and
         // the compute level (inclusive) of the accelerated function
-        if (is_scan_loops) {
+        if (is_scan_loops && starts_with(op->name, func.name() + ".")) {
             debug(3) << "added loop " << op->name << " to scan loops.\n";
-            scan_loops.push_back(op->name);
+            scan_loops.insert(op->name);
             loop_mins[op->name] = op->min;
             loop_maxes[op->name] = simplify(op->min + op->extent - 1);
         }
@@ -413,8 +414,9 @@ class BuildDAGForFunction : public IRVisitor {
                         cur_kernel = dag.kernels[stage.name];
 
                     // figure out wether it is a line buffered kernel or an inlined kernel
-                    if (compute_level == cur_func.schedule().compute_level() &&
-                        store_level == cur_func.schedule().store_level()) {
+                    if (func.schedule().accelerate_inputs().count(stage.name) ||
+                        (compute_level == cur_func.schedule().compute_level() &&
+                         store_level == cur_func.schedule().store_level())) {
                         // it is a linebuffered kernel
                         cur_kernel.is_inlined = false;
                         debug(3) << "[buffered]\n";
@@ -544,8 +546,8 @@ public:
     BuildDAGForFunction(Function f, const map<string, Function> &e,
                         const vector<BoundsInference_Stage> &s)
         : func(f), env(e), inlined_stages(s),
-          compute_level(f.schedule().compute_level()),
-          store_level(f.schedule().store_level()),
+          compute_level(f.schedule().accelerate_compute_level()),
+          store_level(f.schedule().accelerate_store_level()),
           is_scan_loops(false) {}
 
     HWKernelDAG build(Stmt s) {
@@ -553,6 +555,8 @@ public:
         dag.name = func.name();
         dag.loop_vars = scan_loops;
         dag.input_kernels = func.schedule().accelerate_inputs(); // TODO we don't use it later
+        dag.compute_level = compute_level;
+        dag.store_level = store_level;
         calculate_input_streams(dag);
         /*
         debug(0) << "after building producer pointers:" << "\n";

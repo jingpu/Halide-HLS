@@ -103,10 +103,9 @@ public:
             .tile(x, y, xo, yo, xi, yi, 480, 640);
         hw_output.unroll(xi, 2);
 
-        std::vector<Func> hw_bounds = hw_output.accelerate({in_bounded}, xi, xo);
-        hw_bounds[0].unroll(x).unroll(y);
+        hw_output.accelerate({in_bounded}, xi, xo);
 
-        //blur_y.linebuffer().unroll(c).unroll(x).unroll(y);
+        //blur_y.linebuffer().unroll(x).unroll(y);
 
         //output.print_loop_nest();
         output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
@@ -124,6 +123,7 @@ public:
 
         output.compile_to_object("pipeline_zynq.o", args, "pipeline_zynq", target);
         output.compile_to_lowered_stmt("pipeline_zynq.ir.html", args, HTML, target);
+
     }
 };
 

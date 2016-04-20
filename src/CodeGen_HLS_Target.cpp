@@ -115,7 +115,8 @@ string CodeGen_HLS_Target::CodeGen_HLS_C::print_stencil_pragma(const string &nam
     ostringstream oss;
     internal_assert(stencils.contains(name));
     Stencil_Type stype = stencils.get(name);
-    if (stype.type == Stencil_Type::StencilContainerType::Stream) {
+    if (stype.type == Stencil_Type::StencilContainerType::Stream ||
+        stype.type == Stencil_Type::StencilContainerType::AxiStream) {
         oss << "#pragma HLS STREAM variable=" << print_name(name) << " depth=" << stype.depth << "\n"
             << "#pragma HLS RESOURCE variable=" << print_name(name) << " core=FIFO_SRL\n\n";
     } else if (stype.type == Stencil_Type::StencilContainerType::Stencil) {
@@ -136,8 +137,10 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::add_kernel(Stmt stmt,
         string arg_name = "arg_" + std::to_string(i);
         if (args[i].is_stencil) {
             CodeGen_HLS_Base::Stencil_Type stype = args[i].stencil_type;
-            stream << print_stencil_type(args[i].stencil_type, true) << " ";
-            if (args[i].stencil_type.type == Stencil_Type::StencilContainerType::Stream) {
+            internal_assert(args[i].stencil_type.type == Stencil_Type::StencilContainerType::AxiStream ||
+                            args[i].stencil_type.type == Stencil_Type::StencilContainerType::Stencil);
+            stream << print_stencil_type(args[i].stencil_type) << " ";
+            if (args[i].stencil_type.type == Stencil_Type::StencilContainerType::AxiStream) {
                 stream << "&";  // hls_stream needs to be passed by reference
             }
             stream << arg_name;
@@ -192,7 +195,7 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::add_kernel(Stmt stmt,
             do_indent();
             if (args[i].is_stencil) {
                 CodeGen_HLS_Base::Stencil_Type stype = args[i].stencil_type;
-                stream << print_stencil_type(args[i].stencil_type, true) << " &"
+                stream << print_stencil_type(args[i].stencil_type) << " &"
                        << print_name(args[i].name) << " = " << arg_name << ";\n";
             } else {
                 stream << print_type(args[i].scalar_type) << " &"
