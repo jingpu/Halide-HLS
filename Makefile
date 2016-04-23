@@ -330,6 +330,7 @@ SOURCE_FILES = \
   Param.cpp \
   Parameter.cpp \
   PartitionLoops.cpp \
+  PerfectNestedLoops.cpp \
   Pipeline.cpp \
   PrintLoopNest.cpp \
   Profiling.cpp \

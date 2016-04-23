@@ -27,18 +27,18 @@ int main(int argc, char **argv) {
     */
 
     Image<uint8_t> input = load_image(argv[1]);
-    Image<uint8_t> out_native(input.width(), input.height(), 3);
-    Image<uint8_t> out_hls(input.width(), input.height(), 3);
+    Image<uint8_t> out_native(1440/2, 960/2, 3);
+    Image<uint8_t> out_hls(1440/2, 960/2, 3);
 
 
     printf("start.\n");
 
-    pipeline_native(input, 3, out_native);
-    save_image(out_native, "demosaicked.png");
+    pipeline_native(input, out_native);
+    save_image(out_native, "out.png");
 
     printf("finish running native code\n");
 
-    pipeline_hls(input, 3, out_hls);
+    pipeline_hls(input, out_hls);
 
     printf("finish running HLS code\n");
 

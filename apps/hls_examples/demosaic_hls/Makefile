@@ -18,7 +18,7 @@ run: run.cpp pipeline_hls.cpp hls_target.cpp pipeline_native.o
 	$(CXX) $(CXXFLAGS) -O1 -DNDEBUG $(HLS_CXXFLAGS) -g -Wall -Werror $^ -lpthread -ldl $(PNGFLAGS) -o $@
 
 demosaic.png: run
-	./run mosaic.png
+	./run ../../images/zynq_raw.png
 
 clean:
 	rm -f pipeline run out.png demosaic.png

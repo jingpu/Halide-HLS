@@ -29,6 +29,7 @@
 #include "IRPrinter.h"
 #include "Memoization.h"
 #include "PartitionLoops.h"
+#include "PerfectNestedLoops.h"
 #include "Profiling.h"
 #include "Qualify.h"
 #include "RealizationOrder.h"
@@ -266,6 +267,14 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     s = remove_trivial_for_loops(s);
     s = simplify(s);
     debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
+
+    {
+        // passes specific to HLS backend
+        debug(1) << "Performing final HLS optimization..\n";
+        s = perfect_nested_loops(s);
+        s = simplify(s);
+        debug(2) << "Lowering after final HLS optimization:\n" << s << '\n';
+    }
 
     if (!custom_passes.empty()) {
         for (size_t i = 0; i < custom_passes.size(); i++) {

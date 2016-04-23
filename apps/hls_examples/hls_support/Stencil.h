@@ -10,10 +10,12 @@ template <typename T, size_t EXTENT_0, size_t EXTENT_1, size_t EXTENT_2, size_t 
 template <typename T, size_t EXTENT_0, size_t EXTENT_1, size_t EXTENT_2, size_t EXTENT_3> struct PackedStencil;
 template <typename T, size_t EXTENT_0, size_t EXTENT_1, size_t EXTENT_2, size_t EXTENT_3> struct AxiPackedStencil;
 
+
 #ifndef AP_INT_MAX_W
 //#define AP_INT_MAX_W 32768
-//#define AP_INT_MAX_W 10880
-#define AP_INT_MAX_W 2048
+#define AP_INT_MAX_W 4554
+//#define AP_INT_MAX_W 17280
+//#define AP_INT_MAX_W 2048
 #endif
 
 #include <ap_int.h>

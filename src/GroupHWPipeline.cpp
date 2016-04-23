@@ -43,7 +43,11 @@ class CarveHWPipeline : public IRMutator {
                 // NOTE the realize node is not part of the pipeline
                 internal_assert(!pipeline_body.defined());
                 internal_assert(!pc->update.defined());
-                pipeline_body = pc->produce;
+                // still wrap the produce node into a PC node,
+                // so that the implementation of each HW kernel is in a produce of PC.
+                // make a dummy consume node
+                pipeline_body = ProducerConsumer::make(pc->name, pc->produce, Stmt(),
+                                                       Evaluate::make(make_zero(Int(32))));
                 stmt = op;
             } else if ((dag.kernels.count(kernel_name) &&
                         !dag.input_kernels.count(kernel_name)) ||
