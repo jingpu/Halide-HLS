@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
         return(0);
     }
 
-    Image<uint16_t> input = load_image(argv[1]);
+    Image<uint8_t> input = load_image(argv[1]);
     fprintf(stderr, "%d %d\n", input.width(), input.height());
     Image<uint8_t> out_native(1440/2, 960/2, 3);
     Image<uint8_t> out_zynq(1440/2, 960/2, 3);
