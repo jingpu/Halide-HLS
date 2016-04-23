@@ -93,6 +93,8 @@ public:
             .vectorize(xi).unroll(yi).unroll(c);
         //demosaic.tile(x, y, xo, yo, xi, yi, 2, 2)
         //    .reorder(c, xi, yi, xo, yo).unroll(c).unroll(xi).unroll(yi);
+        lowpass_x.compute_at(output, xo)
+            .vectorize(x, 8).unroll(c);
 
 
 
@@ -112,6 +114,7 @@ public:
 
         std::vector<Func> hw_bounds = hw_output.accelerate({padded}, xi, xo);
         demosaic.linebuffer().unroll(c);
+        lowpass_x.linebuffer().unroll(c);
         hw_bounds[0].unroll(c);
 
         //output.print_loop_nest();
@@ -119,7 +122,7 @@ public:
         output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
         output.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
 
-        std::vector<Target::Feature> features({Target::HLS});
+        std::vector<Target::Feature> features({Target::HLS, Target::NoAsserts, Target::NoBoundsQuery});
         Target target(Target::Linux, Target::ARM, 32, features);
         output.compile_to_zynq_c("pipeline_zynq.c", args, "pipeline_zynq", target);
         output.compile_to_header("pipeline_zynq.h", args, "pipeline_zynq", target);
