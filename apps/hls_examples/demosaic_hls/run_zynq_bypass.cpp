@@ -15,6 +15,7 @@
 #include "halide_image.h"
 #include "halide_image_io.h"
 
+using namespace Halide::Tools;
 
 #ifndef KBUF_T_DEFINED
 #define KBUF_T_DEFINED
@@ -69,7 +70,57 @@ static int halide_free_kbuf(int fd, kbuf_t* ptr) {
  return ioctl(fd, FREE_IMAGE, (long unsigned int)ptr);
 }
 
-using namespace Halide::Tools;
+int alloc_buffer_duplet(buffer_t *b, kbuf_t *k, size_t elem_size, int cma) {
+    int ok = halide_alloc_kbuf(cma, k);
+    if (ok < 0) {
+        printf("alloc_buffer_duplet: failed to allocate kernel buffer.\n");
+    }
+    if (k->depth < elem_size || k->depth % elem_size != 0) {
+        printf("alloc_buffer_duplet: wrong values: k->depth = %u, elem_size = %zu\n", k->depth, elem_size);
+    }
+
+    int channels = k->depth / elem_size;
+    if (channels == 1) {
+        // no channel in buffer_t, so dim 0 is image width, dim 1 is image height
+        b->extent[0] = k->width;
+        b->extent[1] = k->height;
+        b->extent[2] = 0;
+        b->extent[3] = 0;
+
+        b->stride[0] = 1;
+        b->stride[1] = k->stride;
+        b->stride[2] = 0;
+        b->stride[3] = 0;
+    } else {
+        // dim 0 is channel, dim 1 is image width, dim 2 is image height
+        b->extent[0] = channels;
+        b->extent[1] = k->width;
+        b->extent[2] = k->height;
+        b->extent[3] = 0;
+
+        b->stride[0] = 1;
+        b->stride[1] = channels;
+        b->stride[2] = channels * k->stride;
+        b->stride[3] = 0;
+    }
+
+    // other fields of buffer_t
+    b->elem_size = elem_size;
+    b->host_dirty = false;
+    b->dev_dirty = false;
+
+    b->dev = k->phys_addr;
+    b->host = (uint8_t*) mmap(NULL, k->stride * k->height * k->depth,
+                              PROT_WRITE, MAP_SHARED, cma, k->mmap_offset);
+    return ok;
+}
+
+
+int free_buffer_duplet(buffer_t *b, kbuf_t *k, int cma) {
+    munmap((void*)b->host, k->stride * k->height * k->depth);
+    return halide_free_kbuf(cma, k);
+}
+
 
 int main(int argc, char **argv) {
     // Open the buffer allocation device
@@ -98,28 +149,7 @@ int main(int argc, char **argv) {
     input_kbuf.height = 1080;
     input_kbuf.depth = 1;
     input_kbuf.stride = 2048;
-    int ok_1 = halide_alloc_kbuf(cma, &input_kbuf);
-    if (ok_1 < 0) {
-        printf("Failed to allocate kernel buffer input_kbuf.\n");
-    }
-
-    // setup buffer_t
-    input_zynq.extent[0] = 1920;
-    input_zynq.extent[1] = 1080;
-    input_zynq.extent[2] = 0;
-    input_zynq.extent[3] = 0;
-
-    input_zynq.stride[0] = 1;
-    input_zynq.stride[1] = 2048;
-    input_zynq.stride[2] = 0;
-    input_zynq.stride[3] = 0;
-    input_zynq.elem_size = sizeof(uint8_t);
-    input_zynq.host_dirty = false;
-    input_zynq.dev_dirty = false;
-
-    input_zynq.dev = input_kbuf.phys_addr;
-    input_zynq.host = (uint8_t*) mmap(NULL, input_kbuf.stride * input_kbuf.height * input_kbuf.depth,
-                                      PROT_WRITE, MAP_SHARED, cma, input_kbuf.mmap_offset);
+    alloc_buffer_duplet(&input_zynq, &input_kbuf, sizeof(uint8_t), cma);
 
     // fill data
     for (int y = 0; y < input_zynq.extent[1]; y++)
@@ -134,28 +164,7 @@ int main(int argc, char **argv) {
     output_kbuf.height = 480;
     output_kbuf.depth = 3;
     output_kbuf.stride = 720;
-    int ok_2 = halide_alloc_kbuf(cma, &output_kbuf);
-    if (ok_2 < 0) {
-        printf("Failed to allocate kernel buffer output_kbuf.\n");
-    }
-
-    // setup buffer_t
-    output_zynq.extent[0] = 3;
-    output_zynq.extent[1] = 720;
-    output_zynq.extent[2] = 480;
-    output_zynq.extent[3] = 0;
-
-    output_zynq.stride[0] = 1;
-    output_zynq.stride[1] = 3;
-    output_zynq.stride[2] = 3*720;
-    output_zynq.stride[3] = 0;
-    output_zynq.elem_size = sizeof(uint8_t);
-    output_zynq.host_dirty = false;
-    output_zynq.dev_dirty = false;
-
-    output_zynq.dev = output_kbuf.phys_addr;
-    output_zynq.host = (uint8_t*) mmap(NULL, output_kbuf.stride * output_kbuf.height * output_kbuf.depth,
-                                       PROT_WRITE, MAP_SHARED, cma, output_kbuf.mmap_offset);
+    alloc_buffer_duplet(&output_zynq, &output_kbuf, sizeof(uint8_t), cma);
 
     printf("start.\n");
     pipeline_native(input, out_native);
@@ -214,10 +223,8 @@ int main(int argc, char **argv) {
 
 
     // free pinned buffers
-    munmap((void*)input_zynq.host, input_kbuf.stride * input_kbuf.height * input_kbuf.depth);
-    halide_free_kbuf(cma, &input_kbuf);
-    munmap((void*)output_zynq.host, output_kbuf.stride * output_kbuf.height * output_kbuf.depth);
-    halide_free_kbuf(cma, &output_kbuf);
+    free_buffer_duplet(&input_zynq, &input_kbuf, cma);
+    free_buffer_duplet(&output_zynq, &output_kbuf, cma);
 
     close(hwacc);
     close(cma);
