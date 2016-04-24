@@ -50,6 +50,9 @@ out_zynq.png: run_zynq
 out_zynq_bypass.png: run_zynq_bypass
 	./run_zynq_bypass ../../images/zynq_raw.png
 
+capture_image: capture_image.cpp pipeline_zynq_bypass.o pipeline_native.o
+	$(CXX) $(CXXFLAGS) -g -Wall -Werror $^ -o $@ -lpthread -ldl $(PNGFLAGS)
+
 clean:
 	rm -f pipeline run out.png demosaic.png
 	rm -f pipeline_native.h pipeline_native.o
