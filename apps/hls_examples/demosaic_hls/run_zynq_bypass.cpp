@@ -70,13 +70,9 @@ static int halide_free_kbuf(int fd, kbuf_t* ptr) {
  return ioctl(fd, FREE_IMAGE, (long unsigned int)ptr);
 }
 
-int alloc_buffer_duplet(buffer_t *b, kbuf_t *k, size_t elem_size, int cma) {
-    int ok = halide_alloc_kbuf(cma, k);
-    if (ok < 0) {
-        printf("alloc_buffer_duplet: failed to allocate kernel buffer.\n");
-    }
+int setup_buffer_duplet(buffer_t *b, kbuf_t *k, size_t elem_size, int cma) {
     if (k->depth < elem_size || k->depth % elem_size != 0) {
-        printf("alloc_buffer_duplet: wrong values: k->depth = %u, elem_size = %zu\n", k->depth, elem_size);
+        printf("setup_buffer_duplet: wrong values: k->depth = %u, elem_size = %zu\n", k->depth, elem_size);
     }
 
     int channels = k->depth / elem_size;
@@ -112,7 +108,7 @@ int alloc_buffer_duplet(buffer_t *b, kbuf_t *k, size_t elem_size, int cma) {
     b->dev = k->phys_addr;
     b->host = (uint8_t*) mmap(NULL, k->stride * k->height * k->depth,
                               PROT_WRITE, MAP_SHARED, cma, k->mmap_offset);
-    return ok;
+    return 0;
 }
 
 
@@ -149,7 +145,9 @@ int main(int argc, char **argv) {
     input_kbuf.height = 1080;
     input_kbuf.depth = 1;
     input_kbuf.stride = 2048;
-    alloc_buffer_duplet(&input_zynq, &input_kbuf, sizeof(uint8_t), cma);
+
+    halide_alloc_kbuf(cma, &input_kbuf);
+    setup_buffer_duplet(&input_zynq, &input_kbuf, sizeof(uint8_t), cma);
 
     // fill data
     for (int y = 0; y < input_zynq.extent[1]; y++)
@@ -164,7 +162,9 @@ int main(int argc, char **argv) {
     output_kbuf.height = 480;
     output_kbuf.depth = 3;
     output_kbuf.stride = 720;
-    alloc_buffer_duplet(&output_zynq, &output_kbuf, sizeof(uint8_t), cma);
+
+    halide_alloc_kbuf(cma, &output_kbuf);
+    setup_buffer_duplet(&output_zynq, &output_kbuf, sizeof(uint8_t), cma);
 
     printf("start.\n");
     pipeline_native(input, out_native);

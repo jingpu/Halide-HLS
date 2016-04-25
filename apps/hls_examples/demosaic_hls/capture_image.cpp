@@ -178,7 +178,6 @@ int main(int argc, char* argv[])
         buffer_t raw_buffer = {0};
         setup_buffer_duplet(&raw_buffer, &raw_kbuf, sizeof(uint8_t), cma);
 
-
         // copy raw image to a Halide Image object and save to file
         Image<uint8_t> raw_img(1920, 1080);
         for (int y = 0; y < raw_buffer.extent[1]; y++)
@@ -208,7 +207,7 @@ int main(int argc, char* argv[])
                 for (int c = 0; c < output_buffer.extent[0]; c++)
                     output_img(x, y, c) = output_buffer.host[c + x*output_buffer.stride[1] +
                                                              y*output_buffer.stride[2]];
-        save_image(output_img, "captured.png");
+        save_image(output_img, "captured_rgb.png");
 
         // Free the two working buffers
         free_buffer_duplet(&raw_buffer, &raw_kbuf, cma);
