@@ -31,8 +31,8 @@ int main(int argc, char **argv) {
 
     Image<uint8_t> input = load_image(argv[1]);
     fprintf(stderr, "%d %d\n", input.width(), input.height());
-    Image<uint8_t> out_native(720, 480);
-    Image<uint8_t> out_zynq(720, 480);
+    Image<uint8_t> out_native(720, 480, 3);
+    Image<uint8_t> out_zynq(720, 480, 3);
 
     printf("start.\n");
 
@@ -49,11 +49,13 @@ int main(int argc, char **argv) {
     unsigned fails = 0;
     for (int y = 0; y < out_zynq.height(); y++) {
         for (int x = 0; x < out_zynq.width(); x++) {
-            if (out_native(x, y) != out_zynq(x, y)) {
-                printf("out_native(%d, %d) = %d, but out_zynq(%d, %d) = %d\n",
-                       x, y, out_native(x, y),
-                       x, y, out_zynq(x, y));
-                fails++;
+            for (int c = 0; c < out_zynq.channels(); c++) {
+                if (out_native(x, y, c) != out_zynq(x, y, c)) {
+                    printf("out_native(%d, %d, %d) = %d, but out_zynq(%d, %d, %d) = %d\n",
+                           x, y, c, out_native(x, y, c),
+                           x, y, c, out_zynq(x, y, c));
+                    fails++;
+                }
             }
 	}
     }
