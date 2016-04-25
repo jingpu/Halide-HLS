@@ -26,7 +26,7 @@ public:
     Func grad_x, grad_y;
     Func grad_xx, grad_yy, grad_xy;
     Func grad_gx, grad_gy, grad_gxy;
-    Func cim, harris;
+    Func cim, corners, harris;
 
     Func output, hw_output;
     Func neswNeighbors, diagNeighbors, vNeighbors, hNeighbors;
@@ -71,34 +71,30 @@ public:
                                                  c == 1, green(x, y),
                                                  blue(x, y)));
 
-        gray(x, y) = cast<uint8_t>((77 * cast<uint16_t>(demosaic(0, x, y))
-                                    + 150 * cast<uint16_t>(demosaic(1, x, y))
-                                    + 29 * cast<uint16_t>(demosaic(2, x, y))) >> 8);
 
         // lowpass filter before downsample
-        lowpass_y(x, y) = cast<uint8_t>((cast<uint16_t>(gray(x, y)) +
-                                            cast<uint16_t>(gray(x+1, y)))/2);
-        lowpass_x(x, y) = cast<uint8_t>((cast<uint16_t>(lowpass_y(x, y)) +
-                                            cast<uint16_t>(lowpass_y(x, y+1)))/2);
-
-        //hw_output(x, y) = lowpass_x(x, y);
+        lowpass_y(c, x, y) = cast<uint8_t>((cast<uint16_t>(demosaic(c, x, y)) +
+                                            cast<uint16_t>(demosaic(c, x+1, y)))/2);
+        lowpass_x(c, x, y) = cast<uint8_t>((cast<uint16_t>(lowpass_y(c, x, y)) +
+                                            cast<uint16_t>(lowpass_y(c, x, y+1)))/2);
 
         // downsample
-        downsample(x, y) = lowpass_x(x*2, y*2);
-        //downsample(x, y) = hw_output(x*2, y*2);
-
+        downsample(c, x, y) = lowpass_x(c, x*2, y*2);
 
         // harris corner detector
         {
+            gray(x, y) = cast<uint8_t>((77 * cast<uint16_t>(downsample(0, x, y))
+                                        + 150 * cast<uint16_t>(downsample(1, x, y))
+                                        + 29 * cast<uint16_t>(downsample(2, x, y))) >> 8);
 
-            Func downsample16;
-            downsample16(x,y) = cast<int16_t>(downsample(x,y));
-            grad_x(x, y) = cast<int16_t>(-downsample16(x-1,y-1) + downsample16(x+1,y-1)
-                                         -2*downsample16(x-1,y) + 2*downsample16(x+1,y)
-                                         -downsample16(x-1,y+1) + downsample16(x+1,y+1));
-            grad_y(x, y) = cast<int16_t>(downsample16(x-1,y+1) - downsample16(x-1,y-1) +
-                                         2*downsample16(x,y+1) - 2*downsample16(x,y-1) +
-                                         downsample16(x+1,y+1) - downsample16(x+1,y-1));
+            Func gray16;
+            gray16(x,y) = cast<int16_t>(gray(x,y));
+            grad_x(x, y) = cast<int16_t>(-gray16(x-1,y-1) + gray16(x+1,y-1)
+                                         -2*gray16(x-1,y) + 2*gray16(x+1,y)
+                                         -gray16(x-1,y+1) + gray16(x+1,y+1));
+            grad_y(x, y) = cast<int16_t>(gray16(x-1,y+1) - gray16(x-1,y-1) +
+                                         2*gray16(x,y+1) - 2*gray16(x,y-1) +
+                                         gray16(x+1,y+1) - gray16(x+1,y-1));
 
             grad_xx(x, y) = cast<int32_t>(grad_x(x,y)) * cast<int32_t>(grad_x(x,y));
             grad_yy(x, y) = cast<int32_t>(grad_y(x,y)) * cast<int32_t>(grad_y(x,y));
@@ -123,17 +119,20 @@ public:
                 cim(x, y) > cim(x+1, y-1) && cim(x, y) > cim(x-1, y) &&
                 cim(x, y) > cim(x+1, y) && cim(x, y) > cim(x-1, y+1) &&
                 cim(x, y) > cim(x, y+1) && cim(x, y) > cim(x+1, y+1);
-            harris(x, y) = select( is_max && (cim(x, y) >= threshold), cast<uint8_t>(255), 0);
-
+            //harris(x, y) = select( is_max && (cim(x, y) >= threshold), cast<uint8_t>(255), 0);
+            corners(x, y) = is_max && (cim(x, y) >= threshold);
+            harris(c, x, y) = select( corners(x, y),
+                                      select(c == 1, cast<uint8_t>(255), 0),  // green dots on corners
+                                      downsample(c, x, y));
         }
 
         //output(x, y) = harris(x, y);
-        hw_output(x, y) = harris(x, y);
-        output(x, y) = hw_output(x, y);
+        hw_output(c, x, y) = harris(c, x, y);
+        output(x, y, c) = hw_output(c, x, y);
 
         // common constraints
         // We can generate slightly better code if we know the output is a whole number of tiles.
-        output.bound(x, 0, 720).bound(y, 0, 480);
+        output.bound(x, 0, 720).bound(y, 0, 480).bound(c, 0, 3);
 
         // Arguments
         args = {input};
@@ -145,11 +144,18 @@ public:
         output.tile(x, y, xo, yo, xi, yi, 120, 120);
 
         // ARM schedule use interleaved vector instructions
+        /*
+        demosaic.compute_at(output, xo)
+            .tile(x, y, xo, yo, xi, yi, 8, 2)
+            .reorder(c, xi, yi, xo, yo)
+            .vectorize(xi).unroll(yi).unroll(c);
         gray.compute_at(output, xo)
             .tile(x, y, xo, yo, xi, yi, 8, 2)
             .vectorize(xi).unroll(yi);
         lowpass_x.compute_at(output, xo)
             .vectorize(x, 8);
+        */
+        downsample.compute_at(output, xo).vectorize(x, 8).unroll(c);
 
         grad_x.compute_at(output, xo).vectorize(x, 8);
         grad_y.compute_at(output, xo).vectorize(x, 8);
@@ -190,7 +196,8 @@ public:
         hw_output.tile(x, y, xo, yo, xi, yi, 720, 480);
         std::vector<Func> hw_bounds = hw_output.accelerate({padded}, xi, xo);
 
-        downsample.linebuffer();
+        downsample.linebuffer().unroll(c)
+            .fifo_depth(hw_bounds[0], 720*10);
         grad_x.linebuffer().unroll(x);
         grad_y.linebuffer().unroll(x);
         grad_xx.linebuffer().unroll(x);
@@ -203,6 +210,8 @@ public:
         grad_gxy.linebuffer().unroll(x);
         grad_gxy.update(0).unroll(x);
         cim.linebuffer().unroll(x);
+        corners.linebuffer().unroll(x);
+        hw_bounds[0].linebuffer().unroll(x).unroll(c);
 
         grad_gx.update(0).unroll(box.x).unroll(box.y);
         grad_gy.update(0).unroll(box.x).unroll(box.y);
