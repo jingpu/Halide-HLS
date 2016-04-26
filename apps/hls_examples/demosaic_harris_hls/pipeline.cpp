@@ -42,7 +42,7 @@ public:
     {
         //padded = BoundaryConditions::constant_exterior(input, 0);
         //padded(x, y) = input(x+240, y+60);
-        padded(x, y) = input(x+200, y+40);
+        padded(x, y) = input(x+201, y+41);
 
         // Now demosaic and try to get RGB back
         Func padded16;

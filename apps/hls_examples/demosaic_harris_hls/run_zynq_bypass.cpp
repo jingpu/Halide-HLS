@@ -135,8 +135,8 @@ int main(int argc, char **argv) {
 
     Image<uint8_t> input = load_image(argv[1]);
     fprintf(stderr, "%d %d\n", input.width(), input.height());
-    Image<uint8_t> out_native(720, 480);
-    Image<uint8_t> out_zynq_img(720, 480);
+    Image<uint8_t> out_native(720, 480, 3);
+    Image<uint8_t> out_zynq_img(720, 480, 3);
 
     // prepare a pinned buffer holding inputs
     kbuf_t input_kbuf;
@@ -160,7 +160,7 @@ int main(int argc, char **argv) {
     buffer_t output_zynq = {0};
     output_kbuf.width = 720;
     output_kbuf.height = 480;
-    output_kbuf.depth = 1;
+    output_kbuf.depth = 3;
     output_kbuf.stride = 720;
 
     halide_alloc_kbuf(cma, &output_kbuf);
@@ -176,10 +176,11 @@ int main(int argc, char **argv) {
     pipeline_zynq(&input_zynq, &output_zynq, hwacc, cma);
 
     // copy output values
-    for (int y = 0; y < output_zynq.extent[1]; y++)
-        for (int x = 0; x < output_zynq.extent[0]; x++)
-                out_zynq_img(x, y) = output_zynq.host[x*output_zynq.stride[0] +
-                                                      y*output_zynq.stride[1]];
+    for (int y = 0; y < output_zynq.extent[2]; y++)
+        for (int x = 0; x < output_zynq.extent[1]; x++)
+            for (int c = 0; c < output_zynq.extent[0]; c++)
+                out_zynq_img(x, y, c) = output_zynq.host[c + x*output_zynq.stride[1] +
+                                                         y*output_zynq.stride[2]];
 
     save_image(out_zynq_img, "out_zynq_bypass.png");
     printf("accelerator program results saved.\n");
@@ -187,13 +188,17 @@ int main(int argc, char **argv) {
     printf("checking results...\n");
 
     unsigned fails = 0;
-    for (int y = 0; y < out_zynq_img.height(); y++) {
-        for (int x = 0; x < out_zynq_img.width(); x++) {
-            if (out_native(x, y) != out_zynq_img(x, y)) {
-                printf("out_native(%d, %d) = %d, but out_zynq_img(%d, %d) = %d\n",
-                       x, y, out_native(x, y),
-                       x, y, out_zynq_img(x, y));
-                fails++;
+    //for (int y = 0; y < out_zynq_img.height(); y++) {
+    //for (int x = 0; x < out_zynq_img.width(); x++) {
+    for (int y = 0; y < 5; y++) {
+        for (int x = 0; x < 5; x++) {
+            for (int c = 0; c < 3; c++) {
+                if (out_native(x, y, c) != out_zynq_img(x, y, c)) {
+                    printf("out_native(%d, %d, %d) = %d, but out_zynq_img(%d, %d, %d) = %d\n",
+                           x, y, c, out_native(x, y, c),
+                           x, y, c, out_zynq_img(x, y, c));
+                    fails++;
+                }
             }
 	}
     }

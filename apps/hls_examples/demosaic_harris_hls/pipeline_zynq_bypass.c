@@ -89,7 +89,7 @@ int pipeline_zynq(buffer_t *_p2___input_buffer, buffer_t *_output__2_buffer, con
  output_kbuf.phys_addr = _output__2_buffer->dev;
 
  kbuf_t _slice_padded__2;
- halide_slice_kbuf(&input_kbuf, &_slice_padded__2, 200-2, 40-2, 1443, 963);
+ halide_slice_kbuf(&input_kbuf, &_slice_padded__2, 201-7, 41-7, 1454, 974);
  kbuf_t _kbufs[2];
  _kbufs[0] = _slice_padded__2;
  _kbufs[1] = output_kbuf;
