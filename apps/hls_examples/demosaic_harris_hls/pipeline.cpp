@@ -6,7 +6,7 @@ using namespace Halide;
 Var x("x"), y("y"), c("c");
 Var xo("xo"), yo("yo"), xi("xi"), yi("yi");
 
-uint8_t phase = 0;
+uint8_t phase = 3;
 
 int blockSize = 3;
 int Ksize = 3;
@@ -197,7 +197,7 @@ public:
         std::vector<Func> hw_bounds = hw_output.accelerate({padded}, xi, xo);
 
         downsample.linebuffer().unroll(c)
-            .fifo_depth(hw_bounds[0], 720*10);
+            .fifo_depth(hw_bounds[0], 5400);
         grad_x.linebuffer().unroll(x);
         grad_y.linebuffer().unroll(x);
         grad_xx.linebuffer().unroll(x);

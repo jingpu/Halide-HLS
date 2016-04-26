@@ -221,7 +221,7 @@ static int __pipeline_hls(buffer_t *_p2_input_buffer, buffer_t *_output_2_buffer
  } // if _output_2_host_and_dev_are_null
  if (_p2_input_host_and_dev_are_null)
  {
-  bool _1 = halide_rewrite_buffer(_p2_input_buffer, 1, 193, 1454, 1, 33, 974, 1454, 0, 0, 0, 0, 0, 0);
+  bool _1 = halide_rewrite_buffer(_p2_input_buffer, 1, 194, 1454, 1, 34, 974, 1454, 0, 0, 0, 0, 0, 0);
   (void)_1;
  } // if _p2_input_host_and_dev_are_null
  bool _2 = _output_2_host_and_dev_are_null || _p2_input_host_and_dev_are_null;
@@ -268,24 +268,24 @@ static int __pipeline_hls(buffer_t *_p2_input_buffer, buffer_t *_output_2_buffer
    int32_t _28 = halide_error_access_out_of_bounds(NULL, "Output buffer output$2", 2, 0, 2, _output_2_min_2, _27);
    return _28;
   }
-  bool _29 = _p2_input_min_0 <= 193;
-  int32_t _30 = 1647 - _p2_input_extent_0;
+  bool _29 = _p2_input_min_0 <= 194;
+  int32_t _30 = 1648 - _p2_input_extent_0;
   bool _31 = _30 <= _p2_input_min_0;
   bool _32 = _29 && _31;
   if (!_32)   {
    int32_t _33 = _p2_input_min_0 + _p2_input_extent_0;
    int32_t _34 = _33 + -1;
-   int32_t _35 = halide_error_access_out_of_bounds(NULL, "Input buffer p2:input", 0, 193, 1646, _p2_input_min_0, _34);
+   int32_t _35 = halide_error_access_out_of_bounds(NULL, "Input buffer p2:input", 0, 194, 1647, _p2_input_min_0, _34);
    return _35;
   }
-  bool _36 = _p2_input_min_1 <= 33;
-  int32_t _37 = 1007 - _p2_input_extent_1;
+  bool _36 = _p2_input_min_1 <= 34;
+  int32_t _37 = 1008 - _p2_input_extent_1;
   bool _38 = _37 <= _p2_input_min_1;
   bool _39 = _36 && _38;
   if (!_39)   {
    int32_t _40 = _p2_input_min_1 + _p2_input_extent_1;
    int32_t _41 = _40 + -1;
-   int32_t _42 = halide_error_access_out_of_bounds(NULL, "Input buffer p2:input", 1, 33, 1006, _p2_input_min_1, _41);
+   int32_t _42 = halide_error_access_out_of_bounds(NULL, "Input buffer p2:input", 1, 34, 1007, _p2_input_min_1, _41);
    return _42;
   }
   bool _43 = _output_2_stride_0 == 1;
@@ -396,13 +396,13 @@ static int __pipeline_hls(buffer_t *_p2_input_buffer, buffer_t *_output_2_buffer
      int32_t _111 = __auto_insert__padded_2_s0_y * 1454;
      int32_t _112 = __auto_insert__padded_2_s0_x + _111;
      int32_t _113 = _112 + 10185;
-     int32_t _114 = __auto_insert__padded_2_s0_y + 40;
+     int32_t _114 = __auto_insert__padded_2_s0_y + 41;
      int32_t _115 = _114 * _p2_input_stride_1;
      int32_t _116 = __auto_insert__padded_2_s0_x + _115;
      int32_t _117 = _p2_input_min_1 * _p2_input_stride_1;
      int32_t _118 = _p2_input_min_0 + _117;
      int32_t _119 = _116 - _118;
-     int32_t _120 = _119 + 200;
+     int32_t _120 = _119 + 201;
      uint8_t _121 = _p2_input[_120];
      __auto_insert__padded_2[_113] = _121;
     } // for __auto_insert__padded_2_s0_x
