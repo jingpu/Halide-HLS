@@ -188,10 +188,8 @@ int main(int argc, char **argv) {
     printf("checking results...\n");
 
     unsigned fails = 0;
-    //for (int y = 0; y < out_zynq_img.height(); y++) {
-    //for (int x = 0; x < out_zynq_img.width(); x++) {
-    for (int y = 0; y < 5; y++) {
-        for (int x = 0; x < 5; x++) {
+    for (int y = 0; y < out_zynq_img.height(); y++) {
+        for (int x = 0; x < out_zynq_img.width(); x++) {
             for (int c = 0; c < 3; c++) {
                 if (out_native(x, y, c) != out_zynq_img(x, y, c)) {
                     printf("out_native(%d, %d, %d) = %d, but out_zynq_img(%d, %d, %d) = %d\n",
