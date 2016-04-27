@@ -116,8 +116,11 @@ string CodeGen_HLS_Target::CodeGen_HLS_C::print_stencil_pragma(const string &nam
     internal_assert(stencils.contains(name));
     Stencil_Type stype = stencils.get(name);
     if (stype.type == Stencil_Type::StencilContainerType::Stream) {
-        oss << "#pragma HLS STREAM variable=" << print_name(name) << " depth=" << stype.depth << "\n"
-            << "#pragma HLS RESOURCE variable=" << print_name(name) << " core=FIFO_SRL\n\n";
+        oss << "#pragma HLS STREAM variable=" << print_name(name) << " depth=" << stype.depth << "\n";
+        if (stype.depth <= 100) {
+            // use shift register implementation when the FIFO is shallow
+            oss << "#pragma HLS RESOURCE variable=" << print_name(name) << " core=FIFO_SRL\n\n";
+        }
     } else if (stype.type == Stencil_Type::StencilContainerType::Stencil) {
         oss << "#pragma HLS ARRAY_PARTITION variable=" << print_name(name) << ".value complete dim=0\n\n";
     } else {

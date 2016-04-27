@@ -152,7 +152,7 @@ const string globals =
     // for a detailed comparison of type-punning methods.
     "template<typename A, typename B> A reinterpret(B b) {A a; memcpy(&a, &b, sizeof(a)); return a;}\n"
     "\n"
-    "static bool halide_rewrite_buffer(buffer_t *b, int32_t elem_size,\n"
+    "inline static bool halide_rewrite_buffer(buffer_t *b, int32_t elem_size,\n"
     "                           int32_t min0, int32_t extent0, int32_t stride0,\n"
     "                           int32_t min1, int32_t extent1, int32_t stride1,\n"
     "                           int32_t min2, int32_t extent2, int32_t stride2,\n"
