@@ -45,10 +45,10 @@ run_zynq_bypass: pipeline_zynq_bypass.o pipeline_native.o run_zynq_bypass.o
 	$(CXX) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
 
 out_zynq.png: run_zynq
-	HL_NUM_THREADS=3 ./run_zynq ../../images/zynq_raw.png
+	HL_NUM_THREADS=3 ./run_zynq ../../images/raw11.png ../../images/raw12.png
 
 out_zynq_bypass.png: run_zynq_bypass
-	./run_zynq_bypass ../../images/zynq_raw.png
+	./run_zynq_bypass ../../images/raw11.png ../../images/raw12.png
 
 clean:
 	rm -f pipeline run out.png demosaic.png
