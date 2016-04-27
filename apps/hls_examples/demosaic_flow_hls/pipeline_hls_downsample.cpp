@@ -251,12 +251,12 @@ static int __pipeline_hls(buffer_t *_p2_input1_buffer, buffer_t *_p2_input2_buff
  } // if _output_2_host_and_dev_are_null
  if (_p2_input1_host_and_dev_are_null)
  {
-  bool _1 = halide_rewrite_buffer(_p2_input1_buffer, 1, 193, 1454, 1, 33, 974, 1454, 0, 0, 0, 0, 0, 0);
+  bool _1 = halide_rewrite_buffer(_p2_input1_buffer, 1, 194, 1454, 1, 34, 974, 1454, 0, 0, 0, 0, 0, 0);
   (void)_1;
  } // if _p2_input1_host_and_dev_are_null
  if (_p2_input2_host_and_dev_are_null)
  {
-  bool _2 = halide_rewrite_buffer(_p2_input2_buffer, 1, 195, 1450, 1, 35, 970, 1450, 0, 0, 0, 0, 0, 0);
+  bool _2 = halide_rewrite_buffer(_p2_input2_buffer, 1, 196, 1450, 1, 36, 970, 1450, 0, 0, 0, 0, 0, 0);
   (void)_2;
  } // if _p2_input2_host_and_dev_are_null
  bool _3 = _output_2_host_and_dev_are_null || _p2_input1_host_and_dev_are_null;
@@ -309,44 +309,44 @@ static int __pipeline_hls(buffer_t *_p2_input1_buffer, buffer_t *_p2_input2_buff
    int32_t _32 = halide_error_access_out_of_bounds(NULL, "Output buffer output$2", 2, 0, 2, _output_2_min_2, _31);
    return _32;
   }
-  bool _33 = _p2_input1_min_0 <= 193;
-  int32_t _34 = 1647 - _p2_input1_extent_0;
+  bool _33 = _p2_input1_min_0 <= 194;
+  int32_t _34 = 1648 - _p2_input1_extent_0;
   bool _35 = _34 <= _p2_input1_min_0;
   bool _36 = _33 && _35;
   if (!_36)   {
    int32_t _37 = _p2_input1_min_0 + _p2_input1_extent_0;
    int32_t _38 = _37 + -1;
-   int32_t _39 = halide_error_access_out_of_bounds(NULL, "Input buffer p2:input1", 0, 193, 1646, _p2_input1_min_0, _38);
+   int32_t _39 = halide_error_access_out_of_bounds(NULL, "Input buffer p2:input1", 0, 194, 1647, _p2_input1_min_0, _38);
    return _39;
   }
-  bool _40 = _p2_input1_min_1 <= 33;
-  int32_t _41 = 1007 - _p2_input1_extent_1;
+  bool _40 = _p2_input1_min_1 <= 34;
+  int32_t _41 = 1008 - _p2_input1_extent_1;
   bool _42 = _41 <= _p2_input1_min_1;
   bool _43 = _40 && _42;
   if (!_43)   {
    int32_t _44 = _p2_input1_min_1 + _p2_input1_extent_1;
    int32_t _45 = _44 + -1;
-   int32_t _46 = halide_error_access_out_of_bounds(NULL, "Input buffer p2:input1", 1, 33, 1006, _p2_input1_min_1, _45);
+   int32_t _46 = halide_error_access_out_of_bounds(NULL, "Input buffer p2:input1", 1, 34, 1007, _p2_input1_min_1, _45);
    return _46;
   }
-  bool _47 = _p2_input2_min_0 <= 195;
-  int32_t _48 = 1645 - _p2_input2_extent_0;
+  bool _47 = _p2_input2_min_0 <= 196;
+  int32_t _48 = 1646 - _p2_input2_extent_0;
   bool _49 = _48 <= _p2_input2_min_0;
   bool _50 = _47 && _49;
   if (!_50)   {
    int32_t _51 = _p2_input2_min_0 + _p2_input2_extent_0;
    int32_t _52 = _51 + -1;
-   int32_t _53 = halide_error_access_out_of_bounds(NULL, "Input buffer p2:input2", 0, 195, 1644, _p2_input2_min_0, _52);
+   int32_t _53 = halide_error_access_out_of_bounds(NULL, "Input buffer p2:input2", 0, 196, 1645, _p2_input2_min_0, _52);
    return _53;
   }
-  bool _54 = _p2_input2_min_1 <= 35;
-  int32_t _55 = 1005 - _p2_input2_extent_1;
+  bool _54 = _p2_input2_min_1 <= 36;
+  int32_t _55 = 1006 - _p2_input2_extent_1;
   bool _56 = _55 <= _p2_input2_min_1;
   bool _57 = _54 && _56;
   if (!_57)   {
    int32_t _58 = _p2_input2_min_1 + _p2_input2_extent_1;
    int32_t _59 = _58 + -1;
-   int32_t _60 = halide_error_access_out_of_bounds(NULL, "Input buffer p2:input2", 1, 35, 1004, _p2_input2_min_1, _59);
+   int32_t _60 = halide_error_access_out_of_bounds(NULL, "Input buffer p2:input2", 1, 36, 1005, _p2_input2_min_1, _59);
    return _60;
   }
   bool _61 = _output_2_stride_0 == 1;
@@ -494,13 +494,13 @@ static int __pipeline_hls(buffer_t *_p2_input1_buffer, buffer_t *_p2_input2_buff
      int32_t _154 = __auto_insert__padded2_2_s0_y * 1450;
      int32_t _155 = __auto_insert__padded2_2_s0_x + _154;
      int32_t _156 = _155 + 7255;
-     int32_t _157 = __auto_insert__padded2_2_s0_y + 40;
+     int32_t _157 = __auto_insert__padded2_2_s0_y + 41;
      int32_t _158 = _157 * _p2_input2_stride_1;
      int32_t _159 = __auto_insert__padded2_2_s0_x + _158;
      int32_t _160 = _p2_input2_min_1 * _p2_input2_stride_1;
      int32_t _161 = _p2_input2_min_0 + _160;
      int32_t _162 = _159 - _161;
-     int32_t _163 = _162 + 200;
+     int32_t _163 = _162 + 201;
      uint8_t _164 = _p2_input2[_163];
      __auto_insert__padded2_2[_156] = _164;
     } // for __auto_insert__padded2_2_s0_x
@@ -517,13 +517,13 @@ static int __pipeline_hls(buffer_t *_p2_input1_buffer, buffer_t *_p2_input2_buff
       int32_t _166 = __auto_insert__padded1_2_s0_y * 1454;
       int32_t _167 = __auto_insert__padded1_2_s0_x + _166;
       int32_t _168 = _167 + 10185;
-      int32_t _169 = __auto_insert__padded1_2_s0_y + 40;
+      int32_t _169 = __auto_insert__padded1_2_s0_y + 41;
       int32_t _170 = _169 * _p2_input1_stride_1;
       int32_t _171 = __auto_insert__padded1_2_s0_x + _170;
       int32_t _172 = _p2_input1_min_1 * _p2_input1_stride_1;
       int32_t _173 = _p2_input1_min_0 + _172;
       int32_t _174 = _171 - _173;
-      int32_t _175 = _174 + 200;
+      int32_t _175 = _174 + 201;
       uint8_t _176 = _p2_input1[_175];
       __auto_insert__padded1_2[_168] = _176;
      } // for __auto_insert__padded1_2_s0_x

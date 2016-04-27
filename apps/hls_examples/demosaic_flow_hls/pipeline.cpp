@@ -6,7 +6,7 @@ using namespace Halide;
 Var x("x"), y("y"), c("c");
 Var xo("xo"), yo("yo"), xi("xi"), yi("yi");
 
-uint8_t phase = 0;
+uint8_t phase = 3;
 
 int windowR = 2;
 
@@ -265,8 +265,8 @@ public:
           win(-windowR, windowR*2 + 1, -windowR, windowR*2 + 1)
     {
         //padded = BoundaryConditions::constant_exterior(input, 0);
-        padded1(x, y) = input1(x+200, y+40);
-        padded2(x, y) = input2(x+200, y+40);
+        padded1(x, y) = input1(x+201, y+41);
+        padded2(x, y) = input2(x+201, y+41);
 
         rgb1 = demosaic(padded1);
         rgb2 = demosaic(padded2);
