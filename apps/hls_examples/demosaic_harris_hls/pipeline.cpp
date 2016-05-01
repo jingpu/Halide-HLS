@@ -197,7 +197,7 @@ public:
         std::vector<Func> hw_bounds = hw_output.accelerate({padded}, xi, xo);
 
         downsample.linebuffer().unroll(c)
-            .fifo_depth(hw_bounds[0], 720*10);
+            .fifo_depth(hw_bounds[0], 5400);
         grad_x.linebuffer().unroll(x);
         grad_y.linebuffer().unroll(x);
         grad_xx.linebuffer().unroll(x);

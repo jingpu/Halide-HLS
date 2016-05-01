@@ -187,11 +187,9 @@ hls::stream<AxiPackedStencil<uint8_t, 2, 1> > &arg_1)
  // produce downsample$2.stencil.stream
  linebuffer<3, 726, 486>(_downsample_2_stencil_update_stream, _downsample_2_stencil_stream);
  (void)0;
- // dispatch_stream(_downsample_2_stencil_stream, 3, 3, 3, 3, 3, 1, 726, 3, 1, 486, 3, "__auto_insert__hw_output$2", 7200, 0, 3, 1, 722, 1, 482, "p2:grad_x", 1, 0, 3, 0, 726, 0, 486, "p2:grad_y", 1, 0, 3, 0, 726, 0, 486);
+ // dispatch_stream(_downsample_2_stencil_stream, 3, 3, 3, 3, 3, 1, 726, 3, 1, 486, 3, "__auto_insert__hw_output$2", 5400, 0, 3, 1, 722, 1, 482, "p2:grad_x", 1, 0, 3, 0, 726, 0, 486, "p2:grad_y", 1, 0, 3, 0, 726, 0, 486);
  hls::stream<PackedStencil<uint8_t, 3, 3, 3> > _downsample_2_stencil_stream_to___auto_insert__hw_output_2;
 #pragma HLS STREAM variable=_downsample_2_stencil_stream_to___auto_insert__hw_output_2 depth=5400
-
-
  hls::stream<PackedStencil<uint8_t, 3, 3, 3> > _downsample_2_stencil_stream_to_p2_grad_x;
 #pragma HLS STREAM variable=_downsample_2_stencil_stream_to_p2_grad_x depth=1
 #pragma HLS RESOURCE variable=_downsample_2_stencil_stream_to_p2_grad_x core=FIFO_SRL
