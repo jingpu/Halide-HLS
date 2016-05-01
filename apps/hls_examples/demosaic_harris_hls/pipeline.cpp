@@ -193,11 +193,12 @@ public:
         hw_bounds[0];
         */
 
-        hw_output.tile(x, y, xo, yo, xi, yi, 720, 480);
-        std::vector<Func> hw_bounds = hw_output.accelerate({padded}, xi, xo);
+        hw_output.tile(x, y, xo, yo, xi, yi, 720, 480)
+            .reorder(c, xi, yi, xo, yo);
+        hw_output.accelerate({padded}, xi, xo);
 
         downsample.linebuffer().unroll(c)
-            .fifo_depth(hw_bounds[0], 5400);
+            .fifo_depth(hw_output, 5400);
         grad_x.linebuffer().unroll(x);
         grad_y.linebuffer().unroll(x);
         grad_xx.linebuffer().unroll(x);
@@ -211,7 +212,7 @@ public:
         grad_gxy.update(0).unroll(x);
         cim.linebuffer().unroll(x);
         corners.linebuffer().unroll(x);
-        hw_bounds[0].linebuffer().unroll(x).unroll(c);
+        hw_output.unroll(xi).unroll(c);
 
         grad_gx.update(0).unroll(box.x).unroll(box.y);
         grad_gy.update(0).unroll(box.x).unroll(box.y);
@@ -221,12 +222,13 @@ public:
         output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
         output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
         output.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
-
+        /*
         std::vector<Target::Feature> features({Target::HLS, Target::NoAsserts, Target::NoBoundsQuery});
         Target target(Target::Linux, Target::ARM, 32, features);
         output.compile_to_zynq_c("pipeline_zynq.c", args, "pipeline_zynq", target);
         output.compile_to_header("pipeline_zynq.h", args, "pipeline_zynq", target);
         output.compile_to_lowered_stmt("pipeline_zynq.ir.html", args, HTML, target);
+        */
     }
 };
 

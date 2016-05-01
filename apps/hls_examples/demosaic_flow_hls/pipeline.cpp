@@ -107,145 +107,6 @@ public:
     ImageParam input1, input2;
     Func padded1, rgb1, small_rgb1, gray1;
     Func padded2, rgb2, small_rgb2, gray2;
-    Func A, Ainv;
-    Func output, hw_output;
-    std::vector<Argument> args;
-
-
-    MyPipeline()
-        : input1(UInt(8), 2), input2(UInt(8), 2),
-          padded1("padded1"), padded2("padded2"),
-          A("A"), Ainv("Ainv"),
-          output("output"), hw_output("hw_output")
-    {
-        //padded = BoundaryConditions::constant_exterior(input, 0);
-        padded1(x, y) = input1(x+200, y+40);
-        padded2(x, y) = input2(x+200, y+40);
-
-        rgb1 = demosaic(padded1);
-        rgb2 = demosaic(padded2);
-
-        small_rgb1 = downsample(rgb1);
-        small_rgb2 = downsample(rgb2);
-
-        gray1 = gray(small_rgb1);
-        gray2 = gray(small_rgb2);
-
-        Func frame1_f, frame2_f;
-        frame1_f(x, y) = cast<float>(gray1(x, y));
-        frame2_f(x, y) = cast<float>(gray2(x, y));
-
-        // calculate derivatives
-        Func Fdx, Fdy, Gdx, Gdy;
-        Fdx(x, y) = (frame1_f(x+1, y) - frame1_f(x-1, y)) / 2;
-        Fdy(x, y) = (frame1_f(x, y+1) - frame1_f(x, y-1)) / 2;
-        Gdx(x, y) = (frame2_f(x+1, y) - frame2_f(x-1, y)) / 2;
-        Gdy(x, y) = (frame2_f(x, y+1) - frame2_f(x, y-1)) / 2;
-
-        // calculate A^-1
-        int window_extent = windowR*2 + 1;
-        RDom win(-windowR, window_extent, -windowR, window_extent);
-        A(x, y) = {sum(Fdx(x+win.x, y+win.y) * Fdx(x+win.x, y+win.y)),
-                   sum(Fdx(x+win.x, y+win.y) * Fdy(x+win.x, y+win.y)),
-                   sum(Fdx(x+win.x, y+win.y) * Fdy(x+win.x, y+win.y)),
-                   sum(Fdy(x+win.x, y+win.y) * Fdy(x+win.x, y+win.y))};
-        //Aupdate(0).unroll(win.x).unroll(win.y);
-
-        Ainv = invert2x2(A);
-
-        // initialize condition: no offset
-        Func vectorField_0, vectorField_1;
-        Func G;
-        vectorField_0(x, y) = {0.0f, 0.0f};
-        //RDom i(1, iterations);
-        //Func G = resample(frame2_f, vectorField_0);
-        G(x, y)= frame2_f(x, y);
-
-        Func b0, b1;
-        b0(x, y) += Fdx(x+win.x, y+win.y) * (G(x+win.x, y+win.y) - frame1_f(x+win.x, y+win.y));
-        b1(x, y) += Fdy(x+win.x, y+win.y) * (G(x+win.x, y+win.y) - frame1_f(x+win.x, y+win.y));
-        b0.update(0).unroll(win.x).unroll(win.y);
-        b1.update(0).unroll(win.x).unroll(win.y);
-
-        vectorField_1(x, y) = {Ainv(x, y)[0]*(-b0(x, y)) + Ainv(x, y)[1]*(-b1(x, y)) + vectorField_0(x, y)[0],
-                               Ainv(x, y)[2]*(-b0(x, y)) + Ainv(x, y)[3]*(-b1(x, y)) + vectorField_0(x, y)[1]};
-
-
-        Expr red, green, blue;
-        red = cast<uint8_t>(clamp(cast<uint16_t>(gray2(x, y)) + abs(cast<int8_t>(vectorField_1(x, y)[0]*2)), 0, 255));
-        green = cast<uint8_t>(clamp(cast<uint16_t>(gray2(x, y)) + abs(cast<int8_t>(vectorField_1(x, y)[1]*2)), 0, 255));
-        blue = gray2(x, y);
-        hw_output(c, x, y) = select(c == 0, red,
-                                    select(c == 1, green,
-                                    blue));
-
-
-        output(x, y, c) = hw_output(c, x, y);
-
-        // common constraints
-        // We can generate slightly better code if we know the output is a whole number of tiles.
-        output.bound(x, 0, 720).bound(y, 0, 480).bound(c, 0, 3);
-
-        // Arguments
-        args = {input1, input2};
-    }
-
-    void compile_cpu() {
-        std::cout << "\ncompiling cpu code..." << std::endl;
-
-        output.tile(x, y, xo, yo, xi, yi, 120, 120);
-
-        // ARM schedule use interleaved vector instructions
-        gray1.compute_at(output, xo).vectorize(x, 8);
-        gray2.compute_at(output, xo).vectorize(x, 8);
-
-        A.compute_at(output, xo);
-        Ainv.compute_at(output, xo);
-
-        output.reorder(c, xi, yi, xo, yo)
-            .unroll(c);
-
-        //output.print_loop_nest();
-        output.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
-        output.compile_to_header("pipeline_native.h", args, "pipeline_native");
-        output.compile_to_object("pipeline_native.o", args, "pipeline_native");
-    }
-
-    void compile_hls() {
-        std::cout << "\ncompiling HLS code..." << std::endl;
-
-        padded1.compute_root();
-        padded2.compute_root();
-        hw_output.compute_root();
-
-        hw_output.tile(x, y, xo, yo, xi, yi, 720, 480);
-        std::vector<Func> hw_bounds = hw_output.accelerate({padded1, padded2}, xi, xo);
-
-        gray1.linebuffer();
-        gray2.linebuffer();
-        //A.linebuffer();
-        //Ainv.linebuffer();
-
-        hw_bounds[0].unroll(c);
-
-        //output.print_loop_nest();
-        output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
-        output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
-        output.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
-
-        std::vector<Target::Feature> features({Target::HLS, Target::NoAsserts, Target::NoBoundsQuery});
-        Target target(Target::Linux, Target::ARM, 32, features);
-        output.compile_to_zynq_c("pipeline_zynq.c", args, "pipeline_zynq", target);
-        output.compile_to_header("pipeline_zynq.h", args, "pipeline_zynq", target);
-        output.compile_to_lowered_stmt("pipeline_zynq.ir.html", args, HTML, target);
-    }
-};
-
-class MyPipelineNew {
-public:
-    ImageParam input1, input2;
-    Func padded1, rgb1, small_rgb1, gray1;
-    Func padded2, rgb2, small_rgb2, gray2;
     Func Ix, Iy, It;
     Func A00, A01, A10, A11, Ainv;
     Func b0, b1;
@@ -255,7 +116,7 @@ public:
     std::vector<Argument> args;
 
 
-    MyPipelineNew()
+    MyPipeline()
         : input1(UInt(8), 2), input2(UInt(8), 2),
           padded1("padded1"), padded2("padded2"),
           Ix("Ix"), Iy("Iy"), It("It"),
@@ -357,15 +218,17 @@ public:
     void compile_hls() {
         std::cout << "\ncompiling HLS code..." << std::endl;
 
-        padded1.compute_root();
-        padded2.compute_root();
-        hw_output.compute_root();
+        output.tile(x, y, xo, yo, xi, yi, 720, 480)
+            .reorder(c, xi, yi, xo, yo);
+        padded1.compute_at(output, xo);
+        padded2.compute_at(output, xo);
+        hw_output.compute_at(output, xo);
 
         hw_output.tile(x, y, xo, yo, xi, yi, 720, 480);
-        std::vector<Func> hw_bounds = hw_output.accelerate({padded1, padded2}, xi, xo);
+        hw_output.accelerate({padded1, padded2}, xi, xo);
 
         gray1.linebuffer();
-        gray2.linebuffer().fifo_depth(hw_bounds[0], 720*5);
+        gray2.linebuffer().fifo_depth(hw_output, 720*5);
         Ix.linebuffer();
         Iy.linebuffer();
         It.linebuffer();
@@ -386,26 +249,28 @@ public:
         b0.update(0).unroll(win.x).unroll(win.y);
         b1.update(0).unroll(win.x).unroll(win.y);
 
-        hw_bounds[0].unroll(c);
+        hw_output.unroll(c);
 
         //output.print_loop_nest();
         output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
         output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
         output.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
 
+        /*
         std::vector<Target::Feature> features({Target::HLS, Target::NoAsserts, Target::NoBoundsQuery});
         Target target(Target::Linux, Target::ARM, 32, features);
         output.compile_to_zynq_c("pipeline_zynq.c", args, "pipeline_zynq", target);
         output.compile_to_header("pipeline_zynq.h", args, "pipeline_zynq", target);
         output.compile_to_lowered_stmt("pipeline_zynq.ir.html", args, HTML, target);
+        */
     }
 };
 
 int main(int argc, char **argv) {
-    MyPipelineNew p1;
+    MyPipeline p1;
     p1.compile_cpu();
 
-    MyPipelineNew p2;
+    MyPipeline p2;
     p2.compile_hls();
 
     return 0;

@@ -32,19 +32,9 @@ int main(int argc, char **argv) {
     printf("finish running HLS code\n");
 
     bool success = true;
-    for (int y = 0; y < out_native.height(); y++) {
-        for (int x = 0; x < out_native.width(); x++) {
-            if (out_native(x, y) != out_hls(x, y)) {
-                printf("out_native(%d, %d) = %d, but out_c(%d, %d) = %d\n",
-                       x, y, out_native(x, y),
-                       x, y, out_hls(x, y));
-		success = false;
-            }
-	}
-    }
-    for (int y = 0; y < out_native.height(); y++) {
-        for (int x = 0; x < out_native.width(); x++) {
-            for (int c = 0; c < out_native.channels(); c++) {
+    for (int y = 0; y < out_hls.height(); y++) {
+        for (int x = 0; x < out_hls.width(); x++) {
+            for (int c = 0; c < out_hls.channels(); c++) {
                 if (out_native(x, y, c) != out_hls(x, y, c)) {
                     printf("out_native(%d, %d, %d) = %d, but out_c(%d, %d, %d) = %d\n",
                            x, y, c, out_native(x, y, c),
