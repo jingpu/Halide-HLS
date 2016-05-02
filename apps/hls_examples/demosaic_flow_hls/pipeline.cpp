@@ -310,7 +310,7 @@ public:
         v_render =  clampcast_u8(abs(cast<int32_t>(v(x, y))) * scale_factor);
         red = clampcast_u8(cast<uint16_t>(gray2(x, y)/2) + u_render);
         green = clampcast_u8(cast<uint16_t>(gray2(x, y)/2) + v_render);
-        blue = gray2(x, y)/2;
+        blue = clampcast_u8(cast<uint16_t>(gray2(x, y)/2) + u_render);
         hw_output(c, x, y) = select(c == 0, red,
                                     select(c == 1, green,
                                     blue));

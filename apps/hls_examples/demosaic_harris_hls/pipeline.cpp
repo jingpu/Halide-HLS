@@ -6,7 +6,7 @@ using namespace Halide;
 Var x("x"), y("y"), c("c");
 Var xo("xo"), yo("yo"), xi("xi"), yi("yi");
 
-uint8_t phase = 3;
+uint8_t phase = 0;
 
 int blockSize = 3;
 int Ksize = 3;
