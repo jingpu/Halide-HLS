@@ -54,10 +54,10 @@ class VectorizeLoops : public IRMutator {
             string widened_name = op->name + widening_suffix;
             if (op->name == var) {
                 expr = replacement;
-            } else if (scope.contains(widened_name)) {
+            } else if (scope.contains(op->name)) {
                 // If the variable appears in scope then we previously widened
                 // it and we use the new widened name for the variable.
-                expr = Variable::make(scope.get(widened_name).type(), widened_name);
+                expr = Variable::make(scope.get(op->name).type(), widened_name);
             } else {
                 expr = op;
             }
@@ -65,7 +65,7 @@ class VectorizeLoops : public IRMutator {
             if (scalarized) {
                 // When we're scalarized, we were supposed to hide all
                 // the vector vars in scope.
-                internal_assert(expr.type().is_scalar());
+                internal_assert(expr.type().is_scalar()) << op->name << " -> " << expr << "\n";
             }
         }
 
@@ -147,8 +147,7 @@ class VectorizeLoops : public IRMutator {
             // convention than the rest of Halide. Instead of passing widened
             // expressions, individual scalar expressions for each lane are
             // passed as a variable number of arguments to the intrinisc.
-            if (op->name == Call::shuffle_vector &&
-                op->call_type == Call::Intrinsic) {
+            if (op->is_intrinsic(Call::shuffle_vector)) {
 
                 int replacement_lanes = replacement.type().lanes();
                 int shuffle_lanes = op->type.lanes();
@@ -279,19 +278,21 @@ class VectorizeLoops : public IRMutator {
             std::string vectorized_name;
             if (was_vectorized) {
                 vectorized_name = op->name + widening_suffix;
-                scope.push(vectorized_name, mutated_value);
+                scope.push(op->name, mutated_value);
             }
 
             Expr mutated_body = mutate(op->body);
 
             if (was_vectorized) {
-                scope.pop(vectorized_name);
+                scope.pop(op->name);
             }
 
             // Check to see if the value and body were modified by this mutator
             if (mutated_value.same_as(op->value) &&
                 mutated_body.same_as(op->body)) {
                 expr = op;
+            } else if (scalarized) {
+                expr = Let::make(op->name, mutated_value, mutated_body);
             } else {
                 // Otherwise create a new Let containing the original value
                 // expression plus the widened expression
@@ -307,25 +308,28 @@ class VectorizeLoops : public IRMutator {
             Expr mutated_value = mutate(op->value);
 
             // Check if the value was vectorized by this mutator.
-            bool was_vectorized = !op->value.type().is_vector() &&
-            mutated_value.type().is_vector();
+            bool was_vectorized = (!op->value.type().is_vector() &&
+                                   mutated_value.type().is_vector());
 
             std::string vectorized_name;
 
             if (was_vectorized) {
                 vectorized_name = op->name + widening_suffix;
-                scope.push(vectorized_name, mutated_value);
+                scope.push(op->name, mutated_value);
             }
 
             Stmt mutated_body = mutate(op->body);
 
             if (was_vectorized) {
-                scope.pop(vectorized_name);
+                scope.pop(op->name);
             }
 
             if (mutated_value.same_as(op->value) &&
                 mutated_body.same_as(op->body)) {
                 stmt = op;
+            } else if (scalarized) {
+                internal_assert(!was_vectorized);
+                stmt = LetStmt::make(op->name, mutated_value, mutated_body);
             } else {
                 stmt = LetStmt::make(op->name, op->value, mutated_body);
 
@@ -395,7 +399,7 @@ class VectorizeLoops : public IRMutator {
                 stmt = op;
             } else {
                 int lanes = std::max(value.type().lanes(), index.type().lanes());
-                stmt = Store::make(op->name, widen(value, lanes), widen(index, lanes));
+                stmt = Store::make(op->name, widen(value, lanes), widen(index, lanes), op->param);
             }
         }
 

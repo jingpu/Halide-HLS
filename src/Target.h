@@ -82,6 +82,9 @@ struct Target {
         HLS,  /// Enable Halide to HLS feature.
 
         MinGW, ///< For Windows compile to MinGW toolset rather then Visual Studio
+
+        CPlusPlusMangling, ///< Generate C++ mangled names for result function, et al
+
         FeatureEnd ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
     };
 

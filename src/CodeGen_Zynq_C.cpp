@@ -69,7 +69,7 @@ const string runtime_zynq_driver =
 }
 
 CodeGen_Zynq_C::CodeGen_Zynq_C(ostream &dest)
-    : CodeGen_C(dest, false, "", zynq_headers) {
+    : CodeGen_C(dest, CImplementation, "", zynq_headers) {
     stream  << runtime_zynq_driver;
 }
 

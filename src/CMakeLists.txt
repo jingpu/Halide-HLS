@@ -27,6 +27,7 @@ set(RUNTIME_CPP
   cuda
   destructors
   device_interface
+  errors
   fake_thread_pool
   float16_t
   gcd_thread_pool
@@ -225,13 +226,14 @@ set(HEADER_FILES
   CodeGen_Posix.h
   CodeGen_Renderscript_Dev.h
   CodeGen_X86.h
+  CPlusPlusMangle.h
   Debug.h
   DebugToFile.h
   Deinterleave.h
-  Derivative.h
   DeviceArgument.h
   DeviceInterface.h
   EarlyFree.h
+  EliminateBoolVectors.h
   Error.h
   Expr.h
   ExprUsesVar.h
@@ -269,8 +271,8 @@ set(HEADER_FILES
   Memoization.h
   Module.h
   ModulusRemainder.h
+  Monotonic.h
   ObjectInstanceRegistry.h
-  OneToOne.h
   Output.h
   ParallelRVar.h
   Param.h
@@ -300,6 +302,7 @@ set(HEADER_FILES
   Substitute.h
   Target.h
   Tracing.h
+  TrimNoOps.h
   Tuple.h
   Type.h
   UnifyDuplicateLets.h
@@ -369,15 +372,16 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_Posix.cpp
   CodeGen_Renderscript_Dev.cpp
   CodeGen_X86.cpp
+  CPlusPlusMangle.cpp
   CSE.cpp
   Debug.cpp
   Debug.cpp
   DebugToFile.cpp
   Deinterleave.cpp
-  Derivative.cpp
   DeviceArgument.cpp
   DeviceInterface.cpp
   EarlyFree.cpp
+  EliminateBoolVectors.cpp
   Error.cpp
   FastIntegerDivide.cpp
   FindCalls.cpp
@@ -410,8 +414,8 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Memoization.cpp
   Module.cpp
   ModulusRemainder.cpp
+  Monotonic.cpp
   ObjectInstanceRegistry.cpp
-  OneToOne.cpp
   Output.cpp
   ParallelRVar.cpp
   Param.cpp
@@ -441,6 +445,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Substitute.cpp
   Target.cpp
   Tracing.cpp
+  TrimNoOps.cpp
   Tuple.cpp
   Type.cpp
   UnifyDuplicateLets.cpp
@@ -458,7 +463,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
 
    if (WIN32)
      if (MSVC)
-	   # empty
+           # empty
      else()
        set_target_properties(Halide PROPERTIES LINK_FLAGS "-Wl,--export-all-symbols")
      endif()
@@ -545,7 +550,9 @@ else()
   # FIXME: These defines should come from ``llvm-config --cppflags``
   target_compile_definitions(Halide PRIVATE "-D__STDC_LIMIT_MACROS" "-D__STDC_CONSTANT_MACROS" "-D__STDC_FORMAT_MACROS")
   target_compile_options(Halide PUBLIC "-std=c++11") # Halide and its clients need to use C++11
-  target_compile_options(Halide PUBLIC "-fno-rtti")
+  if(NOT HALIDE_ENABLE_RTTI)
+    target_compile_options(Halide PUBLIC "-fno-rtti")
+  endif()
 endif()
 
 # Get the LLVM libraries we need

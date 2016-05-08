@@ -6,7 +6,6 @@
 #include "Substitute.h"
 #include "IRPrinter.h"
 #include "Simplify.h"
-#include "Derivative.h"
 #include "Bounds.h"
 
 #include <iostream>

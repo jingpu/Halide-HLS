@@ -11,9 +11,17 @@ namespace llvm {
 class Value;
 class Module;
 class Function;
+#if LLVM_VERSION >= 39
+class IRBuilderDefaultInserter;
+#else
 template<bool> class IRBuilderDefaultInserter;
+#endif
 class ConstantFolder;
+#if LLVM_VERSION >= 39
+template<typename, typename> class IRBuilder;
+#else
 template<bool, typename, typename> class IRBuilder;
+#endif
 class LLVMContext;
 class Type;
 class StructType;
@@ -72,8 +80,20 @@ protected:
 
     /** Compile a specific halide declaration into the llvm Module. */
     // @{
-    virtual void compile_func(const LoweredFunc &func);
+    virtual void compile_func(const LoweredFunc &func, const std::string &simple_name, const std::string &extern_name);
     virtual void compile_buffer(const Buffer &buffer);
+    // @}
+
+    /** Helper functions for compiling Halide functions to llvm
+     * functions. begin_func performs all the work necessary to begin
+     * generating code for a function with a given argument list with
+     * the IRBuilder. A call to begin_func should be a followed by a
+     * call to end_func with the same arguments, to generate the
+     * appropriate cleanup code. */
+    // @{
+    virtual void begin_func(LoweredFunc::LinkageType linkage, const std::string &simple_name,
+                            const std::string &extern_name, const std::vector<Argument> &args);
+    virtual void end_func(const std::vector<Argument> &args);
     // @}
 
     /** What should be passed as -mcpu, -mattrs, and related for
@@ -110,7 +130,11 @@ protected:
     std::unique_ptr<llvm::Module> module;
     llvm::Function *function;
     llvm::LLVMContext *context;
+#if LLVM_VERSION >= 39
+    llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter> *builder;
+#else
     llvm::IRBuilder<true, llvm::ConstantFolder, llvm::IRBuilderDefaultInserter<true>> *builder;
+#endif
     llvm::Value *value;
     llvm::MDNode *very_likely_branch;
     //@}
@@ -139,7 +163,7 @@ protected:
 
     /** Fetch an entry from the symbol table. If the symbol is not
      * found, it either errors out (if the second arg is true), or
-     * returns NULL. */
+     * returns nullptr. */
     llvm::Value* sym_get(const std::string &name,
                          bool must_succeed = true) const;
 
@@ -191,6 +215,7 @@ protected:
      * representation of the result of the expression. */
     llvm::Value *codegen(Expr);
 
+
     /** Emit code that runs a statement. */
     void codegen(Stmt);
 
@@ -231,7 +256,7 @@ protected:
      * null), or evaluates and returns the message, which must be an
      * Int(32) expression. */
     // @{
-    void create_assertion(llvm::Value *condition, Expr message, llvm::Value *error_code = NULL);
+    void create_assertion(llvm::Value *condition, Expr message, llvm::Value *error_code = nullptr);
     // @}
 
     /** Return the the pipeline with the given error code. Will run
@@ -281,6 +306,22 @@ protected:
      * so that llvm knows it can reorder loads and stores across
      * different buffers */
     void add_tbaa_metadata(llvm::Instruction *inst, std::string buffer, Expr index);
+
+    /** Get a unique name for the actual block of memory that an
+     * allocate node uses. Used so that alias analysis understands
+     * when multiple Allocate nodes shared the same memory. */
+    virtual std::string get_allocation_name(const std::string &n) {return n;}
+
+    /** Helpers for implementing fast integer division. */
+    // @{
+    // Compute high_half(a*b) >> shr. Note that this is a shift in
+    // addition to the implicit shift due to taking the upper half of
+    // the multiply result.
+    virtual Expr mulhi_shr(Expr a, Expr b, int shr);
+    // Compute (a+b)/2, assuming a < b.
+    virtual Expr sorted_avg(Expr a, Expr b);
+    // @}
+
 
     using IRVisitor::visit;
 
@@ -359,7 +400,7 @@ protected:
 
     /** Which buffers came in from the outside world (and so we can't
      * guarantee their alignment) */
-    std::set<std::string> might_be_misaligned;
+    std::set<std::string> external_buffer;
 
     /** The user_context argument. May be a constant null if the
      * function is being compiled without a user context. */
@@ -368,7 +409,7 @@ protected:
     /** Implementation of the intrinsic call to
      * interleave_vectors. This implementation allows for interleaving
      * an arbitrary number of vectors.*/
-    llvm::Value *interleave_vectors(Type, const std::vector<Expr> &);
+    llvm::Value *interleave_vectors(const std::vector<llvm::Value *> &);
 
     /** Generate a call to a vector intrinsic or runtime inlined
      * function. The arguments are sliced up into vectors of the width
@@ -392,6 +433,12 @@ protected:
     /** Concatenate a bunch of llvm vectors. Must be of the same type. */
     llvm::Value *concat_vectors(const std::vector<llvm::Value *> &);
 
+    /** Create an LLVM shuffle vectors instruction. */
+    llvm::Value *shuffle_vectors(llvm::Value *a, llvm::Value *b,
+                                 const std::vector<int> &indices);
+    /** Shorthand for shuffling a vector with an undef vector. */
+    llvm::Value *shuffle_vectors(llvm::Value *v, const std::vector<int> &indices);
+
     /** Go looking for a vector version of a runtime function. Will
      * return the best match. Matches in the following order:
      *
@@ -406,7 +453,7 @@ protected:
      *
      * So for a 5-wide vector, it tries: 5, 8, 4, 2, 16.
      *
-     * If there's no match, returns (NULL, 0).
+     * If there's no match, returns (nullptr, 0).
      */
     std::pair<llvm::Function *, int> find_vector_runtime_function(const std::string &name, int lanes);
 

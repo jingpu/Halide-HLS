@@ -67,7 +67,7 @@ const string hls_headers =
 }
 
 CodeGen_HLS_Testbench::CodeGen_HLS_Testbench(ostream &tb_stream)
-    : CodeGen_HLS_Base(tb_stream, false, "", hls_headers),
+    : CodeGen_HLS_Base(tb_stream, CImplementation, "", hls_headers),
       cg_target("hls_target") {
     cg_target.init_module();
 }

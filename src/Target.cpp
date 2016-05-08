@@ -232,6 +232,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"metal", Target::Metal},
     {"hls", Target::HLS},
     {"mingw", Target::MinGW},
+    {"c_plus_plus_name_mangling", Target::CPlusPlusMangling},
 };
 
 bool lookup_feature(const std::string &tok, Target::Feature &result) {
@@ -456,7 +457,7 @@ bool Target::supported() const {
 
 bool Target::supports_device_api(DeviceAPI api) const {
     switch (api) {
-    case DeviceAPI::Parent:      return true;
+    case DeviceAPI::None:        return true;
     case DeviceAPI::Host:        return true;
     case DeviceAPI::Default_GPU: return has_gpu_feature();
     default:                     return has_feature(target_feature_for_device_api(api));

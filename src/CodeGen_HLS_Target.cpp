@@ -47,8 +47,8 @@ bool contain_for_loop(Stmt s) {
 
 CodeGen_HLS_Target::CodeGen_HLS_Target(const string &name)
     : target_name(name),
-      hdrc(hdr_stream, true),
-      srcc(src_stream, false) { }
+      hdrc(hdr_stream, CodeGen_HLS_C::CHeader),
+      srcc(src_stream, CodeGen_HLS_C::CImplementation) { }
 
 
 CodeGen_HLS_Target::~CodeGen_HLS_Target() {
@@ -156,7 +156,7 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::add_kernel(Stmt stmt,
         if (i < args.size()-1) stream << ",\n";
     }
 
-    if (is_header) {
+    if (is_header()) {
         stream << ");\n";
     } else {
         stream << ")\n";
@@ -265,7 +265,8 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::visit(const Allocate *op) {
     internal_assert(!op->new_expr.defined());
     internal_assert(!is_zero(op->condition));
     int32_t constant_size;
-    if (constant_allocation_size(op->extents, op->name, constant_size)) {
+    constant_size = op->constant_allocation_size();
+    if (constant_size > 0) {
 
     } else {
         internal_error << "Size for allocation " << op->name

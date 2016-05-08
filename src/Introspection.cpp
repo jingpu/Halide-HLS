@@ -68,7 +68,7 @@ class DebugSections {
         uint64_t def_loc, spec_loc;
         uint64_t addr;
         GlobalVariable() : name(""),
-                           type(NULL),
+                           type(nullptr),
                            type_def_loc(0),
                            def_loc(0),
                            spec_loc(0),
@@ -106,7 +106,7 @@ class DebugSections {
         // function.
         vector<LiveRange> live_ranges;
         LocalVariable() : name(""),
-                          type(NULL),
+                          type(nullptr),
                           stack_offset(0),
                           type_def_loc(0),
                           def_loc(0),
@@ -310,6 +310,9 @@ public:
         // Check the address is indeed inside the object found
         uint64_t end_ptr = global_variables[idx].addr;
         TypeInfo *t = global_variables[idx].type;
+        if (t == nullptr) {
+            return -1;
+        }
         uint64_t size = t->size;
         while (t->type == TypeInfo::Array) {
             t = t->members[0].type;
@@ -340,7 +343,7 @@ public:
         for (; (size_t)idx < global_variables.size() && global_variables[idx].addr <= address; idx++) {
 
             GlobalVariable &v = global_variables[idx];
-            TypeInfo *elem_type = NULL;
+            TypeInfo *elem_type = nullptr;
             if (v.type && v.type->type == TypeInfo::Array && v.type->size) {
                 elem_type = v.type->members[0].type;
             }
@@ -586,7 +589,7 @@ public:
         };
 
         frame_info *fp = (frame_info *)__builtin_frame_address(0);
-        frame_info *next_fp = NULL;
+        frame_info *next_fp = nullptr;
 
         // Walk up the stack until we pass the pointer.
         debug(5) << "Walking up the stack\n";
@@ -671,7 +674,7 @@ public:
             }
 
             TypeInfo *type = var.type;
-            TypeInfo *elem_type = NULL;
+            TypeInfo *elem_type = nullptr;
             if (type && type->type == TypeInfo::Array && type->size) {
                 elem_type = type->members[0].type;
             }
@@ -865,10 +868,23 @@ public:
 private:
 
     void load_and_parse_object_file(const std::string &binary) {
-        llvm::object::ObjectFile *obj = NULL;
+        llvm::object::ObjectFile *obj = nullptr;
 
         // Open the object file in question. The API to do this keeps changing.
-        #if LLVM_VERSION >= 36
+        #if LLVM_VERSION >= 39
+
+        llvm::Expected<llvm::object::OwningBinary<llvm::object::ObjectFile>> maybe_obj =
+            llvm::object::ObjectFile::createObjectFile(binary);
+
+        if (!maybe_obj) {
+            consumeError(maybe_obj.takeError());
+            debug(1) << "Failed to load binary:" << binary << "\n";
+            return;
+        }
+
+        obj = maybe_obj.get().getBinary();
+
+        #elif LLVM_VERSION >= 36
 
         llvm::ErrorOr<llvm::object::OwningBinary<llvm::object::ObjectFile>> maybe_obj =
             llvm::object::ObjectFile::createObjectFile(binary);
@@ -1156,7 +1172,7 @@ private:
                     // A field can either be a constant value:
                     uint64_t val = 0;
                     // Or a variable length payload:
-                    const uint8_t *payload = NULL;
+                    const uint8_t *payload = nullptr;
                     // If payload is non-null, val indicates the
                     // payload size. If val is zero the payload is a
                     // null-terminated string.
@@ -2142,7 +2158,7 @@ private:
             }
         }
 
-        return NULL;
+        return nullptr;
     }
 
     int64_t get_sleb128(const uint8_t *ptr) {
@@ -2187,7 +2203,7 @@ private:
 };
 
 namespace {
-DebugSections *debug_sections = NULL;
+DebugSections *debug_sections = nullptr;
 }
 
 std::string get_variable_name(const void *var, const std::string &expected_type) {
@@ -2232,7 +2248,9 @@ bool saves_frame_pointer(void *fn) {
 }
 
 
-void test_compilation_unit(bool (*test)(), void (*calib)()) {
+void test_compilation_unit(bool (*test)(bool (*)(const void *, const std::string &)),
+                           bool (*test_a)(const void *, const std::string &),
+                           void (*calib)()) {
     #ifdef __ARM__
     return;
     #else
@@ -2262,7 +2280,7 @@ void test_compilation_unit(bool (*test)(), void (*calib)()) {
             return;
         }
 
-        debug_sections->working = (*test)();
+        debug_sections->working = (*test)(test_a);
         if (!debug_sections->working) {
             debug(5) << "Failed because test routine failed\n";
             return;
@@ -2300,7 +2318,9 @@ void register_heap_object(const void *obj, size_t size, const void *helper) {
 void deregister_heap_object(const void *obj, size_t size) {
 }
 
-void test_compilation_unit(bool (*test)(), void (*calib)()) {
+void test_compilation_unit(bool (*test)(bool (*)(const void *, const std::string &)),
+                           bool (*test_a)(const void *, const std::string &),
+                           void (*calib)()) {
 }
 
 }

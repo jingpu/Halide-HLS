@@ -44,7 +44,7 @@ public:
 protected:
     class CodeGen_HLS_C : public CodeGen_HLS_Base {
     public:
-        CodeGen_HLS_C(std::ostream &s, bool is_header) : CodeGen_HLS_Base(s, is_header) {}
+        CodeGen_HLS_C(std::ostream &s, OutputKind output_kind) : CodeGen_HLS_Base(s, output_kind) {}
 
         void add_kernel(Stmt stmt,
                         const std::string &name,
