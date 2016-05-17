@@ -77,15 +77,7 @@ CodeGen_HLS_Testbench::~CodeGen_HLS_Testbench() {
 
 void CodeGen_HLS_Testbench::visit(const ProducerConsumer *op) {
     if (starts_with(op->name, "_hls_target.")) {
-        // steps over the start_hwacc() call
-        const Block *block = op->produce.as<Block>();
-        internal_assert(block);
-        const Evaluate *eva = block->first.as<Evaluate>();
-        internal_assert(eva);
-        const Call *start_call = eva->value.as<Call>();
-        internal_assert(start_call && start_call->name == "start_hwacc");
-
-        Stmt hw_body = block->rest;
+        Stmt hw_body = op->produce;
 
         debug(1) << "compute the closure for " << op->name << '\n';
         HLS_Closure c(hw_body);
@@ -94,9 +86,6 @@ void CodeGen_HLS_Testbench::visit(const ProducerConsumer *op) {
         // generate HLS target code using the child code generator
         string ip_name = unique_name("hls_target");
         cg_target.add_kernel(hw_body, ip_name, args);
-
-        do_indent();
-        stream << "// produce " << op->name << '\n';
 
         // emits the target function call
         do_indent();
@@ -108,20 +97,7 @@ void CodeGen_HLS_Testbench::visit(const ProducerConsumer *op) {
         }
         stream <<");\n";
 
-        do_indent();
-        stream << "// consume " << op->name << '\n';
         print_stmt(op->consume);
-    } else {
-        CodeGen_HLS_Base::visit(op);
-    }
-}
-void CodeGen_HLS_Testbench::visit(const Allocate *op) {
-    if (op->free_function == "_kernel_buffer") {
-        // We only treat kernel buffer function differently in Zynq runtime.
-        // Here, we just resets the new_expr and free_function
-        // for this allocate node
-        Stmt alloc = Allocate::make(op->name, op->type, op->extents, op->condition, op->body);
-        alloc.accept(this);
     } else {
         CodeGen_HLS_Base::visit(op);
     }
@@ -131,14 +107,14 @@ void CodeGen_HLS_Testbench::visit(const Call *op) {
     if (op->name == "stream_subimage") {
         // add intrinsic functions to convert memory buffers to streams
         // syntax:
-        //   stream_subimage(direction, stream_name, address_of_subimage_origin, call_to_image
+        //   stream_subimage(direction, buffer_var, stream_var, address_of_subimage_origin,
+        //                   dummy_call_to_function,
         //                   dim_0_stride, dim_0_extent, ...)
-        // Note that codegen only uses the address of subimage_origin, and
-        // call to call_to_image is here to avoid skip_stage optimization
-        internal_assert(op->args.size() >= 6 && op->args.size() <= 12);
+        internal_assert(op->args.size() >= 7 && op->args.size() <= 13);
         const StringImm *direction = op->args[0].as<StringImm>();
         string a1 = print_expr(op->args[1]);
         string a2 = print_expr(op->args[2]);
+        string a3 = print_expr(op->args[3]);
         do_indent();
         if (direction->value == "buffer_to_stream") {
             stream << "subimage_to_stream(";
@@ -147,17 +123,13 @@ void CodeGen_HLS_Testbench::visit(const Call *op) {
         } else {
             internal_error;
         }
-        stream << a1 << ", " << a2;
-        // skip args[3]
-        for (size_t i = 4; i < op->args.size(); i++) {
+        stream << a1 << ", " << a2 << ", " << a3;
+        // skips args[4] -- dummy_call_to_function
+        for (size_t i = 5; i < op->args.size(); i++) {
             stream << ", " << print_expr(op->args[i]);
         }
         stream <<");\n";
         id = "0"; // skip evaluation
-    } else if (op->name == "create_kbuf") {
-        // skips. this intrinsic call only used in Zynq codegen
-        id = "0"; // skip evaluation
-        return;
     } else {
         CodeGen_HLS_Base::visit(op);
     }
@@ -183,7 +155,6 @@ void CodeGen_HLS_Testbench::visit(const Realize *op) {
         // We didn't generate free stmt inside for stream type
         allocations.pop(op->name);
         stencils.pop(op->name);
-
     } else {
         CodeGen_HLS_Base::visit(op);
     }

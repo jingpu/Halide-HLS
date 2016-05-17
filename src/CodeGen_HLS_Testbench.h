@@ -27,7 +27,6 @@ protected:
     using CodeGen_HLS_Base::visit;
 
     void visit(const ProducerConsumer *);
-    void visit(const Allocate *);
     void visit(const Call *);
     void visit(const Realize *);
     void visit(const Block *);

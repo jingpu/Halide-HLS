@@ -193,19 +193,7 @@ private:
                                  stmt);
 
             // Make the allocation node
-            Expr new_expr = Expr();
-            string free_function = string();
-            auto iter = env.find(realize->name);
-            internal_assert(iter != env.end()) << "Realize node refers to function not in environment.\n";
-            if (iter->second.schedule().is_kernel_buffer()) {
-                // for function that has been scheduled to store in kernel buffer,
-                // we overwrite new_expr and free_function in order to notify codegen
-                // TODO better way to pass information to codegen
-                Expr kernel_buffer = Variable::make(Handle(), "kbuf_" + buffer_name);
-                new_expr = Call::make(Handle(), "create_kbuf", {kernel_buffer}, Call::Intrinsic);
-                free_function = "_kernel_buffer";
-            }
-            stmt = Allocate::make(buffer_name, t, extents, condition, stmt, new_expr, free_function);
+            stmt = Allocate::make(buffer_name, t, extents, condition, stmt);
 
             // Compute the strides
             for (int i = (int)realize->bounds.size()-1; i > 0; i--) {

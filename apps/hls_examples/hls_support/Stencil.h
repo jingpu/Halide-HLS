@@ -261,7 +261,8 @@ void buffer_to_stencil(const buffer_t *buffer,
 }
 
 template <typename T, size_t EXTENT_0, size_t EXTENT_1, size_t EXTENT_2, size_t EXTENT_3>
-void subimage_to_stream(hls::stream<AxiPackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &stream,
+void subimage_to_stream(const struct buffer_t *buf_noop,
+                        hls::stream<AxiPackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &stream,
                         void *subimage,
                         int stride_0, int subimage_extent_0,
                         int stride_1 = 1, int subimage_extent_1 = 1,
@@ -271,6 +272,7 @@ void subimage_to_stream(hls::stream<AxiPackedStencil<T, EXTENT_0, EXTENT_1, EXTE
     assert(subimage_extent_1 % EXTENT_1 == 0);
     assert(subimage_extent_2 % EXTENT_2 == 0);
     assert(subimage_extent_3 % EXTENT_3 == 0);
+    (void) buf_noop;  // avoid unused warnning
     for(size_t idx_3 = 0; idx_3 < subimage_extent_3; idx_3 += EXTENT_3)
     for(size_t idx_2 = 0; idx_2 < subimage_extent_2; idx_2 += EXTENT_2)
     for(size_t idx_1 = 0; idx_1 < subimage_extent_1; idx_1 += EXTENT_1)
@@ -291,7 +293,8 @@ void subimage_to_stream(hls::stream<AxiPackedStencil<T, EXTENT_0, EXTENT_1, EXTE
 }
 
 template <typename T, size_t EXTENT_0, size_t EXTENT_1, size_t EXTENT_2, size_t EXTENT_3>
-void stream_to_subimage(hls::stream<AxiPackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &stream,
+void stream_to_subimage(const struct buffer_t *buf_noop,
+                        hls::stream<AxiPackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> > &stream,
                         void *subimage,
                         int stride_0, int subimage_extent_0,
                         int stride_1 = 1, int subimage_extent_1 = 1,
@@ -301,6 +304,7 @@ void stream_to_subimage(hls::stream<AxiPackedStencil<T, EXTENT_0, EXTENT_1, EXTE
     assert(subimage_extent_1 % EXTENT_1 == 0);
     assert(subimage_extent_2 % EXTENT_2 == 0);
     assert(subimage_extent_3 % EXTENT_3 == 0);
+    (void) buf_noop;  // avoid unused warnning
     for(size_t idx_3 = 0; idx_3 < subimage_extent_3; idx_3 += EXTENT_3)
     for(size_t idx_2 = 0; idx_2 < subimage_extent_2; idx_2 += EXTENT_2)
     for(size_t idx_1 = 0; idx_1 < subimage_extent_1; idx_1 += EXTENT_1)

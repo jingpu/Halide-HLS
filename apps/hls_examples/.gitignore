@@ -9,6 +9,7 @@ pipeline_zynq.h
 pipeline
 run
 run_zynq
+run_zynq_bypass
 run_cuda
 dump
 *.png

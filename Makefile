@@ -302,6 +302,7 @@ SOURCE_FILES = \
   InjectHostDevBufferCopies.cpp \
   InjectImageIntrinsics.cpp \
   InjectOpenGLIntrinsics.cpp \
+  InjectZynqIntrinsics.cpp \
   Inline.cpp \
   InlineReductions.cpp \
   IntegerDivisionTable.cpp \
@@ -554,7 +555,7 @@ RUNTIME_CPP_COMPONENTS = \
   windows_opencl \
   windows_thread_pool \
   write_debug_image \
-  zynq_driver
+  zynq
 
 RUNTIME_LL_COMPONENTS = \
   aarch64 \

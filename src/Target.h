@@ -79,7 +79,7 @@ struct Target {
 
         Metal, ///< Enable the (Apple) Metal runtime.
 
-        HLS,  /// Enable Halide to HLS feature.
+        Zynq,  /// Enable Xilinx Zynq runtime.
 
         MinGW, ///< For Windows compile to MinGW toolset rather then Visual Studio
 

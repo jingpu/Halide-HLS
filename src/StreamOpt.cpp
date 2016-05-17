@@ -631,12 +631,7 @@ class StreamOpt : public IRMutator {
             }
 
             //stmt = For::make(dag.name + ".accelerator", 0, 1, ForType::Serial, DeviceAPI::Host, body);
-            // insert a "start_hwacc" call to include the device
-            // handlers "__hwacc" and "__cma" in the closure
-            Expr fd_hwacc = Variable::make(Int(32), "__hwacc");
-            Expr fd_cma = Variable::make(Int(32), "__cma");
-            Stmt hw_call = Evaluate::make(Call::make(Handle(), "start_hwacc", {fd_hwacc, fd_cma}, Call::Intrinsic));
-            stmt = ProducerConsumer::make("_hls_target." + dag.name, Block::make(hw_call, body), Stmt(), Evaluate::make(0));
+            stmt = ProducerConsumer::make("_hls_target." + dag.name, body, Stmt(), Evaluate::make(0));
 
             // add declarations of inputs and output (external) streams outside the hardware pipeline IR
             vector<string> external_streams;
@@ -657,15 +652,15 @@ class StreamOpt : public IRMutator {
                     image_args.push_back(kernel.dims[i].store_bound.min);
                 }
                 Expr address_of_subimage_origin = Call::make(Handle(), Call::address_of, {Call::make(kernel.func, image_args, 0)}, Call::Intrinsic);
-                Expr call_to_image = Call::make(kernel.func, {undef(Int(32))}, 0);
+                Expr buffer_var = Variable::make(type_of<struct buffer_t *>(), kernel.name + ".buffer");
+                Expr dummy_call_to_function = Call::make(kernel.func, {undef(Int(32))}, 0); // avoid skip_stages optimization
 
                 // add intrinsic functions to convert memory buffers to streams
                 // syntax:
-                //   stream_subimage(direction, stream_name, address_of_subimage_origin, call_to_image
+                //   stream_subimage(direction, buffer_var, stream_var, address_of_subimage_origin,
+                //                   dummy_call_to_function,
                 //                   dim_0_stride, dim_0_extent, ...)
-                // Note that codegen only uses the address of subimage_origin, and
-                // call to call_to_image is here to avoid skip_stage optimization
-                vector<Expr> stream_call_args({direction, stream_var, address_of_subimage_origin, call_to_image});
+                vector<Expr> stream_call_args({direction, buffer_var, stream_var, address_of_subimage_origin, dummy_call_to_function});
                 for (size_t i = 0; i < kernel.dims.size(); i++) {
                     stream_call_args.push_back(Variable::make(Int(32), kernel.name + ".stride." + std::to_string(i)));
                     stream_call_args.push_back(simplify(kernel.dims[i].store_bound.max - kernel.dims[i].store_bound.min + 1));

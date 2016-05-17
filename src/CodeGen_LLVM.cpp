@@ -261,13 +261,13 @@ void CodeGen_LLVM::set_context(llvm::LLVMContext &context) {
 
 CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
                                            llvm::LLVMContext &context) {
-    if (target.has_feature(Target::HLS)) {
+    if (target.has_feature(Target::Zynq)) {
         user_assert(!target.features_any_of({Target::CUDA,
                         Target::OpenCL,
                         Target::OpenGL,
                         Target::OpenGLCompute,
                         Target::Renderscript,
-                        Target::Metal})) << "HLS feature cannot be enabled with GPU features.\n";
+                        Target::Metal})) << "Zynq feature cannot be enabled with GPU features.\n";
         user_assert(target.arch == Target::ARM &&
                     target.os == Target::Linux &&
                     target.bits == 32)

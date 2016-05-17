@@ -170,7 +170,7 @@ class InjectEarlyFrees : public IRMutator {
     using IRMutator::visit;
 
     void visit(const Allocate *alloc) {
-        if (alloc->free_function == "_kernel_buffer") {
+        if (alloc->free_function == "halide_zynq_free") {
             // do late free for kernel buffers
             // TODO kernel buffer can be freed earlier than this
             // specifically, the early free need to be delayed until wait DMA call finishes

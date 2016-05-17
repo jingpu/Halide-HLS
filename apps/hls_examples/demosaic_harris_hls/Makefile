@@ -11,7 +11,7 @@ all: out.png
 pipeline: pipeline.cpp
 	$(CXX) $(CXXFLAGS) -Wall -g $^ $(LIB_HALIDE) -o $@ $(LDFLAGS) -ltinfo
 
-pipeline_hls.cpp pipeline_native.o pipeline_zynq.c: pipeline
+pipeline_hls.cpp pipeline_native.o pipeline_zynq.o: pipeline
 	HL_DEBUG_CODEGEN=0 ./pipeline
 
 run: run.cpp pipeline_hls.cpp hls_target.cpp pipeline_native.o
@@ -26,23 +26,20 @@ out.png: run
 out_downsample: run_downsample
 	./run_downsample ../../images/zynq_raw.png
 
-pipeline_zynq.o: pipeline_zynq.c
-	$(CXX) -c -O2 $(CXXFLAGS) -g -Wall -Werror $^ -o $@
+#pipeline_zynq.o: pipeline_zynq.c
+#	$(CXX) -c -O2 $(CXXFLAGS) -g -Wall -Werror $^ -o $@
 
 pipeline_zynq_bypass.o: pipeline_zynq_bypass.c
 	$(CXX) -c -O2 $(CXXFLAGS) -g -Wall -Werror $^ -o $@
 
-run_zynq.o: run_zynq.cpp
-	$(CXX) -c $(CXXFLAGS) -g -Wall -Werror $^ -o $@  $(PNGFLAGS)
+HalideRuntimeZynq.o: ../hls_support/HalideRuntimeZynq.cpp
+	$(CXX) -c -O2 $(CXXFLAGS) -g -Wall -Werror $^ -o $@
 
-run_zynq_bypass.o: run_zynq_bypass.cpp
-	$(CXX) -c $(CXXFLAGS) -g -Wall -Werror $^ -o $@  $(PNGFLAGS)
+run_zynq: run_zynq.cpp pipeline_zynq.o pipeline_native.o  #HalideRuntimeZynq.o
+	$(CXX) $(CXXFLAGS) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
 
-run_zynq: pipeline_zynq.o pipeline_native.o run_zynq.o
-	$(CXX) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
-
-run_zynq_bypass: pipeline_zynq_bypass.o pipeline_native.o run_zynq_bypass.o
-	$(CXX) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
+run_zynq_bypass: run_zynq_bypass.cpp pipeline_native.o pipeline_zynq_bypass.o HalideRuntimeZynq.o
+	$(CXX) $(CXXFLAGS) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
 
 out_zynq.png: run_zynq
 	HL_NUM_THREADS=3 ./run_zynq ../../images/zynq_raw.png

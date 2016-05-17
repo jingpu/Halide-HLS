@@ -22,6 +22,7 @@
 #include "InjectHostDevBufferCopies.h"
 #include "InjectImageIntrinsics.h"
 #include "InjectOpenGLIntrinsics.h"
+#include "InjectZynqIntrinsics.h"
 #include "Inline.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -173,6 +174,9 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
 
     debug(1) << "Performing storage flattening...\n";
     s = storage_flattening(s, outputs, env);
+    if (t.has_feature(Target::Zynq)) {
+        s = inject_zynq_intrinsics(s, env);
+    }
     debug(2) << "Lowering after storage flattening:\n" << s << "\n\n";
 
     if (any_memoized) {

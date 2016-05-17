@@ -28,9 +28,9 @@ protected:
 
     using CodeGen_C::visit;
 
-    void visit(const Allocate *);
-    void visit(const Free *);
     void visit(const Realize *);
+    void visit(const ProducerConsumer *op);
+    void visit(const Call *);
 };
 
 }
