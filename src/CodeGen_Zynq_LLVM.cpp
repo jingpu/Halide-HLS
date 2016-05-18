@@ -50,7 +50,11 @@ void CodeGen_Zynq_LLVM::visit(const ProducerConsumer *op) {
         size_t size_of_kbuf = d.getTypeAllocSize(kbuf_type);
         for (size_t i = 0; i < buffer_slices.size(); i++) {
             Value *slice_ptr = buffer_slices[i];
-            Value *elem_ptr = builder->CreateConstInBoundsGEP1_32(slice_set,
+            Value *elem_ptr = builder->CreateConstInBoundsGEP1_32(
+#if LLVM_VERSION >= 37
+								  kbuf_type,
+#endif
+								  slice_set,
                                                                         i);
             builder->CreateMemCpy(elem_ptr, slice_ptr, size_of_kbuf, 0);
         }
