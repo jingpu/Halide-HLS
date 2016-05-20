@@ -279,9 +279,8 @@ public:
         output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
         output.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
 
-        /*
         // Create the Zynq platform target
-        std::vector<Target::Feature> features({Target::HLS});
+        std::vector<Target::Feature> features({Target::Zynq});
         Target target(Target::Linux, Target::ARM, 32, features);
 
         output.compile_to_zynq_c("pipeline_zynq.c", args, "pipeline_zynq", target);
@@ -297,7 +296,6 @@ public:
         output.compile_to_lowered_stmt("pipeline_zynq.ir.html", args, HTML, target);
         output.compile_to_object("pipeline_zynq.o", args, "pipeline_zynq", target);
         output.compile_to_assembly("pipeline_zynq.s", args, "pipeline_zynq", target);
-        */
     }
 };
 

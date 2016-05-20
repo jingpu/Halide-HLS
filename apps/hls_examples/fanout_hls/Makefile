@@ -5,8 +5,12 @@ include ../../support/Makefile.inc
 
 #### HLS flags
 include ../hls_support/Makefile.inc
+HLS_LOG = vivado_hls.log
 
+.PHONY: all run_hls
 all: test
+run_hls: $(HLS_LOG)
+
 
 pipeline: pipeline.cpp
 	$(CXX) $(CXXFLAGS) -Wall -g $^ $(LIB_HALIDE) -o $@ $(LDFLAGS) -ltinfo
@@ -16,6 +20,12 @@ pipeline_hls.cpp pipeline_native.o: pipeline
 
 run: run.cpp pipeline_hls.cpp hls_target.cpp pipeline_native.o
 	$(CXX) $(CXXFLAGS) -O1 -DNDEBUG $(HLS_CXXFLAGS) -g -Wall -Werror $^ -lpthread -ldl -o $@
+
+
+$(HLS_LOG): ../hls_support/run_hls.tcl pipeline_hls.cpp run.cpp
+	RUN_PATH=$(realpath ./) \
+	RUN_ARGS=$(realpath ./) \
+	vivado_hls -f $< -l $(HLS_LOG)
 
 test: run
 	./run

@@ -670,8 +670,8 @@ public:
         processed.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
         processed.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
         processed.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
-        /*
-        std::vector<Target::Feature> features({Target::HLS});
+
+        std::vector<Target::Feature> features({Target::Zynq});
         Target target(Target::Linux, Target::ARM, 32, features);
         processed.compile_to_zynq_c("pipeline_zynq.c", args, "pipeline_zynq", target);
         processed.compile_to_header("pipeline_zynq.h", args, "pipeline_zynq", target);
@@ -687,7 +687,6 @@ public:
         processed.compile_to_object("pipeline_zynq.o", args, "pipeline_zynq", target);
         processed.compile_to_lowered_stmt("pipeline_zynq.ir.html", args, HTML, target);
         processed.compile_to_assembly("pipeline_zynq.s", args, "pipeline_zynq", target);
-        */
     }
 };
 
