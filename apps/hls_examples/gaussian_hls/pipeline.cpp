@@ -22,7 +22,7 @@ public:
         : in(UInt(8), 2),
           kernel("kernel"), blur_y("blur_y"), blur_x("blur_x"),
           output("output"), hw_output("hw_output"),
-          win(-4, 9), win2(-4, 9, -4, 9)
+          win(0, 2), win2(-1, 3, -1, 3)
     {
         // Define a 9x9 Gaussian Blur with a repeat-edge boundary condition.
         float sigma = 1.5f;
@@ -101,7 +101,7 @@ public:
 
         hw_output.compute_at(output, xo)
             .tile(x, y, xo, yo, xi, yi, 480, 640);
-        hw_output.unroll(xi, 2);
+        //hw_output.unroll(xi, 2);
 
         hw_output.accelerate({in_bounded}, xi, xo);
 

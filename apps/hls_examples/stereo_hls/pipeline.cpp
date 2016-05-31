@@ -6,8 +6,8 @@ using namespace Halide;
 Var x("x"), y("y"), z("z"), c("c");
 Var x_grid("x_grid"), y_grid("y_grid"), xo("xo"), yo("yo"), x_in("x_in"), y_in("y_in");
 
-int windowR = 4;
-int searchR = 64;
+int windowR = 1;
+int searchR = 4;
 //int windowR = 8;
 //int searchR = 120;
 
@@ -62,7 +62,7 @@ public:
         : left(UInt(8), 3), right(UInt(8), 3),
           left_remap(UInt(8), 3), right_remap(UInt(8), 3),
           SAD("SAD"), offset("offset"), output("output"), hw_output("hw_output"),
-          win(-windowR, windowR*2, -windowR, windowR*2),
+          win(0, 1, 0, 1),
           search(0, searchR)
     {
         right_padded = BoundaryConditions::constant_exterior(right, 0);
@@ -164,13 +164,13 @@ public:
         hw_output.compute_root();
         hw_output.tile(x, y, xo, yo, x_in, y_in, 256, 256);
         hw_output.accelerate({right_remapped, left_remapped}, x_in, xo);
-        right_remapped.store_at(output, xo).compute_at(output, x_in);
-        left_remapped.store_at(output, xo).compute_at(output, x_in);
+        right_remapped.compute_at(hw_output, xo);
+        left_remapped.compute_at(hw_output, xo);
 
         RVar so("so"), si("si");
         //offset.update(0).unroll(search.x, 16); // the unrolling doesn's generate code that balances the computation, creating a long critical path
-        offset.update(0).split(search.x, so, si, 16);
-        SAD.compute_at(offset, so);
+        //offset.update(0).split(search.x, so, si, 16);
+        //SAD.compute_at(offset, so);
         SAD.unroll(c);
         SAD.update(0).unroll(win.x).unroll(win.y).unroll(c);
 
@@ -213,7 +213,8 @@ MyPipelineOpt()
     SAD(x, y, c) += cast<uint16_t>(absd(right_remapped(x+win.x, y+win.y),
                                         left_remapped(x+win.x+20+c, y+win.y)));
 
-    //offset(x, y) = argmin(SAD(x, y, search.x));
+    offset(x, y) = argmin(SAD(x, y, search.x));
+    /*
     // offset_l1 caculates {minarg, minval} betwen SAD(x, y, c*4) and SAD(x, y, c*4+3)
     offset_l1(x, y, c) = {cast<int8_t>(0), cast<uint16_t>(65535)};
     offset_l1(x, y, c) = {select(SAD(x, y, c*4 + search_l1.x) < offset_l1(x, y, c)[1],
@@ -226,7 +227,7 @@ MyPipelineOpt()
                            offset_l1(x, y, search.x)[0],
                            offset(x, y)[0]),
                            min(offset_l1(x, y, search.x)[1], offset(x, y)[1])};
-
+    */
 
     hw_output(x, y) = cast<uint8_t>(cast<uint16_t>(offset(x, y)[0]) * 255 / searchR);
     output(x, y) = hw_output(x, y);
@@ -283,20 +284,20 @@ void compile_hls() {
     hw_output.tile(x, y, xo, yo, x_in, y_in, 600, 400);
 
     //offset.update(0).unroll(search.x, 4);
-    RVar search_xo, search_xi;
-    offset.update(0).split(search.x, search_xo, search_xi, 4);
+    //RVar search_xo, search_xi;
+    //offset.update(0).split(search.x, search_xo, search_xi, 4);
     //SAD.compute_at(offset_l1, Var::outermost());
     SAD.unroll(c);
     SAD.update(0).unroll(win.x).unroll(win.y).unroll(c);
-    offset_l1.compute_at(offset, search_xo);
-    offset_l1.unroll(c);
-    offset_l1.update(0).unroll(c).unroll(search_l1.x);
+    //offset_l1.compute_at(offset, search_xo);
+    //offset_l1.unroll(c);
+    //offset_l1.update(0).unroll(c).unroll(search_l1.x);
 
     hw_output.accelerate({right_remapped, left_remapped}, x_in, xo);
     //hw_output.accelerate({right_padded, left_padded, right_remap_padded, left_remap_padded}, x_in, xo);
     //right_remapped.linebuffer();
     //left_remapped.linebuffer();
-
+    output.print_loop_nest();
     output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
     output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
     output.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
@@ -323,9 +324,9 @@ void compile_hls() {
 
 int main(int argc, char **argv) {
     MyPipeline p1, p3;
-    MyPipelineOpt p2;
+    MyPipeline p2;
     p1.compile_cpu();
     p2.compile_hls();
-    p3.compile_gpu();
+    //p3.compile_gpu();
     return 0;
 }

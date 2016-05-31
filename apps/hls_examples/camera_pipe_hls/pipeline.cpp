@@ -896,7 +896,7 @@ public:
         hw_output.unroll(xi, 2);
         hw_output.accelerate({shifted}, xi, xo);
 
-        //curve.compute_at(hw_output, xi);
+        curve.compute_at(hw_output, xo);
 
         denoised.linebuffer()
             .unroll(x).unroll(y);
@@ -904,7 +904,7 @@ public:
             .unroll(c).unroll(x).unroll(y);
         hw_output.unroll(c);
 
-        //processed.print_loop_nest();
+        processed.print_loop_nest();
         processed.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
         processed.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
         processed.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
@@ -967,7 +967,7 @@ int main(int argc, char **argv) {
     MyPipelineOpt2 p2(2, matrix, gamma, contrast);
     p2.compile_hls();
 
-    MyPipeline p3(3, matrix, gamma, contrast);
-    p3.compile_gpu();
+    //MyPipeline p3(3, matrix, gamma, contrast);
+    //p3.compile_gpu();
     return 0;
 }
