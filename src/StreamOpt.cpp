@@ -18,6 +18,7 @@ namespace Internal {
 using std::string;
 using std::map;
 using std::set;
+using std::pair;
 using std::vector;
 
 namespace {
@@ -582,7 +583,6 @@ Stmt transform_kernel(Stmt s, const HWKernelDAG &dag, const Scope<Expr> &scope) 
     return ret;
 }
 
-
 // Perform streaming optimization for all functions
 class StreamOpt : public IRMutator {
     const HWKernelDAG &dag;
@@ -591,48 +591,57 @@ class StreamOpt : public IRMutator {
     using IRMutator::visit;
 
     void visit(const For *op) {
-        if (!dag.loop_vars.count(op->name)) {
+        if (!dag.store_level.match(op->name) && !dag.loop_vars.count(op->name)) {
             IRMutator::visit(op);
-        } else {
-            debug(3) << "find the pipeline producing " << dag.name << "\n";
+        } else if (dag.compute_level.match(op->name)) {
+            internal_assert(dag.loop_vars.count(op->name));
 
-            // step over scan loops
+            // walk inside of any let statements
             Stmt body = op->body;
 
-            // FIXME handle these letstmt properly
+            vector<pair<string, Expr>> lets;
             while (const LetStmt *let = body.as<LetStmt>()) {
                 body = let->body;
                 scope.push(let->name, simplify(expand_expr(let->value, scope)));
+                lets.push_back(make_pair(let->name, let->value));
             }
 
-            size_t count = 1;   // already inside one scan loop
-            while (const For *for_loop = body.as<For>()) {
-                if (for_loop == NULL ||
-                    dag.loop_vars.count(for_loop->name) == 0) {
-                    break;
-                }
-
-                body = for_loop->body;
-                count++;
-                while (const LetStmt *let = body.as<LetStmt>()) {
-                    body = let->body;
-                    scope.push(let->name, simplify(expand_expr(let->value, scope)));
-                }
-            }
-            internal_assert(count == dag.loop_vars.size())
-                << "Cannot find all the scan loops.\n";
-
-            // transform each linebuffered function in the pipeline
-            body = transform_kernel(body, dag, scope);
+            Stmt new_body = transform_kernel(body, dag, scope);
 
             // insert line buffers for input streams
             for (const string &kernel_name : dag.input_kernels) {
                 const HWKernel &input_kernel = dag.kernels.find(kernel_name)->second;
-                body = add_linebuffer(body, input_kernel);
+                new_body = add_linebuffer(new_body, input_kernel);
             }
 
+            // Rewrap the let statements
+            for (size_t i = lets.size(); i > 0; i--) {
+                new_body = LetStmt::make(lets[i-1].first, lets[i-1].second, new_body);
+            }
+
+            // remove the loop statement if it is one of the scan loops
+            stmt = new_body;
+        } else if (dag.loop_vars.count(op->name)){
+            // remove the loop statement if it is one of the scan loops
+            stmt = mutate(op->body);
+        } else {
+            internal_assert(dag.store_level.match(op->name));
+            debug(3) << "find the pipeline producing " << dag.name << "\n";
+
+            // walk inside of any let statements
+            Stmt body = op->body;
+
+            vector<pair<string, Expr>> lets;
+            while (const LetStmt *let = body.as<LetStmt>()) {
+                body = let->body;
+                scope.push(let->name, simplify(expand_expr(let->value, scope)));
+                lets.push_back(make_pair(let->name, let->value));
+            }
+
+            Stmt new_body = mutate(body);
+
             //stmt = For::make(dag.name + ".accelerator", 0, 1, ForType::Serial, DeviceAPI::Host, body);
-            stmt = ProducerConsumer::make("_hls_target." + dag.name, body, Stmt(), Evaluate::make(0));
+            new_body = ProducerConsumer::make("_hls_target." + dag.name, new_body, Stmt(), Evaluate::make(0));
 
             // add declarations of inputs and output (external) streams outside the hardware pipeline IR
             vector<string> external_streams;
@@ -672,8 +681,14 @@ class StreamOpt : public IRMutator {
                 for (StencilDimSpecs dim: kernel.dims) {
                     bounds.push_back(Range(0, dim.step));
                 }
-                stmt = Realize::make(stream_name, kernel.func.output_types(), bounds, const_true(), Block::make(stream_subimg, stmt));
+                new_body = Realize::make(stream_name, kernel.func.output_types(), bounds, const_true(), Block::make(stream_subimg, new_body));
             }
+
+            // Rewrap the let statements
+            for (size_t i = lets.size(); i > 0; i--) {
+                new_body = LetStmt::make(lets[i-1].first, lets[i-1].second, new_body);
+            }
+            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, new_body);
         }
     }
 
@@ -700,6 +715,19 @@ class StreamOpt : public IRMutator {
         } else {
             IRMutator::visit(op);
         }
+    }
+
+    void visit(const LetStmt *op) {
+        Expr new_value = simplify(expand_expr(op->value, scope));
+        scope.push(op->name, new_value);
+        Stmt new_body = mutate(op->body);
+        if (new_value.same_as(op->value) &&
+            new_body.same_as(op->body)) {
+            stmt = op;
+        } else {
+            stmt = LetStmt::make(op->name, new_value, new_body);
+        }
+        scope.pop(op->name);
     }
 
 public:
