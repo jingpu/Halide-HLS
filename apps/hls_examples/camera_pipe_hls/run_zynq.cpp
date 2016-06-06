@@ -3,8 +3,6 @@
 #include <cassert>
 #include <math.h>
 
-#include <fcntl.h>
-#include <unistd.h>
 #include "pipeline_zynq.h"
 #include "pipeline_native.h"
 
@@ -13,6 +11,8 @@
 #include "halide_image_io.h"
 
 using namespace Halide::Tools;
+
+extern "C" int halide_zynq_init();
 
 template<typename ImageType>
 void my_save_image(ImageType &im, const std::string &filename) {
@@ -28,24 +28,12 @@ void my_save_image(ImageType &im, const std::string &filename) {
 }
 
 int main(int argc, char **argv) {
-    // Open the buffer allocation device
-    int cma = open("/dev/cmabuffer0", O_RDWR);
-    if(cma == -1){
-        printf("Failed to open cma provider!\n");
-        return(0);
-    }
-
-    // open the hardware
-    int hwacc = open("/dev/hwacc0", O_RDWR);
-    if(hwacc == -1) {
-        printf("Failed to open hardware device!\n");
-        return(0);
-    }
+    halide_zynq_init();
 
     Image<uint16_t> input = load_image(argv[1]);
     fprintf(stderr, "%d %d\n", input.width(), input.height());
     Image<uint8_t> out_native(2560, 1920, 3);
-    Image<uint8_t> out_zynq(2560, 1920, 3, 0, true);
+    Image<uint8_t> out_zynq(2560, 1920, 3);
     //Image<uint8_t> out_zynq(4, 640, 480);
 
     printf("start.\n");
@@ -56,8 +44,8 @@ int main(int argc, char **argv) {
     //out_native = load_image("out_native.png");
     //printf("cpu program results loaded.\n");
 
-    pipeline_zynq(input, out_zynq, hwacc, cma);
-    my_save_image(out_zynq, "out_zynq.png");
+    pipeline_zynq(input, out_zynq);
+    save_image(out_zynq, "out_zynq.png");
     printf("accelerator program results saved.\n");
 
     printf("checking results...\n");
@@ -93,11 +81,9 @@ int main(int argc, char **argv) {
     // Timing code. Timing doesn't include copying the input data to
     // the gpu or copying the output back.
     double min_t2 = benchmark(5, 20, [&]() {
-            pipeline_zynq(input, out_zynq, hwacc, cma);
+            pipeline_zynq(input, out_zynq);
         });
     printf("accelerator program runtime: %g\n", min_t2 * 1e3);
 
-    close(hwacc);
-    close(cma);
     return 0;
 }
