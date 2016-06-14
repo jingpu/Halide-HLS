@@ -260,7 +260,8 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::visit(const For *op) {
 // we want to check that the allocation size is constant, and
 // add a 'HLS ARRAY_PARTITION' pragma to the allocation
 void CodeGen_HLS_Target::CodeGen_HLS_C::visit(const Allocate *op) {
-    open_scope();
+    // we don't add scopes, as it messes up the dataflow directives in HLS compiler
+    //open_scope();
 
     internal_assert(!op->new_expr.defined());
     internal_assert(!is_zero(op->condition));
@@ -282,14 +283,14 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::visit(const Allocate *op) {
            << print_name(op->name)
            << "[" << constant_size << "];\n";
     // add a 'ARRAY_PARTITION" pragma
-    stream << "#pragma HLS ARRAY_PARTITION variable=" << print_name(op->name) << " complete dim=0\n\n";
+    //stream << "#pragma HLS ARRAY_PARTITION variable=" << print_name(op->name) << " complete dim=0\n\n";
 
     op->body.accept(this);
 
     // Should have been freed internally
     internal_assert(!allocations.contains(op->name));
 
-    close_scope("alloc " + print_name(op->name));
+    //close_scope("alloc " + print_name(op->name));
 
 }
 

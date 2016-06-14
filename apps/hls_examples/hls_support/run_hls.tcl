@@ -13,6 +13,7 @@ add_files -tb run.cpp -cflags "-std=c++0x $INC_FLAGS"
 open_solution "solution1"
 set_part {xc7z020clg484-1}
 create_clock -period 10 -name default
+#config_rom_infer -array_size_threshold 1024
 
 # C simluation
 csim_design -O -ldflags ${LD_FLAGS} -argv $env(RUN_ARGS)
@@ -25,5 +26,6 @@ cosim_design -O -ldflags ${LD_FLAGS} -argv $env(RUN_ARGS)
 
 # export the RTL design as a Xilix IP Catalog
 export_design -format ip_catalog
+#export_design -evaluate verilog -format ip_catalog
 
 exit

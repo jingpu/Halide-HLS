@@ -13,6 +13,18 @@ Expr avg(Expr a, Expr b) {
     return cast(a.type(), (cast(wider, a) + b + 1)/2);
 }
 
+Func hot_pixel_suppression(Func input) {
+    Expr a = max(max(input(x-2, y), input(x+2, y)),
+                 max(input(x, y-2), input(x, y+2)));
+    Expr b = min(min(input(x-2, y), input(x+2, y)),
+                 min(input(x, y-2), input(x, y+2)));
+
+    Func denoised("denoised");
+    denoised(x, y) = clamp(input(x, y), b, a);
+
+    return denoised;
+}
+
 class MyPipeline {
     int schedule;
     ImageParam input;
@@ -28,18 +40,6 @@ class MyPipeline {
     Func hw_output;
     Func curve;
     Func rgb;
-
-    Func hot_pixel_suppression(Func input) {
-        Expr a = max(max(input(x-2, y), input(x+2, y)),
-                     max(input(x, y-2), input(x, y+2)));
-        Expr b = min(min(input(x-2, y), input(x+2, y)),
-                     min(input(x, y-2), input(x, y+2)));
-
-        Func denoised("denoised");
-        denoised(x, y) = clamp(input(x, y), b, a);
-
-        return denoised;
-    }
 
     Func interleave_x(Func a, Func b) {
         Func out;
@@ -393,7 +393,7 @@ public:
 };
 
 
-class MyPipelineOpt2 {
+class MyPipelineOpt {
     int schedule;
     ImageParam input;
 
@@ -409,18 +409,6 @@ class MyPipelineOpt2 {
     Func curve;
     Func rgb;
 
-    Func hot_pixel_suppression(Func input) {
-        Expr a = max(max(input(x-2, y), input(x+2, y)),
-                     max(input(x, y-2), input(x, y+2)));
-        Expr b = min(min(input(x-2, y), input(x+2, y)),
-                     min(input(x, y-2), input(x, y+2)));
-
-        Func denoised("denoised");
-        denoised(x, y) = clamp(input(x, y), b, a);
-
-        return denoised;
-    }
-
     Func interleave_x(Func a, Func b) {
         Func out;
         out(x, y) = select((x%2)==0, a(x, y), b(x-1, y));
@@ -433,17 +421,17 @@ class MyPipelineOpt2 {
         return out;
     }
 
+    // The demosaic algorithm is optimized for HLS schedule
+    // such that the bound analysis can derive a constant window
+    // and shift step without needed to unroll 'demosaic' into
+    // a 2x2 grid.
+    //
+    // The chances made from the original is that there is no
+    // explict downsample and upsample in 'deinterleave' and
+    // 'interleave', respectively.
+    // All the intermediate functions are the same size as the
+    // raw image although only pixels at even coordinates are used.
     Func demosaic(Func raw) {
-        // The algorithm is optimized for HLS schedule
-        // such that the bound analysis can derive a constant window
-        // and shift step without needed to unroll 'demosaic' into
-        // a 2x2 grid.
-        //
-        // The chances made from the original is that there is no
-        // explict downsample and upsample in 'deinterleave' and
-        // 'interleave', respectively.
-        // All the intermediate functions are the same size as the
-        // raw image although only pixels at even coordinates are used.
 
         Func r_r, g_gr, g_gb, b_b;
         g_gr(x, y) = raw(x, y);//deinterleaved(x, y, 0);
@@ -543,9 +531,9 @@ class MyPipelineOpt2 {
 
     Func apply_curve(Func input, float gamma, float contrast) {
         // copied from FCam
-        //Func curve("curve");
 
-        Expr xf = clamp(cast<float>(x)/1024.0f, 0.0f, 1.0f);
+        //Expr xf = clamp(cast<float>(x)/1024.0f, 0.0f, 1.0f);
+        Expr xf = x/1024.0f;
         Expr g = pow(xf, 1.0f/gamma);
         Expr b = 2.0f - (float) pow(2.0f, contrast/100.0f);
         Expr a = 2.0f - 2.0f*b;
@@ -555,13 +543,12 @@ class MyPipelineOpt2 {
 
         curve(x) = cast<uint8_t>(clamp(val*256.0f, 0.0f, 255.0f));
 
-        if (schedule == 3) {
-            // GPU schedule
-            curve.gpu_tile(x, 256);
-        }
-
         Func rgb("rgb");
-        rgb(x, y, c) = curve(input(x, y, c));
+        Expr in_val = clamp(input(x, y, c), 0, 1023);
+        //rgb(x, y, c) = curve(input(x, y, c));
+        rgb(x, y, c) = select(input(x, y, c) < 0, 0,
+                              select(input(x, y, c) >= 1024, 255,
+                                     curve(in_val)));
 
         return rgb;
     }
@@ -605,7 +592,7 @@ class MyPipelineOpt2 {
     }
 
 public:
-    MyPipelineOpt2(int _schedule, int32_t matrix[3][4], float gamma, float contrast)
+    MyPipelineOpt(int _schedule, int32_t matrix[3][4], float gamma, float contrast)
         : schedule(_schedule), input(UInt(16), 2), curve("curve")
     {
         // The camera pipe is specialized on the 2592x1968 images that
@@ -619,7 +606,6 @@ public:
         shifted(x, y) = input(x+16, y+12);
 
         denoised = hot_pixel_suppression(shifted);
-        //deinterleaved = deinterleave(denoised);
         demosaiced = demosaic(denoised);
         corrected = color_correct(demosaiced, matrix);
         rgb = apply_curve(corrected, gamma, contrast);
@@ -642,7 +628,6 @@ public:
     void compile_hls() {
         assert(schedule == 2);
         std::cout << "\ncompiling HLS code..." << std::endl;
-        //processed.output_buffer().set_stride(0, 3).set_stride(2, 1);
 
         // Block in chunks over tiles
         processed.tile(x, y, xo, yo, xi, yi, 640, 480)
@@ -651,12 +636,11 @@ public:
         hw_output.compute_at(processed, xo);
 
         hw_output.tile(x, y, xo, yo, xi, yi, 640, 480)
-            .reorder(c, xi, yi, xo, yo);
+            .reorder(c, xi, yi, xo, yo).unroll(c);;
         //hw_output.unroll(xi, 2);
         hw_output.accelerate({shifted}, xi, xo);
 
-        //curve.compute_at(rgb, Var::outermost());
-
+        curve.compute_at(hw_output, xo).unroll(x);  // synthesize curve to a ROM
 
         denoised.linebuffer()
             .unroll(x).unroll(y);
@@ -664,7 +648,6 @@ public:
             .unroll(c).unroll(x).unroll(y);
         rgb.linebuffer().unroll(c).unroll(x).unroll(y)
             .fifo_depth(hw_output, 480*9);
-        hw_output.unroll(c);  // hw output bound
 
         //processed.print_loop_nest();
         processed.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
@@ -727,10 +710,10 @@ int main(int argc, char **argv) {
     MyPipeline p1(1, matrix, gamma, contrast);
     p1.compile_cpu();
 
-    MyPipelineOpt2 p2(2, matrix, gamma, contrast);
+    MyPipelineOpt p2(2, matrix, gamma, contrast);
     p2.compile_hls();
 
     MyPipeline p3(3, matrix, gamma, contrast);
-    //p3.compile_gpu();
+    p3.compile_gpu();
     return 0;
 }
