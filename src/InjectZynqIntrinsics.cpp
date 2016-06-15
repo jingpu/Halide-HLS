@@ -17,7 +17,14 @@ class InjectCmaIntrinsics : public IRMutator {
 
     void visit(const Allocate *op) {
         auto iter = env.find(op->name);
-        internal_assert(iter != env.end()) << "Realize node refers to function not in environment.\n";
+
+        // If it's not in the environment it's some anonymous
+        // realization that we should skip (e.g. an inlined reduction)
+        if (iter == env.end()) {
+            IRMutator::visit(op);
+            return;
+        }
+
         if (iter->second.schedule().is_kernel_buffer()) {
             debug(3) << "find a kernel buffer " << op->name << "\n";
             // function (accessed by the accelerator pipeline) are scheduled to store in kernel buffer

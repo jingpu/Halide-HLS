@@ -88,10 +88,6 @@ public:
         hw_output(x, y) = cast<uint8_t>(cast<uint16_t>(offset(x, y)[0]) * 255 / searchR);
         output(x, y) = hw_output(x, y);
 
-        // The comment constraints and schedules.
-        //output.bound(x, 0, 720);
-        //output.bound(y, 0, 405);
-
         // all inputs has three channels
         right.set_bounds(2, 0, 3);
         left.set_bounds(2, 0, 3);
@@ -164,8 +160,8 @@ public:
         hw_output.compute_root();
         hw_output.tile(x, y, xo, yo, x_in, y_in, 256, 256);
         hw_output.accelerate({right_remapped, left_remapped}, x_in, xo);
-        right_remapped.compute_at(hw_output, xo);
-        left_remapped.compute_at(hw_output, xo);
+        right_remapped.compute_root();
+        left_remapped.compute_root();
 
         RVar so("so"), si("si");
         //offset.update(0).unroll(search.x, 16); // the unrolling doesn's generate code that balances the computation, creating a long critical path
@@ -179,8 +175,6 @@ public:
         output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
         output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
         output.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
-        output.compile_to_header("pipeline_zynq.h", args, "pipeline_zynq");
-        //output.compile_to_c("pipeline_zynq.c", args, "pipeline_zynq");
     }
 };
 
@@ -273,8 +267,8 @@ void compile_hls() {
     std::cout << "\ncompiling HLS code..." << std::endl;
 
     output.tile(x, y, xo, yo, x_in, y_in, 600, 400);
-    right_remapped.compute_at(hw_output, xo);
-    left_remapped.compute_at(hw_output, xo);
+    right_remapped.compute_at(output, xo);
+    left_remapped.compute_at(output, xo);
     //right_padded.compute_at(hw_output, xo);
     //left_padded.compute_at(hw_output, xo);
     //right_remap_padded.compute_at(hw_output, xo);
@@ -327,6 +321,6 @@ int main(int argc, char **argv) {
     MyPipeline p2;
     p1.compile_cpu();
     p2.compile_hls();
-    //p3.compile_gpu();
+    p3.compile_gpu();
     return 0;
 }

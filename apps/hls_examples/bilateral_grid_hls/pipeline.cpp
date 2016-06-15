@@ -260,9 +260,8 @@ public:
         output.tile(x, y, xo, yo, x_in, y_in, 480, 640);
 
         output_shuffled.compute_at(output, xo);
-
-        input_shuffled.compute_at(output_shuffled, xo);
-        input2_shuffled.compute_at(output_shuffled, xo);
+        input_shuffled.compute_at(output, xo);
+        input2_shuffled.compute_at(output, xo);
 
         output_shuffled.tile(x_grid, y_grid, xo, yo, x_grid, y_grid, 60, 80);
         output_shuffled.accelerate({input_shuffled, input2_shuffled}, x_grid, xo);

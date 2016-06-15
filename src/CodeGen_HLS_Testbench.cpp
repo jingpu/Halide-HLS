@@ -105,6 +105,7 @@ void CodeGen_HLS_Testbench::visit(const ProducerConsumer *op) {
 
 void CodeGen_HLS_Testbench::visit(const Call *op) {
     if (op->name == "stream_subimage") {
+        std::ostringstream rhs;
         // add intrinsic functions to convert memory buffers to streams
         // syntax:
         //   stream_subimage(direction, buffer_var, stream_var, address_of_subimage_origin,
@@ -115,20 +116,23 @@ void CodeGen_HLS_Testbench::visit(const Call *op) {
         string a1 = print_expr(op->args[1]);
         string a2 = print_expr(op->args[2]);
         string a3 = print_expr(op->args[3]);
-        do_indent();
         if (direction->value == "buffer_to_stream") {
-            stream << "subimage_to_stream(";
+            rhs << "subimage_to_stream(";
         } else if (direction->value == "stream_to_buffer") {
-            stream << "stream_to_subimage(";
+            rhs << "stream_to_subimage(";
         } else {
             internal_error;
         }
-        stream << a1 << ", " << a2 << ", " << a3;
+        rhs << a1 << ", " << a2 << ", " << a3;
         // skips args[4] -- dummy_call_to_function
         for (size_t i = 5; i < op->args.size(); i++) {
-            stream << ", " << print_expr(op->args[i]);
+            rhs << ", " << print_expr(op->args[i]);
         }
-        stream <<");\n";
+        rhs <<");\n";
+
+        do_indent();
+        stream << rhs.str();
+
         id = "0"; // skip evaluation
     } else {
         CodeGen_HLS_Base::visit(op);
