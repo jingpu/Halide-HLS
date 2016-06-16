@@ -1481,9 +1481,6 @@ private:
         const Mul *mul_a_b = add_a ? add_a->b.as<Mul>() : nullptr;
         const Ramp *ramp_a = a.as<Ramp>();
 
-        const Add *add_a_b = add_a ? add_a->b.as<Add>() : NULL;
-        const Mul *mul_a_b_a = add_a_b ? add_a_b->a.as<Mul>() : NULL;
-
         // If the RHS is a constant, do modulus remainder analysis on the LHS
         ModulusRemainder mod_rem(0, 1);
 
@@ -1562,11 +1559,6 @@ private:
                    mod_rem.modulus % ib == 0) {
             // ((a*b)*x + c) % a -> c % a
             expr = make_const(op->type, mod_imp((int64_t)mod_rem.remainder, ib));
-        } else if (no_overflow(op->type) &&
-                   add_a && add_a_b && mul_a_b_a && const_int(mul_a_b_a->b, &ia) &&
-                   const_int(b, &ib) && ib && (ia % ib == 0)) {
-            // (x + (y*(a*b) + z)) % b -> (x + z) % b)
-            expr = mutate((add_a->a + add_a_b->b) % b);
         } else if (no_overflow(op->type) &&
                    ramp_a &&
                    const_int(ramp_a->stride, &ia) &&
@@ -4063,14 +4055,6 @@ void check_algebra() {
     check(Expr(-7.25f) % 2.0f, 0.75f);
     check(Expr(-7.25f) % -2.0f, -1.25f);
     check(Expr(7.25f) % -2.0f, -0.75f);
-
-    // check distribution rules for modulo
-    check((x*8) % 4, 0);
-    check((x*8 + y) % 4, y % 4);
-    check((y + 8) % 4, y % 4);
-    check((y + x*8) % 4, y % 4);
-    check((y*16 + 13) % 2, 1);
-    check((x + (y*8 + z)) % 4, (x + z) % 4);
 }
 
 void check_vectors() {
