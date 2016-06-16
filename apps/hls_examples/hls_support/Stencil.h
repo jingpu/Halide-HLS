@@ -80,7 +80,11 @@ struct PackedStencil {
     inline ap_range_ref<8*sizeof(T)*EXTENT_3*EXTENT_2*EXTENT_1*EXTENT_0, false>
     operator()(size_t index_0, size_t index_1 = 0, size_t index_2 = 0, size_t index_3 = 0) {
 #pragma HLS INLINE
+
+#ifndef __SYNTHESIS__
         assert(index_0 < EXTENT_0 && index_1 < EXTENT_1 && index_2 < EXTENT_2 && index_3 < EXTENT_3);
+#endif
+
         const size_t word_length = sizeof(T) * 8; // in bits
         const size_t lo = index_0 * word_length +
                           index_1 * EXTENT_0 * word_length +
@@ -95,7 +99,11 @@ struct PackedStencil {
     inline ap_range_ref<8*sizeof(T)*EXTENT_3*EXTENT_2*EXTENT_1*EXTENT_0, false>
     operator()(size_t index_0, size_t index_1 = 0, size_t index_2 = 0, size_t index_3 = 0) const {
 #pragma HLS INLINE
+
+#ifndef __SYNTHESIS__
         assert(index_0 < EXTENT_0 && index_1 < EXTENT_1 && index_2 < EXTENT_2 && index_3 < EXTENT_3);
+#endif
+
         const size_t word_length = sizeof(T) * 8; // in bits
         const size_t lo = index_0 * word_length +
                           index_1 * EXTENT_0 * word_length +
