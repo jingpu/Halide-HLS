@@ -461,11 +461,13 @@ Stmt transform_kernel(Stmt s, const HWKernelDAG &dag, const Scope<Expr> &scope) 
 
         // insert scan loops
         Stmt scan_loops = stencil_realize;
+        int scan_dim = 0;
         for(size_t i = 0; i < kernel.dims.size(); i++) {
             if (kernel.dims[i].loop_var == "undef" )
                 continue;
 
-            string loop_var_name = kernel.name + ".scan_update." + kernel.func.args()[i];
+            string loop_var_name = kernel.name + "." + kernel.func.args()[i]
+                + ".__scan_dim_" + std::to_string(scan_dim++);
 
             Expr store_extent = simplify(kernel.dims[i].store_bound.max -
                                          kernel.dims[i].store_bound.min + 1);
@@ -517,9 +519,11 @@ Stmt transform_kernel(Stmt s, const HWKernelDAG &dag, const Scope<Expr> &scope) 
         vector<Expr> write_args({stream_var, stencil_var});
         // for dag output kernel, we want to record the scan loop vars,
         // so that code gen knows when to assert TLAST signal
+        int scan_dim = 0;
         for (size_t i = 0; i < kernel.dims.size(); i++) {
             if (kernel.dims[i].loop_var != "undef") {
-                string loop_var_name = kernel.name + ".scan_update." + kernel.func.args()[i];
+                string loop_var_name = kernel.name + "." + kernel.func.args()[i]
+                    + ".__scan_dim_" + std::to_string(scan_dim++);
                 Expr store_extent = simplify(kernel.dims[i].store_bound.max -
                                              kernel.dims[i].store_bound.min + 1);
                 const IntImm *store_extent_int = store_extent.as<IntImm>();
@@ -551,11 +555,13 @@ Stmt transform_kernel(Stmt s, const HWKernelDAG &dag, const Scope<Expr> &scope) 
 
         // insert scan loops
         Stmt scan_loops = stencil_realize;
+        scan_dim = 0;
         for(size_t i = 0; i < kernel.dims.size(); i++) {
             if (kernel.dims[i].loop_var == "undef" )
                 continue;
 
-            string loop_var_name = kernel.name + ".scan_update." + kernel.func.args()[i];
+            string loop_var_name = kernel.name + "." + kernel.func.args()[i]
+                + ".__scan_dim_" + std::to_string(scan_dim++);
 
             Expr store_extent = simplify(kernel.dims[i].store_bound.max -
                                          kernel.dims[i].store_bound.min + 1);
@@ -578,7 +584,7 @@ Stmt transform_kernel(Stmt s, const HWKernelDAG &dag, const Scope<Expr> &scope) 
             scan_loops = For::make(loop_var_name, 0, loop_extent, ForType::Serial, DeviceAPI::Host, scan_loops);
         }
 
-        ret = scan_loops;
+        ret = ProducerConsumer::make(stream_name, scan_loops, Stmt(), Evaluate::make(0));
     }
     return ret;
 }

@@ -247,9 +247,9 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::visit(const For *op) {
     open_scope();
     // add a 'PIPELINE' pragma if it is an innermost loop
     if (!contain_for_loop(op->body)) {
-        stream << "#pragma HLS DEPENDENCE array inter false\n"
-               << "#pragma HLS LOOP_FLATTEN off\n"
-               << "#pragma HLS PIPELINE II=1\n";
+        //stream << "#pragma HLS DEPENDENCE array inter false\n"
+        //       << "#pragma HLS LOOP_FLATTEN off\n";
+        stream << "#pragma HLS PIPELINE II=1\n";
     }
     op->body.accept(this);
     close_scope("for " + print_name(op->name));
