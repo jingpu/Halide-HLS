@@ -91,11 +91,12 @@ elif [ ${BUILD_SYSTEM} = 'MAKE' ]; then
   make_build -j ${NUM_JOBS}
 
   # Build the docs
-  make_build doc
+  #make_build doc
 
   if [ ${RUN_TESTS} = '1' ]; then
     # Build an run the correctness tests
-    make_build -j ${NUM_JOBS} test_correctness
+    #make_build -j ${NUM_JOBS} test_correctness
+    make_build -j ${NUM_JOBS} test_hls_apps
   else
     echo "Not running tests"
   fi

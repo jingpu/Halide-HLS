@@ -1103,6 +1103,28 @@ test_apps: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_D
 	make -C apps/fft bench_48x48  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
 	cd apps/HelloMatlab; HALIDE_PATH=$(CURDIR) HALIDE_CXX=$(CXX) ./run_blur.sh
 
+
+ALL_HLS_APPS = bilateral_grid_hls camera_pipe_hls camera_unsharp_hls demosaic_flow_hls demosaic_harris_hls demosaic_hls fanout_hls gaussian_hls harris_hls stereo_hls unsharp_hls
+.PHONY: test_hls_apps
+test_hls_apps: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(INCLUDE_DIR)/HalideRuntime.h
+	mkdir -p apps/hls_examples
+	# Make a local copy of the apps if we're building out-of-tree,
+	# because the app Makefiles are written to build in-tree
+	if [ "$(ROOT_DIR)" != "$(CURDIR)" ]; then \
+	  echo "Building out-of-tree, so making local copy of apps"; \
+	  for app in $(ALL_HLS_APPS); do \
+	    cp -r $(ROOT_DIR)/apps/hls_examples/$$app apps/hls_examples; \
+	  done; \
+	  mkdir -p tools; \
+	  cp -r $(ROOT_DIR)/apps/support apps; \
+	  cp -r $(ROOT_DIR)/apps/images apps; \
+	  cp -r $(ROOT_DIR)/apps/hls_examples/hls_support apps/hls_examples; \
+	  cp $(ROOT_DIR)/tools/* tools/; \
+	fi
+	for app in $(ALL_HLS_APPS); do \
+	  make -C apps/hls_examples/$$app clean all HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR); \
+	done
+
 .PHONY: test_python
 test_python: $(LIB_DIR)/libHalide.a
 	mkdir -p python_bindings
