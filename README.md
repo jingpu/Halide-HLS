@@ -23,10 +23,10 @@ Build Status
 
 | Linux                        |
 |------------------------------|
-| [![linux build status][1]][2]|
+| [![linux build status][1]](2)|
 
-[1]: https://travis-ci.org/halide/Halide.svg?branch=master
-[2]: https://travis-ci.org/halide/Halide
+[1]: https://travis-ci.com/jingpu/Halide-HLS.svg?token=owCmkoBUqDAizEoitXzn&branch=HLS
+[2]: https://travis-ci.com/jingpu/Halide-HLS
 
 Building Halide
 ===============
