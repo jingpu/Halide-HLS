@@ -278,9 +278,9 @@ void CodeGen_HLS_Base::visit(const Call *op) {
         internal_assert(stencils.contains(stream_name));
         Stencil_Type stream_type = stencils.get(stream_name);
 
-        // Optimization. if there is only one consumer and its fifo depth is one
+        // Optimization. if there is only one consumer and its fifo depth is zero
         // , use C++ reference for the consumer stream
-        if (num_of_consumers == 1 && consumer_fifo_depth[0] == 1) {
+        if (num_of_consumers == 1 && consumer_fifo_depth[0] == 0) {
             string consumer_stream_name = stream_name + ".to." + consumer_names[0];
             do_indent();
             stream << print_stencil_type(stream_type) << " &"
@@ -293,7 +293,7 @@ void CodeGen_HLS_Base::visit(const Call *op) {
         for (size_t i = 0; i < num_of_consumers; i++) {
             string consumer_stream_name = stream_name + ".to." + consumer_names[i];
             Stencil_Type consumer_stream_type = stream_type;
-            consumer_stream_type.depth = consumer_fifo_depth[i];
+            consumer_stream_type.depth = std::max(consumer_fifo_depth[i], 1); // HLS tool doesn't support zero-depth FIFO yet
             do_indent();
             stream << print_stencil_type(consumer_stream_type) << ' '
                    << print_name(consumer_stream_name) << ";\n";
@@ -320,13 +320,9 @@ void CodeGen_HLS_Base::visit(const Call *op) {
         stencil_type.type = Stencil_Type::StencilContainerType::Stencil;
         string stencil_name = "tmp_stencil";
         do_indent();
-        stream << print_stencil_type(stencil_type) << ' '
+        stream << "Packed" << print_stencil_type(stencil_type) << ' '
                << print_name(stencil_name) << " = "
                << print_name(stream_name) << ".read();\n";
-        // pragma
-        stencils.push(stencil_name, stencil_type);
-        stream << print_stencil_pragma(stencil_name);
-        stencils.pop(stencil_name);
 
         // dispatch the stencil to each consumer stream
         for (size_t i = 0; i < num_of_consumers; i++) {

@@ -253,7 +253,7 @@ public:
 };
 
 
-Stmt create_dispatch_call(const HWKernel& kernel) {
+Stmt create_dispatch_call(const HWKernel& kernel, int min_fifo_depth = 0) {
     // dispatch the stream into seperate streams for each of its consumers
     // syntax:
     //   dispatch_stream(stream_name, num_of_dimensions,
@@ -278,7 +278,7 @@ Stmt create_dispatch_call(const HWKernel& kernel) {
     for (const auto& p : kernel.consumer_stencils) {
         dispatch_args.push_back(p.first);
         internal_assert(kernel.consumer_fifo_depths.count(p.first));
-        dispatch_args.push_back(kernel.consumer_fifo_depths.find(p.first)->second);
+        dispatch_args.push_back(std::max(min_fifo_depth, kernel.consumer_fifo_depths.find(p.first)->second));
         internal_assert(p.second.size() == kernel.dims.size());
         for (size_t i = 0; i < kernel.dims.size(); i++) {
             Expr store_offset = simplify(p.second[i].store_bound.min -
@@ -382,7 +382,14 @@ Stmt add_linebuffer(Stmt s, const HWKernel &kernel) {
         // After mutation:
         //       dispatch(...)
         //       stmt...
-        Stmt dispatch_call = create_dispatch_call(kernel);
+
+        // Ad-hoc fix: place a fifo buffer at the inputs if the inputs is not linebuffered.
+        // This works around the issue that read stencil call from a interface stream
+        // in the compute kernel cannot fully unrolled
+        int force_buffer_depth = 0;
+        if (kernel.input_streams.empty() && kernel.consumer_stencils.size() == 1)
+            force_buffer_depth = 1;
+        Stmt dispatch_call = create_dispatch_call(kernel, force_buffer_depth);
         ret = Block::make(dispatch_call, s);
     }
     return ret;

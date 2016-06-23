@@ -22,10 +22,10 @@ csim_design -O -ldflags ${LD_FLAGS} -argv $env(RUN_ARGS)
 csynth_design
 
 # Co-simulation (i.e. verifying RTL using C testbench)
-cosim_design -O -ldflags ${LD_FLAGS} -argv $env(RUN_ARGS)
+#cosim_design -O -ldflags ${LD_FLAGS} -argv $env(RUN_ARGS)
 
 # export the RTL design as a Xilix IP Catalog
-export_design -format ip_catalog
+#export_design -format ip_catalog
 #export_design -evaluate verilog -format ip_catalog
 
 exit

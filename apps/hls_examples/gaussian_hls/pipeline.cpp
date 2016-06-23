@@ -22,7 +22,7 @@ public:
         : in(UInt(8), 2),
           kernel("kernel"), blur_y("blur_y"), blur_x("blur_x"),
           output("output"), hw_output("hw_output"),
-          win(0, 2), win2(-1, 3, -1, 3)
+          win(0, 2), win2(-4, 9, -4, 9)
     {
         // Define a 9x9 Gaussian Blur with a repeat-edge boundary condition.
         float sigma = 1.5f;
