@@ -8,7 +8,7 @@ include ../hls_support/Makefile.inc
 HLS_LOG = vivado_hls.log
 
 .PHONY: all run_hls
-all: out.png
+all: run
 run_hls: $(HLS_LOG)
 
 pipeline: pipeline.cpp

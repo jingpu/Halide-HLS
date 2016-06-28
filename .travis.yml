@@ -15,9 +15,9 @@ env:
   #- LLVM_VERSION=3.6 BUILD_SYSTEM=CMAKE BUILD_TYPE=Debug HALIDE_SHARED_LIBRARY=1
   # Don't build as a static library with cmake. It risks exceeding the travis memory limit.
   #- LLVM_VERSION=3.6 BUILD_SYSTEM=CMAKE BUILD_TYPE=Debug HALIDE_SHARED_LIBRARY=0
-  - LLVM_VERSION=3.5.2 BUILD_SYSTEM=MAKE  BUILD_TYPE=Debug
+  - LLVM_VERSION=3.5.2 BUILD_SYSTEM=MAKE  BUILD_TYPE=Debug LLVM_FILENAME=clang+llvm-3.5.2-x86_64-linux-gnu
   # Test Release builds
-  #- LLVM_VERSION=3.6.2 BUILD_SYSTEM=MAKE  BUILD_TYPE=Release
+  - LLVM_VERSION=3.6.2 BUILD_SYSTEM=MAKE  BUILD_TYPE=Release LLVM_FILENAME=clang+llvm-3.6.2-x86_64-linux-gnu-ubuntu-14.04
   #- LLVM_VERSION=3.6 BUILD_SYSTEM=CMAKE BUILD_TYPE=Release HALIDE_SHARED_LIBRARY=1
 cache: apt
 # Note the commands below are written assuming Ubuntu 12.04LTS
@@ -33,7 +33,7 @@ install:
   # Download the right llvm release
   - wget http://llvm.org/releases/${LLVM_VERSION}/clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu-ubuntu-14.04.tar.xz
   - tar xvf clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu-ubuntu-14.04.tar.xz
-  - sudo mv clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu /usr/local/llvm
+  - sudo mv ${LLVM_FILENAME} /usr/local/llvm
   # Get libpng for the tutorials and apps
   - sudo apt-get -y install libpng-dev
   # For generating docs

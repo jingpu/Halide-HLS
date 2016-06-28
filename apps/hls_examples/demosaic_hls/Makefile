@@ -6,7 +6,7 @@ include ../../support/Makefile.inc
 #### HLS flags
 include ../hls_support/Makefile.inc
 
-all: out.png
+all: run
 
 pipeline: pipeline.cpp
 	$(CXX) $(CXXFLAGS) -Wall -g $^ $(LIB_HALIDE) -o $@ $(LDFLAGS) -ltinfo
