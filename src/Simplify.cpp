@@ -3984,7 +3984,7 @@ void check_algebra() {
     check((x + (y*4 + z)) / 2, y*2 + (x + z)/2);
     check((x + (y*4 - z)) / 2, y*2 + (x - z)/2);
     check((x - (y*4 + z)) / 2, (x - z)/2 - y*2);
-    //check((x - (y*4 - z)) / 2, (x + z)/2 - y*2);
+    // check((x - (y*4 - z)) / 2, (x + z)/2 - y*2); // the first term will first be simplified to 
 
     check((x + 3)/2 + 7, (x + 17)/2);
     check((x/2 + 3)/5, (x + 6)/10);
