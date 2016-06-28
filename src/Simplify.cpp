@@ -1236,6 +1236,7 @@ private:
         const Add *add_a_b = NULL;
         const Sub *sub_a_b = NULL;
         const Mul *mul_a_b_a = NULL;
+        const Mul *mul_a_b_b = NULL;
 
         if (add_a) {
             div_a_a = add_a->a.as<Div>();
@@ -1262,8 +1263,10 @@ private:
 
         if(add_a_b) {
             mul_a_b_a = add_a_b->a.as<Mul>();
+            mul_a_b_b = add_a_b->b.as<Mul>();
         } else if(sub_a_b) {
             mul_a_b_a = sub_a_b->a.as<Mul>();
+            mul_a_b_b = sub_a_b->b.as<Mul>();
         }
 
 
@@ -1445,6 +1448,13 @@ private:
             // (x - (y*4 + z)) / 2 -> (x - z)/2 - y*2
             Expr ratio = make_const(op->type, div_imp(ia, ib));
             expr = mutate((sub_a->a - add_a_b->b) / b - (mul_a_b_a->a * ratio));
+        } else if (no_overflow(op->type) && add_a && sub_a_b &&
+                   mul_a_b_b && const_int(mul_a_b_b->b, &ia) && const_int(b, &ib) &&
+                   ib > 0 && (ia % ib == 0)) {
+            // (x - (z*4 - y)) / 2 -> (x + (y - z*4)) / 2  -- by a rule from Sub
+            // (x + (y - z*4)) / 2 -> (x + y)/2 - z*2  -- by this rule
+            Expr ratio = make_const(op->type, div_imp(ia, ib));
+            expr = mutate((add_a->a + sub_a_b->a) / b - (mul_a_b_b->a * ratio));
         } else if (no_overflow(op->type) &&
                    add_a &&
                    const_int(add_a->b, &ia) &&
@@ -3977,6 +3987,7 @@ void check_algebra() {
     check((x*4 - y)/2, x*2 - y/2);
     check((y - x*4)/2, y/2 - x*2);
 
+    // pull out terms in a ternary expression
     check(((x*4 + y) + z) / 2, x*2 + (y + z)/2);
     check(((x*4 - y) + z) / 2, x*2 - (y - z)/2);
     check(((x*4 + y) - z) / 2, x*2 + (y - z)/2);
@@ -3984,7 +3995,7 @@ void check_algebra() {
     check((x + (y*4 + z)) / 2, y*2 + (x + z)/2);
     check((x + (y*4 - z)) / 2, y*2 + (x - z)/2);
     check((x - (y*4 + z)) / 2, (x - z)/2 - y*2);
-    // check((x - (y*4 - z)) / 2, (x + z)/2 - y*2); // the first term will first be simplified to 
+    check((x - (y*4 - z)) / 2, (x + z)/2 - y*2);
 
     check((x + 3)/2 + 7, (x + 17)/2);
     check((x/2 + 3)/5, (x + 6)/10);
