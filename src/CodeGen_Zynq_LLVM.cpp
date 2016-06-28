@@ -102,6 +102,11 @@ void CodeGen_Zynq_LLVM::visit(const Call *op) {
         Value *buffer_ptr = codegen(op->args[1]);
         Value *slice_ptr = codegen(op->args[2]);
         Value *address_of_subimage_origin = codegen(op->args[3]);
+        // cast to the i8* type
+        address_of_subimage_origin =
+          builder->CreatePointerCast(address_of_subimage_origin,
+                                     llvm::PointerType::get(i8, 0));
+
         // TODO check the lower demesion matches the buffer depth
         // TODO static check that the slice is within the bounds of kernel buffer
         size_t arg_length = op->args.size();
