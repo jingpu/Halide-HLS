@@ -1406,46 +1406,45 @@ private:
                    mul_a_a_a && const_int(mul_a_a_a->b, &ia) && const_int(b, &ib) &&
                    ib > 0 && (ia % ib == 0)) {
             // Pull terms that are a multiple of the divisor out
-            // FIXME math is wrong here
-            // ((x*4 + y) + z) / 2 -> x*2 + y/2 + z/2
+            // ((x*4 + y) + z) / 2 -> x*2 + (y + z)/2
             Expr ratio = make_const(op->type, div_imp(ia, ib));
-            expr = mutate((mul_a_a_a->a * ratio) + (add_a_a->b / b) + (add_a->b / b));
+            expr = mutate((mul_a_a_a->a * ratio) + (add_a_a->b  + add_a->b) / b);
         } else if (no_overflow(op->type) && add_a && sub_a_a &&
                    mul_a_a_a && const_int(mul_a_a_a->b, &ia) && const_int(b, &ib) &&
                    ib > 0 && (ia % ib == 0)) {
-            // ((x*4 - y) + z) / 2 -> x*2 - y/2 + z/2
+            // ((x*4 - y) + z) / 2 -> x*2 - (y - z)/2
             Expr ratio = make_const(op->type, div_imp(ia, ib));
-            expr = mutate((mul_a_a_a->a * ratio) - (sub_a_a->b / b) + (add_a->b / b));
+            expr = mutate((mul_a_a_a->a * ratio) - (sub_a_a->b - add_a->b) / b);
         } else if (no_overflow(op->type) && sub_a && add_a_a &&
                    mul_a_a_a && const_int(mul_a_a_a->b, &ia) && const_int(b, &ib) &&
                    ib > 0 && (ia % ib == 0)) {
-            // ((x*4 + y) - z) / 2 -> x*2 + y/2 - z/2
+            // ((x*4 + y) - z) / 2 -> x*2 + (y - z)/2
             Expr ratio = make_const(op->type, div_imp(ia, ib));
-            expr = mutate((mul_a_a_a->a * ratio) + (add_a_a->b / b) - (sub_a->b / b));
+            expr = mutate((mul_a_a_a->a * ratio) + (add_a_a->b - sub_a->b) / b);
         } else if (no_overflow(op->type) && sub_a && sub_a_a &&
                    mul_a_a_a && const_int(mul_a_a_a->b, &ia) && const_int(b, &ib) &&
                    ib > 0 && (ia % ib == 0)) {
-            // ((x*4 - y) - z) / 2 -> x*2 - y/2 - z/2
+            // ((x*4 - y) - z) / 2 -> x*2 - (y + z)/2
             Expr ratio = make_const(op->type, div_imp(ia, ib));
-            expr = mutate((mul_a_a_a->a * ratio) - (sub_a_a->b / b) - (sub_a->b / b));
+            expr = mutate((mul_a_a_a->a * ratio) - (sub_a_a->b + sub_a->b) / b);
         } else if (no_overflow(op->type) && add_a && add_a_b &&
                    mul_a_b_a && const_int(mul_a_b_a->b, &ia) && const_int(b, &ib) &&
                    ib > 0 && (ia % ib == 0)) {
-            // (x + (y*4 + z)) / 2 -> y*2 + (x/2 + z/2)
+            // (x + (y*4 + z)) / 2 -> y*2 + (x + z)/2
             Expr ratio = make_const(op->type, div_imp(ia, ib));
-            expr = mutate((mul_a_b_a->a * ratio) + ((add_a->a / b) + (add_a_b->b / b)));
+            expr = mutate((mul_a_b_a->a * ratio) + (add_a->a + add_a_b->b) / b);
         } else if (no_overflow(op->type) && add_a && sub_a_b &&
                    mul_a_b_a && const_int(mul_a_b_a->b, &ia) && const_int(b, &ib) &&
                    ib > 0 && (ia % ib == 0)) {
-            // (x + (y*4 - z)) / 2 -> y*2 + (x/2 - z/2)
+            // (x + (y*4 - z)) / 2 -> y*2 + (x - z)/2
             Expr ratio = make_const(op->type, div_imp(ia, ib));
-            expr = mutate((mul_a_b_a->a * ratio) + ((add_a->a / b) - (sub_a_b->b / b)));
+            expr = mutate((mul_a_b_a->a * ratio) + (add_a->a - sub_a_b->b) / b);
         } else if (no_overflow(op->type) && sub_a && add_a_b &&
                    mul_a_b_a && const_int(mul_a_b_a->b, &ia) && const_int(b, &ib) &&
                    ib > 0 && (ia % ib == 0)) {
-            // (x - (y*4 + z)) / 2 -> (x/2 - z/2) - y*2
+            // (x - (y*4 + z)) / 2 -> (x - z)/2 - y*2
             Expr ratio = make_const(op->type, div_imp(ia, ib));
-            expr = mutate(((sub_a->a / b) - (add_a_b->b / b)) - (mul_a_b_a->a * ratio));
+            expr = mutate((sub_a->a - add_a_b->b) / b - (mul_a_b_a->a * ratio));
         } else if (no_overflow(op->type) &&
                    add_a &&
                    const_int(add_a->b, &ia) &&
@@ -3977,14 +3976,15 @@ void check_algebra() {
     check((y + x*4)/2, y/2 + x*2);
     check((x*4 - y)/2, x*2 - y/2);
     check((y - x*4)/2, y/2 - x*2);
-    check(((x*4 + y) + z) / 2, x*2 + y/2 + z/2);
-    check(((x*4 - y) + z) / 2, x*2 - y/2 + z/2);
-    check(((x*4 + y) - z) / 2, x*2 + y/2 - z/2);
-    check(((x*4 - y) - z) / 2, x*2 - y/2 - z/2);
-    check((x + (y*4 + z)) / 2, y*2 + (x/2 + z/2));
-    check((x + (y*4 - z)) / 2, y*2 + (x/2 - z/2));
-    check((x - (y*4 + z)) / 2, (x/2 - z/2) - y*2);
-    //check((x - (y*4 - z)) / 2, (x/2 + z/2) - y*2);
+
+    check(((x*4 + y) + z) / 2, x*2 + (y + z)/2);
+    check(((x*4 - y) + z) / 2, x*2 - (y - z)/2);
+    check(((x*4 + y) - z) / 2, x*2 + (y - z)/2);
+    check(((x*4 - y) - z) / 2, x*2 - (y + z)/2);
+    check((x + (y*4 + z)) / 2, y*2 + (x + z)/2);
+    check((x + (y*4 - z)) / 2, y*2 + (x - z)/2);
+    check((x - (y*4 + z)) / 2, (x - z)/2 - y*2);
+    //check((x - (y*4 - z)) / 2, (x + z)/2 - y*2);
 
     check((x + 3)/2 + 7, (x + 17)/2);
     check((x/2 + 3)/5, (x + 6)/10);

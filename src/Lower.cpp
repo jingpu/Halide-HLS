@@ -242,7 +242,7 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     debug(2) << "Lowering after partitioning loops:\n" << s << "\n\n";
 
     //debug(1) << "Trimming loops to the region over which they do something...\n";
-    //s = trim_no_ops(s);
+    s = trim_no_ops(s);
     //debug(2) << "Lowering after loop trimming:\n" << s << "\n\n";
 
     debug(1) << "Injecting early frees...\n";
