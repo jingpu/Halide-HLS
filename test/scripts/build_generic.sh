@@ -95,8 +95,8 @@ elif [ ${BUILD_SYSTEM} = 'MAKE' ]; then
 
   if [ ${RUN_TESTS} = '1' ]; then
     # Build an run the correctness tests
-    #make_build -j ${NUM_JOBS} test_correctness
     make_build -j ${NUM_JOBS} test_hls_apps
+    make_build -j ${NUM_JOBS} test_correctness
   else
     echo "Not running tests"
   fi
