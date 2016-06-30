@@ -550,9 +550,11 @@ public:
         curve.compute_at(hw_output, xo).unroll(x);  // synthesize curve to a ROM
 
         //processed.print_loop_nest();
-        processed.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
-        processed.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
-        processed.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
+        Target hls_target = get_target_from_environment();
+        hls_target.set_feature(Target::CPlusPlusMangling);
+        processed.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML, hls_target);
+        processed.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls", hls_target);
+        processed.compile_to_header("pipeline_hls.h", args, "pipeline_hls", hls_target);
 
         std::vector<Target::Feature> features({Target::Zynq});
         Target target(Target::Linux, Target::ARM, 32, features);

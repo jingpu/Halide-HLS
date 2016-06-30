@@ -118,16 +118,18 @@ public:
         hw_output.unroll(c);
 
         //output.print_loop_nest();
-        output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
-        output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
-        output.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
-        /*
-        std::vector<Target::Feature> features({Target::HLS, Target::NoAsserts, Target::NoBoundsQuery});
+        // Create the target for HLS simulation
+        Target hls_target = get_target_from_environment();
+        hls_target.set_feature(Target::CPlusPlusMangling);
+        output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML, hls_target);
+        output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls", hls_target);
+        output.compile_to_header("pipeline_hls.h", args, "pipeline_hls", hls_target);
+
+        std::vector<Target::Feature> features({Target::Zynq});
         Target target(Target::Linux, Target::ARM, 32, features);
         output.compile_to_zynq_c("pipeline_zynq.c", args, "pipeline_zynq", target);
         output.compile_to_header("pipeline_zynq.h", args, "pipeline_zynq", target);
         output.compile_to_lowered_stmt("pipeline_zynq.ir.html", args, HTML, target);
-        */
     }
 };
 

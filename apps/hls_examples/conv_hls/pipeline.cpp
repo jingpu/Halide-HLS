@@ -93,9 +93,11 @@ public:
         hw_bounds[0].unroll(c).unroll(x).unroll(y);
 
         //output.print_loop_nest();
-        output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML);
-        output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls");
-        output.compile_to_header("pipeline_hls.h", args, "pipeline_hls");
+        Target hls_target = get_target_from_environment();
+        hls_target.set_feature(Target::CPlusPlusMangling);
+        output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML, hls_target);
+        output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls", hls_target);
+        output.compile_to_header("pipeline_hls.h", args, "pipeline_hls", hls_target);
     }
 
 private:

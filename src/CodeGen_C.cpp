@@ -173,7 +173,7 @@ const string globals =
     "}\n";
 }
 
-CodeGen_C::CodeGen_C(ostream &s, OutputKind output_kind, const std::string &guard, const std::string &additional_headers) : IRPrinter(s), id("$$ BAD ID $$"), output_kind(output_kind) {
+CodeGen_C::CodeGen_C(ostream &s, OutputKind output_kind, const std::string &guard) : IRPrinter(s), id("$$ BAD ID $$"), output_kind(output_kind) {
     if (is_header()) {
         // If it's a header, emit an include guard.
         stream << "#ifndef HALIDE_" << print_name(guard) << '\n'
@@ -182,7 +182,6 @@ CodeGen_C::CodeGen_C(ostream &s, OutputKind output_kind, const std::string &guar
 
     if (!is_header()) {
         stream << headers;
-        stream << additional_headers;
     }
 
     // Throw in a definition of a buffer_t
@@ -352,9 +351,9 @@ class ExternCallPrototypes : public IRGraphVisitor {
     void switch_calling_convention(bool c_plus_plus) {
       if (in_c_plus_plus != c_plus_plus) {
           if (in_c_plus_plus) {
-              stream << "}\n";
-          } else {
               stream << "extern \"C\" {\n";
+          } else {
+              stream << "}\n";
           }
           in_c_plus_plus = c_plus_plus;
       }

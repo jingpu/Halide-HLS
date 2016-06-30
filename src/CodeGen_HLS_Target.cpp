@@ -47,8 +47,8 @@ bool contain_for_loop(Stmt s) {
 
 CodeGen_HLS_Target::CodeGen_HLS_Target(const string &name)
     : target_name(name),
-      hdrc(hdr_stream, CodeGen_HLS_C::CHeader),
-      srcc(src_stream, CodeGen_HLS_C::CImplementation) { }
+      hdrc(hdr_stream, CodeGen_HLS_C::CPlusPlusHeader),
+      srcc(src_stream, CodeGen_HLS_C::CPlusPlusImplementation) { }
 
 
 CodeGen_HLS_Target::~CodeGen_HLS_Target() {

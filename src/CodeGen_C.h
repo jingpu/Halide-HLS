@@ -33,7 +33,7 @@ public:
     /** Initialize a C code generator pointing at a particular output
      * stream (e.g. a file, or std::cout) */
     CodeGen_C(std::ostream &dest, OutputKind output_kind = CImplementation,
-              const std::string &include_guard = "", const std::string &additional_headers = "");
+              const std::string &include_guard = "");
     ~CodeGen_C();
 
     /** Emit the declarations contained in the module as C code. */
