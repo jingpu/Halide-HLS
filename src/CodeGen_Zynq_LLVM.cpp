@@ -13,7 +13,7 @@ using std::vector;
 using llvm::Value;
 
 CodeGen_Zynq_LLVM::CodeGen_Zynq_LLVM(Target t)
-    : CodeGen_ARM(t) { }
+  : CodeGen_X86(t) {}
 
 void CodeGen_Zynq_LLVM::visit(const Realize *op) {
     internal_assert(ends_with(op->name, ".stream"));
@@ -71,7 +71,7 @@ void CodeGen_Zynq_LLVM::visit(const ProducerConsumer *op) {
 
         buffer_slices.clear();
     } else {
-        CodeGen_ARM::visit(op);
+        CodeGen_X86::visit(op);
     }
 }
 
@@ -118,7 +118,7 @@ void CodeGen_Zynq_LLVM::visit(const Call *op) {
         internal_assert(fn);
         value = builder->CreateCall(fn, args);
     } else {
-        CodeGen_ARM::visit(op);
+        CodeGen_X86::visit(op);
     }
 }
 

@@ -258,6 +258,7 @@ Target get_target_from_environment() {
 Target get_jit_target_from_environment() {
     Target host = get_host_target();
     host.set_feature(Target::JIT);
+    host.set_feature(Target::Zynq);
     string target = get_env("HL_JIT_TARGET");
     if (target.empty()) {
         return host;

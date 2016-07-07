@@ -1,171 +1,282 @@
 #include "HalideRuntimeZynq.h"
 #include "printer.h"
 
-#ifndef _IOCTL_CMDS_H_
-#define _IOCTL_CMDS_H_
-
-// TODO: switch these out for "proper" mostly-system-unique ioctl numbers
-#define GET_BUFFER 1000 // Get an unused buffer
-#define GRAB_IMAGE 1001 // Acquire image from camera
-#define FREE_IMAGE 1002 // Release buffer
-#define PROCESS_IMAGE 1003 // Push to stencil path
-#define PEND_PROCESSED 1004 // Retreive from stencil path
-
-#endif
+#define NUM_HWACC  8
+#define HWACC_LATENCY_SEC  1
 
 extern "C" {
 
-// forward declarations of some POSIX APIs
-#define O_RDWR           02
-#define PROT_WRITE       0x2
-#define MAP_SHARED       0x01
-typedef int32_t off_t; // FIXME this is not actually correct
-extern int ioctl(int fd, unsigned long cmd, ...);
-extern void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
-extern int munmap(void *addr, size_t length);
+typedef struct {
+    uint32_t flags;
+    void * stack_base;
+    size_t stack_size;
+    size_t guard_size;
+    int32_t sched_policy;
+    int32_t sched_priority;
+} pthread_attr_t;
+typedef long pthread_t;
+typedef struct {
+    // 48 bytes is enough for a cond on 64-bit and 32-bit systems
+    uint64_t _private[6];
+} pthread_cond_t;
+typedef long pthread_condattr_t;
+typedef struct {
+    // 64 bytes is enough for a mutex on 64-bit and 32-bit systems
+    uint64_t _private[8];
+} pthread_mutex_t;
+typedef long pthread_mutexattr_t;
+extern int pthread_create(pthread_t *thread, pthread_attr_t const * attr,
+                          void *(*start_routine)(void *), void * arg);
+extern int pthread_join(pthread_t thread, void **retval);
+extern int pthread_cond_init(pthread_cond_t *cond, const pthread_condattr_t *attr);
+extern int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex);
+extern int pthread_cond_signal(pthread_cond_t *cond);
+extern int pthread_cond_broadcast(pthread_cond_t *cond);
+extern int pthread_cond_destroy(pthread_cond_t *cond);
+extern int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr);
+extern int pthread_mutex_lock(pthread_mutex_t *mutex);
+extern int pthread_mutex_unlock(pthread_mutex_t *mutex);
+extern int pthread_mutex_destroy(pthread_mutex_t *mutex);
+
+extern char *getenv(const char *);
+extern unsigned int sleep(unsigned int seconds);
+} // extern "C"
+
+static int initialized = 0;
 
 
-// file descriptors of devices
-static int fd_hwacc = 0;
-static int fd_cma = 0;
+typedef struct work {
+    work *next_job;
+    int job_id;
+} work;
+
+typedef struct work_queue_t {
+  // all fields are protected by this mutex.
+  pthread_mutex_t mutex;
+
+  // Singly linked list for job queue
+  work head;  // head is dummy node (always valid to read)
+  work *tail;
+
+  int next_job_id;
+
+  pthread_cond_t wakeup_workers;
+  // Keep track of threads so they can be joined at shutdown
+  pthread_t threads[NUM_HWACC];
+} work_queue_t;
+
+typedef struct finish_queue_t {
+  // all fields are protected by this mutex.
+  pthread_mutex_t mutex;
+
+  // Singly linked list for job stack
+  work *head;
+
+  pthread_cond_t worker_finished;
+} finish_queue_t;
+
+static work_queue_t work_queue;
+static finish_queue_t finish_queue;
+
+void print_list(work *head, const char* s) {
+  debug(0) << s << " [";
+  while (head) {
+    debug(0) << head->job_id << ", ";
+    head = head->next_job;
+  }
+  debug(0) << "]\n";
+}
+
+void *worker_thread(void *void_arg) {
+  pthread_mutex_lock(&work_queue.mutex);
+  while (true) {
+    if (work_queue.head.next_job == NULL) {
+      // wait for a new job
+      pthread_cond_wait(&work_queue.wakeup_workers, &work_queue.mutex);
+    } else {
+      // grab a next job
+      work *job = work_queue.head.next_job;
+      work_queue.head.next_job = job->next_job;
+      if (work_queue.tail == job) {
+        work_queue.tail = &work_queue.head;
+      }
+      //print_list(&work_queue.head, "pop a job");
+
+      // Release the lock and do the task.
+      pthread_mutex_unlock(&work_queue.mutex);
+      debug(0) << "Worker starts running job " << job->job_id << "\n";
+      sleep(HWACC_LATENCY_SEC);
+      debug(0) << "Worker finished job " << job->job_id << "\n";
+      pthread_mutex_lock(&work_queue.mutex);
+
+      pthread_mutex_lock(&finish_queue.mutex);
+      // move the job to finish stack
+      job->next_job = finish_queue.head;
+      finish_queue.head = job;
+      print_list(finish_queue.head, "push a job to finish queue");
+
+      pthread_cond_broadcast(&finish_queue.worker_finished);
+      pthread_mutex_unlock(&finish_queue.mutex);
+    }
+  }
+  pthread_mutex_unlock(&work_queue.mutex);
+  return NULL;
+}
+
+
+static int add_job() {
+  pthread_mutex_lock(&work_queue.mutex);
+
+  // make the job
+  work *job = (work *)malloc(sizeof(work));
+  int job_id = work_queue.next_job_id++;
+  job->job_id = job_id;
+  job->next_job = NULL;
+
+  // push the job to the queue
+  work_queue.tail->next_job = job;
+  work_queue.tail = job;
+  //print_list(&work_queue.head, "push a job to work queue");
+
+  debug(0) << "Added job" << job->job_id << " to work queue\n";
+
+  // wake up a workers
+  pthread_cond_signal(&work_queue.wakeup_workers);
+
+  pthread_mutex_unlock(&work_queue.mutex);
+  return job_id;
+}
+
+static void wait_job(int job_id) {
+  pthread_mutex_lock(&finish_queue.mutex);
+
+  bool found = false;
+  while (true) {
+
+    // search through the finish queue
+    work dummy = {finish_queue.head, -1};
+    work *cur = &dummy, *pre;
+    while (cur->next_job) {
+      pre = cur;
+      cur = cur->next_job;
+      if (cur->job_id == job_id) {
+        pre->next_job = cur->next_job;
+        free(cur);
+        found = true;
+        break;
+      }
+    }
+    finish_queue.head = dummy.next_job;
+    if (found) {
+      print_list(finish_queue.head, "pop a job from finish queueu: ");
+      break;
+    }
+    pthread_cond_wait(&finish_queue.worker_finished, &finish_queue.mutex);
+  }
+  pthread_mutex_unlock(&finish_queue.mutex);
+}
+
+static void init_work_queue() {
+  pthread_mutex_lock(&work_queue.mutex);
+  if (!initialized) {
+    //pthread_mutex_init(&work_queue.mutex, NULL);
+    pthread_cond_init(&work_queue.wakeup_workers, NULL);
+    pthread_cond_init(&finish_queue.worker_finished, NULL);
+
+    work_queue.head.job_id = -1;
+    work_queue.head.next_job = NULL;
+    work_queue.tail = &work_queue.head;
+    work_queue.next_job_id = 0;
+
+    finish_queue.head = NULL;
+
+    for (int i = 0; i < NUM_HWACC; i++) {
+      debug(0) << "Creating thread " << i << "\n";
+      pthread_create(work_queue.threads + i, NULL, worker_thread, NULL);
+    }
+    initialized = 1;
+  }
+  pthread_mutex_unlock(&work_queue.mutex);
+}
+
+static void shutdown_queue() {
+  if (!initialized) return;
+
+  for (int i = 0; i < NUM_HWACC; i++) {
+    void *retval;
+    pthread_join(work_queue.threads[i], &retval);
+  }
+  debug(0) << "All threads have quit. Destroying mutex and condition variable.\n";
+  pthread_mutex_destroy(&work_queue.mutex);
+  pthread_cond_destroy(&work_queue.wakeup_workers);
+  pthread_cond_destroy(&finish_queue.worker_finished);
+  initialized = 0;
+}
+
+
+extern "C" {
+
 
 WEAK int halide_zynq_init() {
-    debug(0) << "halide_zynq_init\n";
-    if (fd_cma || fd_hwacc) {
-        error(NULL) << "Zynq runtime is already initialized.\n";
-        return -1;
-    }
-    fd_cma = open("/dev/cmabuffer0", O_RDWR, 0644);
-    if(fd_cma == -1) {
-        error(NULL) << "Failed to open cma provider!\n";
-        fd_cma = fd_hwacc = 0;
-        return -2;
-    }
-    fd_hwacc = open("/dev/hwacc0", O_RDWR, 0644);
-    if(fd_hwacc == -1) {
-        error(NULL) << "Failed to open hwacc device!\n";
-        close(fd_cma);
-        fd_cma = fd_hwacc = 0;
-        return -2;
-    }
+  //debug(1) << "halide_zynq_init\n";
+    init_work_queue();
     return 0;
 }
 
 WEAK void halide_zynq_free(void *user_context, void *ptr) {
-    debug(0) << "halide_zynq_free\n";
+  //debug(1) << "halide_zynq_free\n";
     // do nothing
 }
 
-static int cma_get_buffer(cma_buffer_t* ptr) {
-    return ioctl(fd_cma, GET_BUFFER, (long unsigned int)ptr);
-}
-
-static int cma_free_buffer(cma_buffer_t* ptr) {
-    return ioctl(fd_cma, FREE_IMAGE, (long unsigned int)ptr);
-}
-
 WEAK int halide_zynq_cma_alloc(struct buffer_t *buf) {
-    debug(0) << "halide_zynq_cma_alloc\n";
-    if (fd_cma == 0) {
-        error(NULL) << "Zynq runtime is uninitialized.\n";
-        return -1;
-    }
+  //debug(1) << "halide_zynq_cma_alloc\n";
+    halide_zynq_init();
 
-    cma_buffer_t *cbuf = (cma_buffer_t *)malloc(sizeof(cma_buffer_t));
-    if (cbuf == NULL) {
-        error(NULL) << "malloc failed.\n";
-        return -1;
-    }
-
-    // TODO check the strides of buf are monotonically increasing
-
-    // Currently kernel buffer only supports 2-D data layout,
-    // so we fold lower dimensions into the 'depth' field.
-    size_t nDims = 4;
-    while (nDims > 0) {
-        if (buf->extent[nDims - 1] != 0) {
-            break;
+    // Figure out how much memory to allocate for this buffer
+    size_t min_idx = 0, max_idx = 0;
+    for (int d = 0; d < 4; d++) {
+        if (buf->stride[d] > 0) {
+            min_idx += buf->min[d] * buf->stride[d];
+            max_idx += (buf->min[d] + buf->extent[d] - 1) * buf->stride[d];
+        } else {
+            max_idx += buf->min[d] * buf->stride[d];
+            min_idx += (buf->min[d] + buf->extent[d] - 1) * buf->stride[d];
         }
-        --nDims;
     }
-    if (nDims < 2) {
-        free(cbuf);
-        error(NULL) << "buffer_t has less than 2 dimension, not supported in CMA driver.";
-        return -3;
-    }
-    cbuf->depth = buf->elem_size;
-    if (nDims > 2) {
-        for (size_t i = 0; i < nDims - 2; i++)
-            cbuf->depth *= buf->extent[i];
-    }
-    cbuf->width = buf->extent[nDims-2];
-    cbuf->height = buf->extent[nDims-1];
-    // TODO check stride of dimension are the same as width
-    cbuf->stride = cbuf->width;
+    size_t total_size = (max_idx - min_idx);
+    while (total_size & 0x1f) total_size++;
 
-    int status = cma_get_buffer(cbuf);
-    if (status != 0) {
-        free(cbuf);
-        error(NULL) << "cma_get_buffer() returned" << status << " (failed).\n";
-        return -2;
-    }
-
-    buf->dev = (uint64_t) cbuf;
-    buf->host = (uint8_t*) mmap(NULL, cbuf->stride * cbuf->height * cbuf->depth,
-                                PROT_WRITE, MAP_SHARED, fd_cma, cbuf->mmap_offset);
+    buf->host = (uint8_t*) malloc(total_size);
 
     if ((void *) buf->host == (void *) -1) {
-        free(cbuf);
-        error(NULL) << "mmap failed.\n";
+        error(NULL) << "malloc failed.\n";
         return -3;
     }
     return 0;
 }
 
 WEAK int halide_zynq_cma_free(struct buffer_t *buf) {
-    debug(0) << "halide_zynq_cma_free\n";
-    if (fd_cma == 0) {
-        error(NULL) << "Zynq runtime is uninitialized.\n";
-        return -1;
-    }
-
-    cma_buffer_t *cbuf = (cma_buffer_t *)buf->dev;
-    munmap((void*)buf->host, cbuf->stride * cbuf->height * cbuf->depth);
-    cma_free_buffer(cbuf);
-    free(cbuf);
-    buf->dev = 0;
+  //debug(1) << "halide_zynq_cma_free\n";
+    free(buf->host);
     return 0;
 }
 
 WEAK int halide_zynq_subimage(const struct buffer_t* image, struct cma_buffer_t* subimage, void *address_of_subimage_origin, int width, int height) {
-    debug(0) << "halide_zynq_subimage\n";
-    *subimage = *((cma_buffer_t *)image->dev); // copy depth, stride, data, etc.
-    subimage->width = width;
-    subimage->height = height;
-    size_t offset = (uint8_t *)address_of_subimage_origin - image->host;
-    subimage->phys_addr += offset;
-    subimage->mmap_offset += offset;
+  //debug(1) << "halide_zynq_subimage\n";
+    // do nothing
     return 0;
 }
 
 WEAK int halide_zynq_hwacc_launch(struct cma_buffer_t bufs[]) {
     debug(0) << "halide_zynq_hwacc_launch\n";
-    if (fd_hwacc == 0) {
-        error(NULL) << "Zynq runtime is uninitialized.\n";
-        return -1;
-    }
-    int res = ioctl(fd_hwacc, PROCESS_IMAGE, (long unsigned int)bufs);
-    return res;
+    return add_job();
 }
 
 WEAK int halide_zynq_hwacc_sync(int task_id){
     debug(0) << "halide_zynq_hwacc_sync\n";
-    if (fd_hwacc == 0) {
-        error(NULL) << "Zynq runtime is uninitialized.\n";
-        return -1;
-    }
-    int res = ioctl(fd_hwacc, PEND_PROCESSED, (long unsigned int)task_id);
-    return res;
+    //sleep(1);
+    wait_job(task_id);
+    return 0;
 }
 
 }

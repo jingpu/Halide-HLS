@@ -809,7 +809,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         modules.push_back(get_initmod_matlab(c, bits_64, debug));
     }
 
-    if (module_type == ModuleAOT && t.has_feature(Target::Zynq) ) {
+    if (t.has_feature(Target::Zynq) ) {
         modules.push_back(get_initmod_zynq(c, bits_64, debug));
     }
 
