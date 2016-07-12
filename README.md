@@ -1,4 +1,4 @@
-# Halide to CPU/FPGA backend
+# Halide to CPU/FPGA
 ============
 
 Intructions for building examples can be found at the wiki page:
