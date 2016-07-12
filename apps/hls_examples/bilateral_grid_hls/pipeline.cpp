@@ -262,15 +262,17 @@ public:
         output_shuffled.compute_at(output, xo);
         input_shuffled.compute_at(output, xo);
         input2_shuffled.compute_at(output, xo);
+        histogram.compute_at(output, xo);
+
 
         output_shuffled.tile(x_grid, y_grid, xo, yo, x_grid, y_grid, 60, 80);
-        output_shuffled.accelerate({input_shuffled, input2_shuffled}, x_grid, xo);
+        output_shuffled.accelerate({histogram, input2_shuffled}, x_grid, xo);
 
         blury.linebuffer().reorder(x, y, z, c);
         blurx.linebuffer().reorder(x, y, z, c);
         blurz.linebuffer().reorder(z, x, y, c);
-        histogram.linebuffer().reorder(c, z, x, y).unroll(c).unroll(z);
-        histogram.update().reorder(c, r.x, r.y, x, y).unroll(c);
+        //histogram.linebuffer().reorder(c, z, x, y).unroll(c).unroll(z);
+        //histogram.update().reorder(c, r.x, r.y, x, y).unroll(c);
 
         //output.print_loop_nest();
 
