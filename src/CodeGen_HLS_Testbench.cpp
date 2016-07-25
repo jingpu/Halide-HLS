@@ -111,9 +111,8 @@ void CodeGen_HLS_Testbench::visit(const Call *op) {
         // add intrinsic functions to convert memory buffers to streams
         // syntax:
         //   stream_subimage(direction, buffer_var, stream_var, address_of_subimage_origin,
-        //                   dummy_call_to_function,
         //                   dim_0_stride, dim_0_extent, ...)
-        internal_assert(op->args.size() >= 7 && op->args.size() <= 13);
+        internal_assert(op->args.size() >= 6 && op->args.size() <= 12);
         const StringImm *direction = op->args[0].as<StringImm>();
         string a1 = print_expr(op->args[1]);
         string a2 = print_expr(op->args[2]);
@@ -126,8 +125,7 @@ void CodeGen_HLS_Testbench::visit(const Call *op) {
             internal_error;
         }
         rhs << a1 << ", " << a2 << ", const_cast<void *>(" << a3 << ")";
-        // skips args[4] -- dummy_call_to_function
-        for (size_t i = 5; i < op->args.size(); i++) {
+        for (size_t i = 4; i < op->args.size(); i++) {
             rhs << ", " << print_expr(op->args[i]);
         }
         rhs <<");\n";

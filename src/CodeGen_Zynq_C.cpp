@@ -109,13 +109,12 @@ void CodeGen_Zynq_C::visit(const Call *op) {
         /* IR:
            stream_subimage(direction, buffer_var, stream_var,
                        address_of_subimage_origin,
-                       dummy_call_to_function,
                        dim_0_stride, dim_0_extent, ...)
 
            C code:
            halide_zynq_subimage(&buffer_var, &stream_var, address_of_subimage_origin, width, height);
     */
-        internal_assert(op->args.size() >= 7);
+        internal_assert(op->args.size() >= 6);
         const Variable *buffer_var = op->args[1].as<Variable>();
         internal_assert(buffer_var && buffer_var->type == type_of<struct buffer_t *>());
         string buffer_name = print_expr(op->args[1]);

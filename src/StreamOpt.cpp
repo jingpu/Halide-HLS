@@ -711,14 +711,12 @@ class StreamOpt : public IRMutator {
                 }
                 Expr address_of_subimage_origin = Call::make(Handle(), Call::address_of, {Call::make(kernel.func, image_args, 0)}, Call::Intrinsic);
                 Expr buffer_var = Variable::make(type_of<struct buffer_t *>(), kernel.name + ".buffer");
-                Expr dummy_call_to_function = Call::make(kernel.func, {undef(Int(32))}, 0); // avoid skip_stages optimization
 
                 // add intrinsic functions to convert memory buffers to streams
                 // syntax:
                 //   stream_subimage(direction, buffer_var, stream_var, address_of_subimage_origin,
-                //                   dummy_call_to_function,
                 //                   dim_0_stride, dim_0_extent, ...)
-                vector<Expr> stream_call_args({direction, buffer_var, stream_var, address_of_subimage_origin, dummy_call_to_function});
+                vector<Expr> stream_call_args({direction, buffer_var, stream_var, address_of_subimage_origin});
                 for (size_t i = 0; i < kernel.dims.size(); i++) {
                     stream_call_args.push_back(Variable::make(Int(32), kernel.name + ".stride." + std::to_string(i)));
                     stream_call_args.push_back(simplify(kernel.dims[i].store_bound.max - kernel.dims[i].store_bound.min + 1));
