@@ -30,6 +30,8 @@ struct ScheduleContents {
     std::map<std::string, int> fifo_depths;   // key is the name of the consumer
     bool is_kernel_buffer;
     bool is_kernel_buffer_slice;
+    std::map<std::string, Function> tap_funcs;
+    std::map<std::string, Parameter> tap_params;
 
     ScheduleContents()
         : memoized(false), touched(false), allow_race_conditions(false),
@@ -188,7 +190,7 @@ bool &Schedule::is_kernel_buffer_slice() {
     return contents.ptr->is_kernel_buffer_slice;
 }
 
-std::set<std::string> Schedule::accelerate_inputs() const{
+const std::set<std::string> &Schedule::accelerate_inputs() const{
     return contents.ptr->accelerate_inputs;
 }
 
@@ -196,7 +198,23 @@ std::set<std::string> &Schedule::accelerate_inputs() {
     return contents.ptr->accelerate_inputs;
 }
 
-std::map<std::string, int> Schedule::fifo_depths() const {
+const std::map<std::string, Function> &Schedule::tap_funcs() const {
+    return contents.ptr->tap_funcs;
+}
+
+std::map<std::string, Function> &Schedule::tap_funcs() {
+    return contents.ptr->tap_funcs;
+}
+
+const std::map<std::string, Parameter> &Schedule::tap_params() const {
+    return contents.ptr->tap_params;
+}
+
+std::map<std::string, Parameter> &Schedule::tap_params() {
+    return contents.ptr->tap_params;
+}
+
+const std::map<std::string, int> &Schedule::fifo_depths() const {
     return contents.ptr->fifo_depths;
 }
 
@@ -204,7 +222,7 @@ std::map<std::string, int> &Schedule::fifo_depths() {
     return contents.ptr->fifo_depths;
 }
 
-std::string Schedule::accelerate_exit() const{
+const std::string &Schedule::accelerate_exit() const{
     return contents.ptr->accelerate_exit;
 }
 

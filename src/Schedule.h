@@ -160,6 +160,7 @@ struct StorageDim {
 };
 
 class ReductionDomain;
+class Function;
 
 /** A schedule for a single stage of a Halide pipeline. Right now this
  * interface is basically a struct, offering mutable access to its
@@ -276,19 +277,28 @@ public:
 
     /** The input functions of the hardware accelerator pipeline. */
     // @{
-    std::set<std::string> accelerate_inputs() const;
+    const std::set<std::string> &accelerate_inputs() const;
     std::set<std::string> &accelerate_inputs();
+    // @}
+
+    /** The tap functions and parameters of the hardware accelerator pipeline. */
+    // @{
+
+    const std::map<std::string, Function> &tap_funcs() const;
+    std::map<std::string, Function> &tap_funcs();
+    const std::map<std::string, Parameter> &tap_params() const;
+    std::map<std::string, Parameter> &tap_params();
     // @}
 
     /** The fifo depths downstreaming from the function. */
     // @{
-    std::map<std::string, int> fifo_depths() const;
+    const std::map<std::string, int> &fifo_depths() const;
     std::map<std::string, int> &fifo_depths();
     // @}
 
     /** The output functions of the hardware accelerator pipeline. */
     // @{
-    std::string accelerate_exit() const;
+    const std::string &accelerate_exit() const;
     std::string &accelerate_exit();
     // @}
 

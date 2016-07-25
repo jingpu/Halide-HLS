@@ -99,14 +99,6 @@ void CodeGen_HLS_Base::visit(const Call *op) {
         }
         stream << ">(" << a0 << ", " << a1 << ");\n";
         id = "0"; // skip evaluation
-    }  else if (op->name == "buffer_to_stencil") {
-        internal_assert(op->args.size() == 2);
-        // add a suffix to buffer var, in order to be compatible with CodeGen_C
-        string a0 = print_expr(op->args[0]) + "_buffer";
-        string a1 = print_expr(op->args[1]);
-        do_indent();
-        stream << "buffer_to_stencil(" << a0 << ", " << a1 << ");\n";
-        id = "0"; // skip evaluation
     } else if (op->name == "write_stream") {
         if (op->args.size() == 2) {
             // normal case

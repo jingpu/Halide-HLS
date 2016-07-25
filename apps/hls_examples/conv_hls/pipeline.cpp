@@ -19,18 +19,30 @@ class MyPipeline {
 public:
     ImageParam input;
     ImageParam weight;
+    Param<uint16_t> bias;
+    Func kernel;
     Func clamped;
     Func conv1;
     Func output;
     Func hw_output;
     std::vector<Argument> args;
 
-    MyPipeline() : input(UInt(8), 3, "input"), weight(UInt(8), 2, "weight"),
-                   conv1("conv1"), output("output"), hw_output("hw_output") {
+    RDom win;
+
+    MyPipeline() : input(UInt(8), 3, "input"), weight(UInt(8), 2, "weight"), bias("bias"),
+                   kernel("kernel"), conv1("conv1"),
+                   output("output"), hw_output("hw_output"),
+                   win(-2, 5, -2, 5) {
+        // Define a 9x9 Gaussian Blur with a repeat-edge boundary condition.
+        float sigma = 1.5f;
+
+        kernel(x, y) = exp(-(x*x + y*y)/(2*sigma*sigma)) / (float)(2*M_PI*sigma*sigma);
+
         // define the algorithm
         clamped = BoundaryConditions::repeat_edge(input);
         //conv1 = clamped;
-        conv1 = convolve55_rd(clamped);
+        conv1(x, y, c) += clamped(x+win.x, y+win.y, c) * cast<uint16_t>(kernel(win.x, win.y));
+
         hw_output = convolve55_rd(conv1);
         output(x, y, c) = hw_output(x, y, c);
 
@@ -44,6 +56,9 @@ public:
 
         args.push_back(input);
         args.push_back(weight);
+        args.push_back(bias);
+
+        kernel.compute_root();
     }
 
     void compile_cpu() {
@@ -87,10 +102,11 @@ public:
         hw_output.compute_root();
         //hw_output.tile(x, y, xo, yo, xi, yi, 1920, 1080).reorder(c, xi, yi, xo, yo);
         hw_output.tile(x, y, xo, yo, xi, yi, 256, 256).reorder(c, xi, yi, xo, yo);
-        hw_output.unroll(xi, 2);
-        std::vector<Func> hw_bounds = hw_output.accelerate({clamped}, xi, xo);  // define the inputs and the output
-        conv1.linebuffer().unroll(c).unroll(x).unroll(y);
-        hw_bounds[0].unroll(c).unroll(x).unroll(y);
+        //hw_output.unroll(xi, 2);
+        hw_output.accelerate({clamped}, xi, xo, {kernel});  // define the inputs and the output
+        conv1.linebuffer();
+        //conv1.unroll(c).unroll(x).unroll(y);
+        //hw_output.unroll(c);
 
         //output.print_loop_nest();
         Target hls_target = get_target_from_environment();
@@ -104,6 +120,8 @@ private:
     Func convolve55_rd(Func in) {
         Func local_sum, res;
         RDom r(-2, 5, -2, 5);
+
+        local_sum(x, y, c) = bias;
 
         local_sum(x, y, c) += cast<uint16_t>(in(x+r.x, y+r.y, c)) * weight(r.x+2, r.y+2);
         res(x, y, c) = cast<uint8_t>(local_sum(x, y, c) >> 8);
@@ -123,6 +141,6 @@ int main(int argc, char **argv) {
     p2.compile_hls();
 
     MyPipeline p3;
-    p3.compile_gpu();
+    //p3.compile_gpu();
     return 0;
 }

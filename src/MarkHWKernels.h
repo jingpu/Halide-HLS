@@ -19,7 +19,8 @@ namespace Internal {
  * The recursion only terminates at functions with names included
  * by set inputs.
  */
-void mark_hw_kernels(Function f, const std::set<std::string> &inputs);
+void mark_hw_kernels(Function f, const std::set<std::string> &inputs,
+                     const std::set<std::string> &taps);
 
 }
 }

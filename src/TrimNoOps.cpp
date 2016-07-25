@@ -161,7 +161,9 @@ class IsNoOp : public IRVisitor {
             (op->name == Call::rewrite_buffer ||
              op->name == Call::image_store ||
              op->name == Call::copy_memory ||
-             op->name == "write_stream" || op->name == "stream_subimage")) {
+             op->name == "write_stream" ||
+             op->name == "stream_subimage" ||
+             op->name == "buffer_to_stencil")) {
             condition = const_false();
         } else {
             IRVisitor::visit(op);

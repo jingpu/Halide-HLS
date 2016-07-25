@@ -38,11 +38,11 @@ int main(int argc, char **argv) {
 
     printf("start.\n");
 
-    pipeline_native(in, weight, out_native);
+    pipeline_native(in, weight, 0, out_native);
 
     printf("finish running native code\n");
 
-    pipeline_hls(in, weight, out_hls);
+    pipeline_hls(in, weight, 0, out_hls);
 
     printf("finish running HLS code\n");
 
