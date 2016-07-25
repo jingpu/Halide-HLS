@@ -6,6 +6,7 @@
 #include "CodeGen_HLS_Target.h"
 #include "CodeGen_Internal.h"
 #include "Substitute.h"
+#include "IRMutator.h"
 #include "IROperator.h"
 #include "Param.h"
 #include "Var.h"
@@ -255,12 +256,50 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::visit(const For *op) {
     close_scope("for " + print_name(op->name));
 }
 
+class RenameAllocation : public IRMutator {
+    const string &orig_name;
+    const string &new_name;
+
+    using IRMutator::visit;
+
+    void visit(const Load *op) {
+        if (op->name == orig_name ) {
+            Expr index = mutate(op->index);
+            expr = Load::make(op->type, new_name, index, op->image, op->param);
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+    void visit(const Store *op) {
+        if (op->name == orig_name ) {
+            Expr value = mutate(op->value);
+            Expr index = mutate(op->index);
+            stmt = Store::make(new_name, value, index, op->param);
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+    void visit(const Free *op) {
+        if (op->name == orig_name) {
+            stmt = Free::make(new_name);
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+public:
+    RenameAllocation(const string &o, const string &n)
+        : orig_name(o), new_name(n) {}
+};
 
 // most code is copied from CodeGen_C::visit(const Allocate *)
 // we want to check that the allocation size is constant, and
 // add a 'HLS ARRAY_PARTITION' pragma to the allocation
 void CodeGen_HLS_Target::CodeGen_HLS_C::visit(const Allocate *op) {
-    // we don't add scopes, as it messes up the dataflow directives in HLS compiler
+    // We don't add scopes, as it messes up the dataflow directives in HLS compiler.
+    // Instead, we rename the allocation to a unique name
     //open_scope();
 
     internal_assert(!op->new_expr.defined());
@@ -274,21 +313,26 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::visit(const Allocate *op) {
                        << " is not a constant.\n";
     }
 
+    // rename allocation to avoid name conflict due to unrolling
+    string alloc_name = op->name + unique_name('a');
+    Stmt new_body = RenameAllocation(op->name, alloc_name).mutate(op->body);
+
     Allocation alloc;
     alloc.type = op->type;
-    allocations.push(op->name, alloc);
+    allocations.push(alloc_name, alloc);
 
     do_indent();
     stream << print_type(op->type) << ' '
-           << print_name(op->name)
+           << print_name(alloc_name)
            << "[" << constant_size << "];\n";
     // add a 'ARRAY_PARTITION" pragma
     //stream << "#pragma HLS ARRAY_PARTITION variable=" << print_name(op->name) << " complete dim=0\n\n";
 
-    op->body.accept(this);
+    new_body.accept(this);
 
     // Should have been freed internally
-    internal_assert(!allocations.contains(op->name));
+    internal_assert(!allocations.contains(alloc_name))
+        << "allocation " << alloc_name << " is not freed.\n";
 
     //close_scope("alloc " + print_name(op->name));
 

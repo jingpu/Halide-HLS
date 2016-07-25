@@ -36,12 +36,15 @@ public:
         // Define a 9x9 Gaussian Blur with a repeat-edge boundary condition.
         float sigma = 1.5f;
 
-        kernel(x, y) = exp(-(x*x + y*y)/(2*sigma*sigma)) / (float)(2*M_PI*sigma*sigma);
+        kernel(x, y) = cast<uint16_t>(exp(-(x*x + y*y)/(2*sigma*sigma)) / (float)(2*M_PI*sigma*sigma));
 
         // define the algorithm
         clamped = BoundaryConditions::repeat_edge(input);
         //conv1 = clamped;
-        conv1(x, y, c) += clamped(x+win.x, y+win.y, c) * cast<uint16_t>(kernel(win.x, win.y));
+        conv1(x, y, c) += clamped(x+win.x, y+win.y, c) * kernel(win.x, win.y));
+
+        // unroll the reduction
+        conv1.update(0).unroll(c).unroll(win.x).unroll(win.y);
 
         hw_output = convolve55_rd(conv1);
         output(x, y, c) = hw_output(x, y, c);
@@ -105,8 +108,8 @@ public:
         //hw_output.unroll(xi, 2);
         hw_output.accelerate({clamped}, xi, xo, {kernel});  // define the inputs and the output
         conv1.linebuffer();
-        //conv1.unroll(c).unroll(x).unroll(y);
-        //hw_output.unroll(c);
+        conv1.unroll(c).unroll(x).unroll(y);
+        hw_output.unroll(c);
 
         //output.print_loop_nest();
         Target hls_target = get_target_from_environment();
