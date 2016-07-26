@@ -41,7 +41,7 @@ public:
         // define the algorithm
         clamped = BoundaryConditions::repeat_edge(input);
         //conv1 = clamped;
-        conv1(x, y, c) += clamped(x+win.x, y+win.y, c) * kernel(win.x, win.y));
+        conv1(x, y, c) += clamped(x+win.x, y+win.y, c) * kernel(win.x, win.y);
 
         // unroll the reduction
         conv1.update(0).unroll(c).unroll(win.x).unroll(win.y);
