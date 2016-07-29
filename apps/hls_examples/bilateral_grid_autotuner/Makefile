@@ -15,7 +15,7 @@ pipeline: pipeline.cpp
 	$(CXX) $(CXXFLAGS) -Wall -g $^ $(LIB_HALIDE) -o $@ $(LDFLAGS) -ltinfo $(PNGFLAGS)
 
 out.png: pipeline
-	HL_DEBUG_CODEGEN=0 ./pipeline ../../images/benchmark_8mp_gray.png
+	HL_ZYNQ_NUM_ACC=4 HL_ZYNQ_ACC_LAT=768 HL_NUM_THREADS=1 ./pipeline ../../images/benchmark_8mp_gray.png
 
 run: run.cpp pipeline_hls.cpp hls_target.cpp pipeline_native.o
 	$(CXX) $(CXXFLAGS) -O1 -DNDEBUG $(HLS_CXXFLAGS) -g -Wall -Werror $^ -lpthread -ldl $(PNGFLAGS) -o $@

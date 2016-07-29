@@ -3,11 +3,13 @@
 
 using namespace Halide;
 
+#include "benchmark.h"
 #include "halide_image_io.h"
 using namespace Halide::Tools;
 
 Var x("x"), y("y"), z("z"), c("c");
 Var x_grid("x_grid"), y_grid("y_grid"), xo("xo"), yo("yo"), x_in("x_in"), y_in("y_in");
+Var xi, yi;
 uint8_t r_sigma = 32;
 int s_sigma = 8;
 
@@ -95,11 +97,13 @@ public:
         output.compute_root().parallel(y).vectorize(x, 8);
 
         //output.print_loop_nest();
-
+        std::cout << "JIT compiling..." << std::endl;
         output.compile_jit();
-
-        std::cout << "running cpu code..." << std::endl;
-        output.realize(out);
+        std::cout << "running CPU code..." << std::endl;
+        double min_t = benchmark(100, 10, [&]() {
+            output.realize(out);
+          });
+        printf("CPU program runtime: %g\n", min_t);
     }
 
     void run_gpu(Image<uint8_t> out) {
@@ -135,8 +139,14 @@ public:
         //target.set_feature(Target::CUDA);
         //output.compile_to_header("pipeline_cuda.h", args, "pipeline_cuda", target);
         //output.compile_to_object("pipeline_cuda.o", args, "pipeline_cuda", target);
+
+        std::cout << "JIT compiling..." << std::endl;
         output.compile_jit();
-        output.realize(out);
+        std::cout << "running GPU code..." << std::endl;
+        double min_t = benchmark(100, 10, [&]() {
+            output.realize(out);
+          });
+        printf("GPU program runtime: %g\n", min_t);
     }
 };
 
@@ -160,8 +170,8 @@ public:
           output("output")
     {
         // Add a boundary condition
-        clamped = BoundaryConditions::repeat_edge(input);
-        //clamped(x, y) = input(x+40, y+40);
+        //clamped = BoundaryConditions::repeat_edge(input);
+        clamped(x, y) = input(x+40, y+40);
 
         // shuffle the input
         input_shuffled(x_in, y_in, x_grid, y_grid)
@@ -235,51 +245,76 @@ public:
         args = {input};
     }
 
+    void run_cpu(Image<uint8_t> out) {
+        std::cout << "\ncompiling cpu code..." << std::endl;
+
+        // The CPU schedule for halide paper
+        input_shuffled.compute_root().vectorize(x_in, 8).parallel(y_grid);
+        input2_shuffled.compute_root().vectorize(x_in, 8).parallel(y_grid);
+        blurz.compute_root().reorder(c, z, x, y).parallel(y).vectorize(x, 8).unroll(c);
+        histogram.compute_at(blurz, y);
+        histogram.update().reorder(c, r.x, r.y, x, y).unroll(c);
+        blurx.compute_root().reorder(c, x, y, z).parallel(z).vectorize(x, 8).unroll(c);
+        blury.compute_root().reorder(c, x, y, z).parallel(z).vectorize(x, 8).unroll(c);
+        output.compute_root().parallel(y).vectorize(x, 8);
+        output_shuffled.compute_root().parallel(y_grid).vectorize(x_in, 8);
+
+        Target target = get_target_from_environment();
+        target.set_feature(Target::Profile);
+        //output.print_loop_nest();
+        std::cout << "JIT compiling PipelineOpt..." << std::endl;
+        output.compile_jit(target);
+        std::cout << "running CPU code..." << std::endl;
+        double min_t = benchmark(1, 10, [&]() {
+            output.realize(out);
+          });
+        printf("CPU program runtime: %g\n", min_t);
+    }
 
     void run_hls(Image<uint8_t> out) {
         std::cout << "\ncompiling HLS code..." << std::endl;
-        output.tile(x, y, xo, yo, x_in, y_in, 480, 640);
+        output.tile(x, y, xo, yo, x_in, y_in, 240, 320);
+        output.fuse(xo, yo, xo).parallel(xo);
 
-        output_shuffled.compute_at(output, xo);
-        input_shuffled.compute_at(output, xo);
-        input2_shuffled.compute_at(output, xo);
+        //output_shuffled.compute_at(output, xo);
+        input_shuffled.compute_at(output, xo).vectorize(x_in, 8);
+        input2_shuffled.compute_at(output, xo).vectorize(x_in, 8);
+        output.vectorize(x_in, 8);
 
-        output_shuffled.tile(x_grid, y_grid, xo, yo, x_grid, y_grid, 60, 80);
-        output_shuffled.accelerate({input_shuffled, input2_shuffled}, x_grid, xo);
-
-        blury.linebuffer().reorder(x, y, z, c);
-        blurx.linebuffer().reorder(x, y, z, c);
-        blurz.linebuffer().reorder(z, x, y, c);
-        histogram.linebuffer().reorder(c, z, x, y).unroll(c).unroll(z);
+        blurz.compute_at(output, xo).reorder(c, z, x, y).vectorize(x, 8).unroll(c);
+        histogram.compute_at(blurz, y);
         histogram.update().reorder(c, r.x, r.y, x, y).unroll(c);
+        blurx.compute_at(output, xo).reorder(c, x, y, z).vectorize(x, 8).unroll(c);
+        blury.compute_at(output, xo).reorder(c, x, y, z).vectorize(x, 8).unroll(c);
+
+        output_shuffled.compute_at(output, xo).tile(x_grid, y_grid, xo, yo, xi, yi, 30, 40);
+        output_shuffled.accelerate({blury, input2_shuffled}, xi, xo);
+
+        //blury.linebuffer().reorder(x, y, z, c);
+        //blurx.linebuffer().reorder(x, y, z, c);
+        //blurz.linebuffer().reorder(z, x, y, c);
+        //histogram.linebuffer().reorder(c, z, x, y).unroll(c).unroll(z);
+        //histogram.update().reorder(c, r.x, r.y, x, y).unroll(c);
 
         //output.print_loop_nest();
 
         // Create the target for HLS simulation
         Target target = get_target_from_environment();
-        target.set_feature(Target::CPlusPlusMangling);
-        output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML, target);
-        output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls", target);
-        output.compile_to_header("pipeline_hls.h", args, "pipeline_hls", target);
-
-        // Create the Zynq platform target
-        target.set_feature(Target::CPlusPlusMangling, false);
         target.set_feature(Target::Zynq);
+        //target.set_feature(Target::Debug);
 
-        output.compile_to_zynq_c("pipeline_zynq.c", args, "pipeline_zynq", target);
-
-        // Vectorization and Parallelization Schedules (only work with LLVM codegen)
-        input_shuffled.vectorize(x_in, 8);
-        input2_shuffled.vectorize(x_in, 8);
-        output.vectorize(x_in, 8);
-        output.fuse(xo, yo, xo).parallel(xo);
+        //output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls", target);
+        output.compile_to_header("pipeline_hls.h", args, "pipeline_hls", target);
 
         output.compile_to_lowered_stmt("pipeline_zynq.ir.html", args, HTML, target);
 
         std::cout << "JIT compiling..." << std::endl;
         output.compile_jit(target);
         std::cout << "running Zynq code..." << std::endl;
-        output.realize(out);
+        double min_t = benchmark(100, 10, [&]() {
+            output.realize(out);
+          });
+        printf("Zynq program runtime: %g\n", min_t);
 
     }
 };
@@ -288,12 +323,12 @@ int main(int argc, char **argv) {
     Image<uint8_t> input = load_image(argv[1]);
     Image<uint8_t> output(480*4, 640*4);
 
-    MyPipeline p1(input);
+    MyPipelineOpt p1(input);
     p1.run_cpu(output);
-    save_image(output, "out.png");
+    //save_image(output, "out.png");
 
     MyPipelineOpt p2(input);
-    p2.run_hls(output);
+    //p2.run_hls(output);
 
     MyPipeline p3(input);
     //p3.run_gpu(output);

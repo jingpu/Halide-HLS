@@ -1,9 +1,6 @@
 #include "HalideRuntimeZynq.h"
 #include "printer.h"
 
-#define NUM_HWACC  8
-#define HWACC_LATENCY_SEC  1
-
 extern "C" {
 
 typedef struct {
@@ -40,10 +37,14 @@ extern int pthread_mutex_destroy(pthread_mutex_t *mutex);
 
 extern char *getenv(const char *);
 extern unsigned int sleep(unsigned int seconds);
+extern int usleep(int);
+extern int atoi(const char *);
 } // extern "C"
 
+#define MAX_NUM_ACC 32
 static int initialized = 0;
-
+static int num_accelerator = 0;
+static int accelerator_latency_us = 0;
 
 typedef struct work {
     work *next_job;
@@ -62,7 +63,7 @@ typedef struct work_queue_t {
 
   pthread_cond_t wakeup_workers;
   // Keep track of threads so they can be joined at shutdown
-  pthread_t threads[NUM_HWACC];
+  pthread_t threads[MAX_NUM_ACC];
 } work_queue_t;
 
 typedef struct finish_queue_t {
@@ -105,7 +106,8 @@ void *worker_thread(void *void_arg) {
       // Release the lock and do the task.
       pthread_mutex_unlock(&work_queue.mutex);
       debug(0) << "Worker starts running job " << job->job_id << "\n";
-      sleep(HWACC_LATENCY_SEC);
+      //sleep(HWACC_LATENCY_SEC);
+      usleep(accelerator_latency_us);
       debug(0) << "Worker finished job " << job->job_id << "\n";
       pthread_mutex_lock(&work_queue.mutex);
 
@@ -190,7 +192,7 @@ static void init_work_queue() {
 
     finish_queue.head = NULL;
 
-    for (int i = 0; i < NUM_HWACC; i++) {
+    for (int i = 0; i < num_accelerator; i++) {
       debug(0) << "Creating thread " << i << "\n";
       pthread_create(work_queue.threads + i, NULL, worker_thread, NULL);
     }
@@ -202,7 +204,7 @@ static void init_work_queue() {
 static void shutdown_queue() {
   if (!initialized) return;
 
-  for (int i = 0; i < NUM_HWACC; i++) {
+  for (int i = 0; i < num_accelerator; i++) {
     void *retval;
     pthread_join(work_queue.threads[i], &retval);
   }
@@ -218,7 +220,25 @@ extern "C" {
 
 
 WEAK int halide_zynq_init() {
-  //debug(1) << "halide_zynq_init\n";
+    if (!num_accelerator) {
+      char *num_str = getenv("HL_ZYNQ_NUM_ACC");
+      if (num_str) {
+        num_accelerator = atoi(num_str);
+      } else {
+        num_accelerator = 8;
+      }
+      debug(0) << "num_accelerator = " << num_accelerator << "\n";
+    }
+    if (!accelerator_latency_us) {
+      char *lat_str = getenv("HL_ZYNQ_ACC_LAT");
+      if (lat_str) {
+        accelerator_latency_us = atoi(lat_str);
+      } else {
+        accelerator_latency_us = 1000 * 1000;
+      }
+      debug(0) << "accelerator_latency_us = " << accelerator_latency_us << "\n";
+    }
+
     init_work_queue();
     return 0;
 }
@@ -246,7 +266,7 @@ WEAK int halide_zynq_cma_alloc(struct buffer_t *buf) {
     size_t total_size = (max_idx - min_idx);
     while (total_size & 0x1f) total_size++;
 
-    buf->host = (uint8_t*) malloc(total_size);
+    buf->host = (uint8_t*) malloc(total_size*buf->elem_size);
 
     if ((void *) buf->host == (void *) -1) {
         error(NULL) << "malloc failed.\n";
