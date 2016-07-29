@@ -1475,7 +1475,8 @@ public:
      * functions in the pipeline w.r.t this function.
      */
     EXPORT Func &accelerate(std::vector<Func> inputs,
-                            Var compute_var, Var store_var);
+                            Var compute_var, Var store_var,
+                            std::vector<Func> taps = {});
 
     /** Schedule a function to be linebuffered.
      */

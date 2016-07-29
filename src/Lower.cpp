@@ -36,7 +36,6 @@
 #include "RemoveDeadAllocations.h"
 #include "RemoveTrivialForLoops.h"
 #include "RemoveUndef.h"
-#include "ReplaceImageParam.h"
 #include "ScheduleFunctions.h"
 #include "SelectGPUAPI.h"
 #include "SkipStages.h"

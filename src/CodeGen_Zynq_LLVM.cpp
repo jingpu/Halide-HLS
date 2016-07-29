@@ -92,13 +92,12 @@ void CodeGen_Zynq_LLVM::visit(const Call *op) {
         /* IR:
            stream_subimage(direction, buffer_var, stream_var,
                        address_of_subimage_origin,
-                       dummy_call_to_function,
                        dim_0_stride, dim_0_extent, ...)
 
            C code:
            halide_zynq_subimage(&buffer_var, &stream_var, address_of_subimage_origin, width, height);
         */
-        internal_assert(op->args.size() >= 7);
+        internal_assert(op->args.size() >= 6);
         Value *buffer_ptr = codegen(op->args[1]);
         Value *slice_ptr = codegen(op->args[2]);
         Value *address_of_subimage_origin = codegen(op->args[3]);

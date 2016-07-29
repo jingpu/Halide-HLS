@@ -50,15 +50,25 @@ struct HWKernel {
         : func(f), name(s), is_inlined(false), is_output(false) {}
 };
 
+struct HWTap {
+    std::string name;
+    bool is_func;
+    Function func;
+    Parameter param;
+    std::vector<StencilDimSpecs> dims;
+};
+
 struct HWKernelDAG {
     std::string name;
     std::map<std::string, HWKernel> kernels;
+    std::map<std::string, HWTap> taps;
     std::set<std::string> input_kernels;
     std::set<std::string> loop_vars;   // FIXME we use loop_vars name to figure out the location to start Stream transformation. Need better way.
     LoopLevel compute_level, store_level;
 };
 
 std::ostream &operator<<(std::ostream &out, const HWKernel &k);
+std::ostream &operator<<(std::ostream &out, const HWTap &t);
 
 /** Perform analysis to extract hard kernel DAG
  */

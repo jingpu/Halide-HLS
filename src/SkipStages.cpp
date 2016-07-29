@@ -385,7 +385,8 @@ class MightBeSkippable : public IRVisitor {
             return;
         }
         IRVisitor::visit(op);
-        if (op->name == func || extern_call_uses_buffer(op, func)) {
+        if (op->name == func || extern_call_uses_buffer(op, func) ||
+            (starts_with(op->name, func) && ends_with(op->name, ".stencil"))) {
             result &= guarded;
         }
     }

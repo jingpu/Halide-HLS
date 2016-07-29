@@ -5,10 +5,12 @@ include ../../support/Makefile.inc
 
 #### HLS flags
 include ../hls_support/Makefile.inc
+HLS_LOG = vivado_hls.log
 
-#### end of HLS flags
-
+.PHONY: all run_hls
 all: out.png
+run_hls: $(HLS_LOG)
+
 
 pipeline: pipeline.cpp
 	$(CXX) $(CXXFLAGS) -Wall -g $^ $(LIB_HALIDE) -o $@ $(LDFLAGS) -ltinfo
@@ -25,6 +27,11 @@ run_cuda: pipeline_native.o pipeline_cuda.o run_cuda.cpp
 
 out.png: run
 	./run
+
+$(HLS_LOG): ../hls_support/run_hls.tcl pipeline_hls.cpp run.cpp
+	RUN_PATH=$(realpath ./) \
+	RUN_ARGS= \
+	vivado_hls -f $< -l $(HLS_LOG)
 
 out_cuda.png: run_cuda
 	CUDA_LAUNCH_BLOCKING=1 HL_NUM_THREADS=4 ./run_cuda ../../images/benchmark_1080p_rgb.png

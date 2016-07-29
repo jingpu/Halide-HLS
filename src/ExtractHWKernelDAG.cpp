@@ -198,8 +198,8 @@ bool operator==(const StencilDimSpecs &left, const StencilDimSpecs &right) {
 
 ostream &operator<<(ostream &out, const StencilDimSpecs &dim) {
     out << "[" << dim.min_pos << ", "
-        << dim.size << ", looping "<< dim.loop_var << " step " << dim.step << "] over "
-        << "[" << dim.store_bound.min << ", " << dim.store_bound.max << "]\n";
+        << dim.size << ", looping "<< dim.loop_var << " step " << dim.step << "]"
+        << " over " << "[" << dim.store_bound.min << ", " << dim.store_bound.max << "]\n";
     return out;
 }
 
@@ -248,6 +248,13 @@ ostream &operator<<(ostream &out, const HWKernel &k) {
                 out << "  dim " << k.func.args()[i] << ": " << p.second[i] << '\n';
         }
     }
+    return out;
+}
+
+ostream &operator<<(ostream &out, const HWTap &t) {
+    out << "HWTap " << t.name << " from " << (t.is_func ? "function" : "paramter") << "\n";
+    for (size_t i = 0; i < t.dims.size(); i++)
+        out << "  dim " << i << ": " << t.dims[i] << '\n';
     return out;
 }
 
@@ -464,6 +471,40 @@ class BuildDAGForFunction : public IRVisitor {
 
             debug(3) << k << "\n";
 
+            // Figure out bounds of each tap paramter
+            for (const auto &p : func.schedule().tap_params()) {
+                HWTap tap;
+                tap.name = p.first;
+                tap.is_func = false;
+                tap.param = p.second;
+                internal_assert(tap.param.is_buffer());
+                for (int i = 0; i < tap.param.dimensions(); i++) {
+                    StencilDimSpecs dim_specs;
+                    dim_specs.min_pos = tap.param.min_constraint(i);
+                    Expr extent = tap.param.extent_constraint(i);
+                    const IntImm *extent_int = extent.as<IntImm>();
+                    internal_assert(extent_int) << "tap window extent ("
+                                                << extent << ") is not a const.\n";
+                    dim_specs.size = extent_int->value;
+                    dim_specs.step = dim_specs.size;
+                    dim_specs.loop_var = "undef";
+                    tap.dims.push_back(dim_specs);
+                }
+                dag.taps[p.first] = tap;
+            }
+
+            // Figure out bounds of each tap function
+            for (const auto &p : func.schedule().tap_funcs()) {
+                // TODO check if the required function value has been fully evaluated
+                HWTap tap;
+                tap.name = p.first;
+                tap.is_func = true;
+                tap.func = p.second;
+                Box box = box_required(op->body, p.first);
+                tap.dims = extract_stencil_specs(box, scan_loops, stencil_bounds, store_bounds);
+                dag.taps[p.first] = tap;
+            }
+
             // Figure out how much of each func in the pipeline we're producing
             // do this from output of the pipeline to inputs
             // 'inlined_stages' is sorted, so we do it straight backward
@@ -482,19 +523,7 @@ class BuildDAGForFunction : public IRVisitor {
                 const BoundsInference_Stage &stage = inlined_stages[i];
                 Function cur_func = env.find(stage.name)->second;
 
-                // cur_func is in the HWKernelDAG if it is a hw kernel,
-                // and its consumers are in the HWKernelDAG
-                bool in_dag = false;
                 if (cur_func.schedule().is_hw_kernel() ) {
-                    for(int consumer_idx : stage.consumers) {
-                        string consumer_name = inlined_stages[consumer_idx].name;
-                        if (dag.kernels.count(consumer_name)) {
-                            in_dag = true;
-                            break;
-                        }
-                    }
-                }
-                if (in_dag) {
                     debug(3) << "func " << stage.name << " stage " << stage.stage
                              << " is a hw kernel.\n";
                     HWKernel cur_kernel(cur_func, stage.name);
@@ -649,9 +678,12 @@ public:
         dag.compute_level = compute_level;
         dag.store_level = store_level;
         calculate_input_streams(dag);
+
         /*
         debug(0) << "after building producer pointers:" << "\n";
         for (const auto &p : dag.kernels)
+            debug(0) << p.second << "\n";
+        for (const auto &p : dag.taps)
             debug(0) << p.second << "\n";
         */
         return dag;

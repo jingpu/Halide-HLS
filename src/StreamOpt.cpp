@@ -596,6 +596,41 @@ Stmt transform_kernel(Stmt s, const HWKernelDAG &dag, const Scope<Expr> &scope) 
     return ret;
 }
 
+
+class TransformTapStencils : public IRMutator {
+    const map<string, HWTap> &taps;
+
+    using IRMutator::visit;
+
+    // Replace calls to ImageParam with calls to Stencil
+    void visit(const Call *op) {
+        if (taps.count(op->name) == 0) {
+            IRMutator::visit(op);
+        } else if (op->call_type == Call::Image || op->call_type == Call::Halide) {
+            debug(3) << "replacing " << op->name << '\n';
+            const HWTap &tap = taps.find(op->name)->second;
+
+            // Replace the call node of func with call node of func.tap.stencil
+            string stencil_name = op->name + ".tap.stencil";
+            vector<Expr> new_args(op->args.size());
+
+            // Mutate the arguments.
+            // The value of the new argment is the old_value - min_pos
+            // b/c stencil indices always start from zero
+            internal_assert(tap.dims.size() == op->args.size());
+            for (size_t i = 0; i < op->args.size(); i++) {
+                 new_args[i] = op->args[i]- tap.dims[i].min_pos;
+            }
+            expr = Call::make(op->type, stencil_name, new_args, Call::Intrinsic);
+        } else {
+            internal_error << "unexpected call_type\n";
+        }
+    }
+
+public:
+    TransformTapStencils(const map<string, HWTap> &t) : taps(t) {}
+};
+
 // Perform streaming optimization for all functions
 class StreamOpt : public IRMutator {
     const HWKernelDAG &dag;
@@ -676,14 +711,12 @@ class StreamOpt : public IRMutator {
                 }
                 Expr address_of_subimage_origin = Call::make(Handle(), Call::address_of, {Call::make(kernel.func, image_args, 0)}, Call::Intrinsic);
                 Expr buffer_var = Variable::make(type_of<struct buffer_t *>(), kernel.name + ".buffer");
-                Expr dummy_call_to_function = Call::make(kernel.func, {undef(Int(32))}, 0); // avoid skip_stages optimization
 
                 // add intrinsic functions to convert memory buffers to streams
                 // syntax:
                 //   stream_subimage(direction, buffer_var, stream_var, address_of_subimage_origin,
-                //                   dummy_call_to_function,
                 //                   dim_0_stride, dim_0_extent, ...)
-                vector<Expr> stream_call_args({direction, buffer_var, stream_var, address_of_subimage_origin, dummy_call_to_function});
+                vector<Expr> stream_call_args({direction, buffer_var, stream_var, address_of_subimage_origin});
                 for (size_t i = 0; i < kernel.dims.size(); i++) {
                     stream_call_args.push_back(Variable::make(Int(32), kernel.name + ".stride." + std::to_string(i)));
                     stream_call_args.push_back(simplify(kernel.dims[i].store_bound.max - kernel.dims[i].store_bound.min + 1));
@@ -695,6 +728,30 @@ class StreamOpt : public IRMutator {
                     bounds.push_back(Range(0, dim.step));
                 }
                 new_body = Realize::make(stream_name, kernel.func.output_types(), bounds, const_true(), Block::make(stream_subimg, new_body));
+            }
+
+            // Handle tap values
+            new_body = TransformTapStencils(dag.taps).mutate(new_body);
+
+            // Declare and initialize tap stencils with buffers
+            // TODO move this call out side the tile loops over the kernel launch
+            for (const auto &p : dag.taps) {
+                const HWTap &tap = p.second;
+                const string stencil_name = tap.name + ".tap.stencil";
+
+                Expr buffer_var = Variable::make(type_of<struct buffer_t *>(), tap.name + ".buffer");
+                Expr stencil_var = Variable::make(Handle(), stencil_name);
+                vector<Expr> args({buffer_var, stencil_var});
+                Stmt convert_call = Evaluate::make(Call::make(Handle(), "buffer_to_stencil", args, Call::Intrinsic));
+
+                // create a realizeation of the stencil
+                Region bounds;
+                for (const auto &dim : tap.dims) {
+                    bounds.push_back(Range(0, dim.size));
+                }
+                vector<Type> types = tap.is_func ? tap.func.output_types() :
+                    vector<Type>({tap.param.type()});
+                new_body = Realize::make(stencil_name, types, bounds, const_true(), Block::make(convert_call, new_body));
             }
 
             // Rewrap the let statements

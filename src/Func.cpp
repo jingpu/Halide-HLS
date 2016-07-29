@@ -1193,7 +1193,8 @@ Func &Func::store_root() {
 }
 
 Func &Func::accelerate(vector<Func> inputs,
-                       Var compute_var, Var store_var) {
+                       Var compute_var, Var store_var,
+                       vector<Func> taps) {
     /*
       This method prepares enough information on related function schedules,
       in order to draw the boundaries of the accelerator in the DAG of functinos.
@@ -1222,7 +1223,9 @@ Func &Func::accelerate(vector<Func> inputs,
     func.schedule().is_kernel_buffer() = true;
 
     // mark all the halide functions in the pipeline to be "hw_kernel"
-    mark_hw_kernels(func, func.schedule().accelerate_inputs());
+    set<string> tap_names;
+    for (const auto &f : taps)  tap_names.insert(f.name());
+    mark_hw_kernels(func, func.schedule().accelerate_inputs(), tap_names);
     return *this;
 }
 
