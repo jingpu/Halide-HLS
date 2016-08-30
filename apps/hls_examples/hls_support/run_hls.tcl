@@ -14,6 +14,8 @@ open_solution "solution1"
 set_part {xc7z020clg484-1}
 create_clock -period 10 -name default
 #config_rom_infer -array_size_threshold 1024
+config_bind -effort high
+config_schedule -effort high
 
 # C simluation
 csim_design -O -ldflags ${LD_FLAGS} -argv $env(RUN_ARGS)

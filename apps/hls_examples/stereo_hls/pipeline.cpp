@@ -6,8 +6,8 @@ using namespace Halide;
 Var x("x"), y("y"), z("z"), c("c");
 Var x_grid("x_grid"), y_grid("y_grid"), xo("xo"), yo("yo"), x_in("x_in"), y_in("y_in");
 
-int windowR = 1;
-int searchR = 4;
+int windowR = 4;
+int searchR = 64;
 //int windowR = 8;
 //int searchR = 120;
 
@@ -210,8 +210,9 @@ MyPipelineOpt()
     SAD(x, y, c) += cast<uint16_t>(absd(right_remapped(x+win.x, y+win.y),
                                         left_remapped(x+win.x+20+c, y+win.y)));
 
-    offset(x, y) = argmin(SAD(x, y, search.x));
     /*
+    offset(x, y) = argmin(SAD(x, y, search.x));
+    */
     // offset_l1 caculates {minarg, minval} betwen SAD(x, y, c*4) and SAD(x, y, c*4+3)
     offset_l1(x, y, c) = {cast<int8_t>(0), cast<uint16_t>(65535)};
     offset_l1(x, y, c) = {select(SAD(x, y, c*4 + search_l1.x) < offset_l1(x, y, c)[1],
@@ -224,7 +225,6 @@ MyPipelineOpt()
                            offset_l1(x, y, search.x)[0],
                            offset(x, y)[0]),
                            min(offset_l1(x, y, search.x)[1], offset(x, y)[1])};
-    */
 
     hw_output(x, y) = cast<uint8_t>(cast<uint16_t>(offset(x, y)[0]) * 255 / searchR);
     output(x, y) = hw_output(x, y);
@@ -281,14 +281,15 @@ void compile_hls() {
     hw_output.tile(x, y, xo, yo, x_in, y_in, 600, 400);
 
     //offset.update(0).unroll(search.x, 4);
-    //RVar search_xo, search_xi;
-    //offset.update(0).split(search.x, search_xo, search_xi, 4);
-    //SAD.compute_at(offset_l1, Var::outermost());
+    RVar search_xo, search_xi;
+    offset.update(0).split(search.x, search_xo, search_xi, 4);
+    offset.update(0).unroll(search_xi);
+    SAD.compute_at(offset_l1, Var::outermost());
     SAD.unroll(c);
     SAD.update(0).unroll(win.x).unroll(win.y).unroll(c);
-    //offset_l1.compute_at(offset, search_xo);
-    //offset_l1.unroll(c);
-    //offset_l1.update(0).unroll(c).unroll(search_l1.x);
+    offset_l1.compute_at(offset, search_xo);
+    offset_l1.unroll(c);
+    offset_l1.update(0).unroll(c).unroll(search_l1.x);
 
     hw_output.accelerate({right_remapped, left_remapped}, x_in, xo);
     //hw_output.accelerate({right_padded, left_padded, right_remap_padded, left_remap_padded}, x_in, xo);
@@ -324,7 +325,7 @@ void compile_hls() {
 
 int main(int argc, char **argv) {
     MyPipeline p1, p3;
-    MyPipeline p2;
+    MyPipelineOpt p2;
     p1.compile_cpu();
     p2.compile_hls();
     p3.compile_gpu();
