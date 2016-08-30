@@ -74,10 +74,10 @@ public:
         output_func.schedule().tap_funcs() = tap_funcs;
         output_func.schedule().tap_params() = tap_params;
 
-        debug(0) << "marked inputs: " << input_funcs << "\n";
-        debug(0) << "marked kernels: " << kernel_funcs << "\n";
-        debug(0) << "marked tap funcs: " << tap_funcs << "\n";
-        debug(0) << "marked tap params: " << tap_params << "\n";
+        debug(3) << "marked inputs: " << input_funcs << "\n";
+        debug(3) << "marked kernels: " << kernel_funcs << "\n";
+        debug(3) << "marked tap funcs: " << tap_funcs << "\n";
+        debug(3) << "marked tap params: " << tap_params << "\n";
 
 
         for (auto &&p : kernel_funcs) {
