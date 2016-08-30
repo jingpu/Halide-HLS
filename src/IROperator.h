@@ -160,6 +160,9 @@ EXPORT Expr halide_erf(Expr a);
  * it by itself. */
 EXPORT Expr raise_to_integer_power(Expr a, int64_t b);
 
+/** Split a boolean condition into vector of ANDs. If 'cond' is undefined,
+ * return an empty vector. */
+EXPORT void split_into_ands(Expr cond, std::vector<Expr> &result);
 
 }
 
@@ -1409,6 +1412,10 @@ inline Expr reinterpret(Expr e) {
  * argument. */
 inline Expr operator&(Expr x, Expr y) {
     user_assert(x.defined() && y.defined()) << "bitwise and of undefined Expr\n";
+    user_assert(x.type().is_int() || x.type().is_uint())
+        << "The first argument to bitwise and must be an integer or unsigned integer";
+    user_assert(y.type().is_int() || y.type().is_uint())
+        << "The second argument to bitwise and must be an integer or unsigned integer";
     // First widen or narrow, then bitcast.
     if (y.type().bits() != x.type().bits()) {
         y = cast(y.type().with_bits(x.type().bits()), y);
@@ -1424,6 +1431,10 @@ inline Expr operator&(Expr x, Expr y) {
  * argument. */
 inline Expr operator|(Expr x, Expr y) {
     user_assert(x.defined() && y.defined()) << "bitwise or of undefined Expr\n";
+    user_assert(x.type().is_int() || x.type().is_uint())
+        << "The first argument to bitwise or must be an integer or unsigned integer";
+    user_assert(y.type().is_int() || y.type().is_uint())
+        << "The second argument to bitwise or must be an integer or unsigned integer";
     // First widen or narrow, then bitcast.
     if (y.type().bits() != x.type().bits()) {
         y = cast(y.type().with_bits(x.type().bits()), y);
@@ -1438,7 +1449,11 @@ inline Expr operator|(Expr x, Expr y) {
  * have the same type). The type of the result is the type of the
  * first argument. */
 inline Expr operator^(Expr x, Expr y) {
-    user_assert(x.defined() && y.defined()) << "bitwise or of undefined Expr\n";
+    user_assert(x.defined() && y.defined()) << "bitwise xor of undefined Expr\n";
+    user_assert(x.type().is_int() || x.type().is_uint())
+        << "The first argument to bitwise xor must be an integer or unsigned integer";
+    user_assert(y.type().is_int() || y.type().is_uint())
+        << "The second argument to bitwise xor must be an integer or unsigned integer";
     // First widen or narrow, then bitcast.
     if (y.type().bits() != x.type().bits()) {
         y = cast(y.type().with_bits(x.type().bits()), y);
@@ -1451,7 +1466,9 @@ inline Expr operator^(Expr x, Expr y) {
 
 /** Return the bitwise not of an expression. */
 inline Expr operator~(Expr x) {
-    user_assert(x.defined()) << "bitwise or of undefined Expr\n";
+    user_assert(x.defined()) << "bitwise not of undefined Expr\n";
+    user_assert(x.type().is_int() || x.type().is_uint())
+        << "Argument to bitwise not must be an integer or unsigned integer";
     return Internal::Call::make(x.type(), Internal::Call::bitwise_not, {x}, Internal::Call::PureIntrinsic);
 }
 
@@ -1877,6 +1894,13 @@ inline NO_INLINE Expr memoize_tag(Expr result, Args... args) {
  */
 inline Expr likely(Expr e) {
     return Internal::Call::make(e.type(), Internal::Call::likely,
+                                {e}, Internal::Call::PureIntrinsic);
+}
+
+/** Equivalent to likely, but only triggers a loop partitioning if
+ * found in an innermost loop. */
+inline Expr likely_if_innermost(Expr e) {
+    return Internal::Call::make(e.type(), Internal::Call::likely_if_innermost,
                                 {e}, Internal::Call::PureIntrinsic);
 }
 

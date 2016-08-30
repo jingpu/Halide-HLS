@@ -635,21 +635,21 @@ class BuildDAGForFunction : public IRVisitor {
 
                     // push RDom value to stencil_bounds and store_bounds
                     if(stage.stage > 0) {
-                        const UpdateDefinition &r = cur_func.updates()[stage.stage - 1];
+                        //const Definition &r = cur_func.updates()[stage.stage - 1];
+                        Schedule update_schedule = cur_func.update_schedule(stage.stage - 1);
                         // TODO check the sliding dimensions are all pure, referring to
                         // BoundsInference::Stage::define_bounds()
-                        if (r.domain.defined()) {
-                            for (ReductionVariable i : r.domain.domain()) {
-                                string arg = cur_func.name() + ".s" + std::to_string(stage.stage) + "." + i.var;
-                                internal_assert(is_const(i.min));
-                                internal_assert(is_const(i.extent));
-                                Expr min = i.min;
-                                Expr max = simplify(i.extent + i.min - 1);
-                                stencil_bounds.push(arg + ".min", min);
-                                stencil_bounds.push(arg + ".max", max);
-                                store_bounds.push(arg + ".min", min);
-                                store_bounds.push(arg + ".max", max);
-                            }
+                        //if (r.domain.defined()) {
+                        for (ReductionVariable i : update_schedule.rvars()) {
+                            string arg = cur_func.name() + ".s" + std::to_string(stage.stage) + "." + i.var;
+                            internal_assert(is_const(i.min));
+                            internal_assert(is_const(i.extent));
+                            Expr min = i.min;
+                            Expr max = simplify(i.extent + i.min - 1);
+                            stencil_bounds.push(arg + ".min", min);
+                            stencil_bounds.push(arg + ".max", max);
+                            store_bounds.push(arg + ".min", min);
+                            store_bounds.push(arg + ".max", max);
                         }
                     }
 
@@ -678,7 +678,6 @@ public:
         dag.compute_level = compute_level;
         dag.store_level = store_level;
         calculate_input_streams(dag);
-
         /*
         debug(0) << "after building producer pointers:" << "\n";
         for (const auto &p : dag.kernels)

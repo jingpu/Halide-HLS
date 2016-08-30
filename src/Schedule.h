@@ -9,9 +9,9 @@
 
 #include "Expr.h"
 
+#include <map>
+
 namespace Halide {
-
-
 
 /** Different ways to handle a tail case in a split when the
  * factor does not provably divide the extent. */
@@ -59,6 +59,9 @@ enum class TailStrategy {
 };
 
 namespace Internal {
+
+class IRMutator;
+struct ReductionVariable;
 
 /** A reference to a site in a Halide statement at the top of the
  * body of a particular for loop. Evaluating a region of a halide
@@ -118,13 +121,17 @@ struct Split {
                 // tail strategy to be GuardWithIf.
     TailStrategy tail;
 
-    enum SplitType {SplitVar = 0, RenameVar, FuseVars};
+    enum SplitType {SplitVar = 0, RenameVar, FuseVars, PurifyRVar};
 
     // If split_type is Rename, then this is just a renaming of the
     // old_var to the outer and not a split. The inner var should
     // be ignored, and factor should be one. Renames are kept in
     // the same list as splits so that ordering between them is
     // respected.
+
+    // If split type is Purify, this replaces the old_var RVar to
+    // the outer Var. The inner var should be ignored, and factor
+    // should be one.
 
     // If split_type is Fuse, then this does the opposite of a
     // split, it joins the outer and inner into the old_var.
@@ -133,45 +140,61 @@ struct Split {
     bool is_rename() const {return split_type == RenameVar;}
     bool is_split() const {return split_type == SplitVar;}
     bool is_fuse() const {return split_type == FuseVars;}
+    bool is_purify() const {return split_type == PurifyRVar;}
 };
 
 struct Dim {
     std::string var;
     ForType for_type;
     DeviceAPI device_api;
-    bool pure;
+
+    enum Type {PureVar = 0, PureRVar, ImpureRVar};
+    Type dim_type;
+
+    bool is_pure() const {return (dim_type == PureVar) || (dim_type == PureRVar);}
+    bool is_rvar() const {return (dim_type == PureRVar) || (dim_type == ImpureRVar);}
 };
 
 struct Bound {
     std::string var;
-    Expr min, extent;
+    Expr min, extent, modulus, remainder;
 };
 
 struct ScheduleContents;
 
-struct Specialization {
-    Expr condition;
-    IntrusivePtr<ScheduleContents> schedule;
-};
-
 struct StorageDim {
     std::string var;
     Expr alignment;
+    Expr fold_factor;
+    bool fold_forward;
 };
 
 class ReductionDomain;
 class Function;
+
+struct FunctionContents;
 
 /** A schedule for a single stage of a Halide pipeline. Right now this
  * interface is basically a struct, offering mutable access to its
  * innards. In the future it may become more encapsulated. */
 class Schedule {
     IntrusivePtr<ScheduleContents> contents;
+
 public:
 
     Schedule(IntrusivePtr<ScheduleContents> c) : contents(c) {}
     Schedule(const Schedule &other) : contents(other.contents) {}
     EXPORT Schedule();
+
+    /** Return a deep copy of this Schedule. It recursively deep copies all called
+     * functions, schedules, specializations, and reduction domains. This method
+     * takes a map of <old FunctionContents, deep-copied version> as input and
+     * would use the deep-copied FunctionContents from the map if exists instead
+     * of creating a new deep-copy to avoid creating deep-copies of the same
+     * FunctionContents multiple times.
+     */
+    EXPORT Schedule deep_copy(
+        std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied_map) const;
 
     /** This flag is set to true if the schedule is memoized. */
     // @{
@@ -208,10 +231,10 @@ public:
     std::vector<Dim> &dims();
     // @}
 
-    /** Any reduction domain associated with this schedule. */
+    /** RVars of reduction domain associated with this schedule if there is any. */
     // @{
-    const ReductionDomain &reduction_domain() const;
-    void set_reduction_domain(const ReductionDomain &d);
+    const std::vector<ReductionVariable> &rvars() const;
+    std::vector<ReductionVariable> &rvars();
     // @}
 
     /** The list and order of dimensions used to store this
@@ -223,20 +246,23 @@ public:
     std::vector<StorageDim> &storage_dims();
     // @}
 
-    /** You may explicitly bound some of the dimensions of a
-     * function. See \ref Func::bound */
+    /** You may explicitly bound some of the dimensions of a function,
+     * or constrain them to lie on multiples of a given factor. See
+     * \ref Func::bound and \ref Func::align_bounds */
     // @{
     const std::vector<Bound> &bounds() const;
     std::vector<Bound> &bounds();
     // @}
 
-    /** You may create several specialized versions of a func with
-     * different schedules. They trigger when the condition is
-     * true. See \ref Func::specialize */
+    /** Mark calls of a function by 'f' to be replaced with its wrapper
+     * during the lowering stage. If the string 'f' is empty, it means replace
+     * all calls to the function by all other functions (excluding itself) in
+     * the pipeline with the wrapper. See \ref Func::in for more details. */
     // @{
-    const std::vector<Specialization> &specializations() const;
-    const Specialization &add_specialization(Expr condition);
-    //std::vector<Specialization> &specializations();
+    const std::map<std::string, IntrusivePtr<Internal::FunctionContents>> &wrappers() const;
+    std::map<std::string, IntrusivePtr<Internal::FunctionContents>> &wrappers();
+    EXPORT void add_wrapper(const std::string &f,
+                            const IntrusivePtr<Internal::FunctionContents> &wrapper);
     // @}
 
     /** At what sites should we inject the allocation and the
@@ -320,6 +346,10 @@ public:
     /** Pass an IRVisitor through to all Exprs referenced in the
      * Schedule. */
     void accept(IRVisitor *) const;
+
+    /** Pass an IRMutator through to all Exprs referenced in the
+     * Schedule. */
+    void mutate(IRMutator *);
 };
 
 }

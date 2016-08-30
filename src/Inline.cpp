@@ -22,7 +22,7 @@ class Inliner : public IRMutator {
     // Sanity check that this is a reasonable function to inline
     void check(Function f) {
 
-        internal_assert(!f.has_update_definition());
+        internal_assert(f.can_be_inlined()) << "Illegal to inline " << f.name() << "\n";
 
         const Schedule &s = f.schedule();
 
@@ -76,13 +76,20 @@ class Inliner : public IRMutator {
         }
 
         for (size_t i = 0; i < s.bounds().size(); i++) {
-            user_warning << "It is meaningless to bound dimension "
-                         << s.bounds()[i].var << " of function "
-                         << f.name() << " to be within ["
-                         << s.bounds()[i].min << ", "
-                         << s.bounds()[i].extent << "] because the function is scheduled inline.\n";
+            if (s.bounds()[i].min.defined()) {
+                user_warning << "It is meaningless to bound dimension "
+                             << s.bounds()[i].var << " of function "
+                             << f.name() << " to be within ["
+                             << s.bounds()[i].min << ", "
+                             << s.bounds()[i].extent << "] because the function is scheduled inline.\n";
+            } else if (s.bounds()[i].modulus.defined()) {
+                user_warning << "It is meaningless to align the bounds of dimension "
+                             << s.bounds()[i].var << " of function "
+                             << f.name() << " to have modulus/remainder ["
+                             << s.bounds()[i].modulus << ", "
+                             << s.bounds()[i].remainder << "] because the function is scheduled inline.\n";
+            }
         }
-
     }
 
     void visit(const Call *op) {
@@ -96,11 +103,13 @@ class Inliner : public IRMutator {
             // Grab the body
             Expr body = qualify(func.name() + ".", func.values()[op->value_index]);
 
+            const vector<string> func_args = func.args();
+
             // Bind the args using Let nodes
-            internal_assert(args.size() == func.args().size());
+            internal_assert(args.size() == func_args.size());
 
             for (size_t i = 0; i < args.size(); i++) {
-                body = Let::make(func.name() + "." + func.args()[i], args[i], body);
+                body = Let::make(func.name() + "." + func_args[i], args[i], body);
             }
 
             expr = body;

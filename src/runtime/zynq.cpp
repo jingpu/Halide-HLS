@@ -16,7 +16,6 @@
 extern "C" {
 
 // forward declarations of some POSIX APIs
-#define O_RDWR           02
 #define PROT_WRITE       0x2
 #define MAP_SHARED       0x01
 typedef int32_t off_t; // FIXME this is not actually correct

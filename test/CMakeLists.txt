@@ -32,11 +32,14 @@ function(tests folder)
   if (WIN32)
     LIST(REMOVE_ITEM TESTS "simd_op_check.cpp") # Relies on shell stuff that doesn't work on windows
   endif()
+  set(TEST_NAMES "")
   foreach(file ${TESTS})
     string(REPLACE ".cpp" "" name "${file}")
     # Test links against libHalide
     halide_project("${folder}_${name}" "${folder}" "${folder}/${file}")
+    list(APPEND TEST_NAMES "${folder}_${name}")
   endforeach()
+  set(TEST_NAMES "${TEST_NAMES}" PARENT_SCOPE)
 endfunction(tests)
 
 if (WITH_TEST_CORRECTNESS)
@@ -52,7 +55,11 @@ if (WITH_TEST_PERFORMANCE)
   tests(performance)
 endif()
 if (WITH_TEST_OPENGL)
+  find_package(OpenGL)
   tests(opengl)
+  foreach(test_name ${TEST_NAMES})
+    target_link_libraries("${test_name}" PRIVATE "${OPENGL_LIBRARIES}")
+  endforeach()
 endif()
 if (WITH_TEST_RENDERSCRIPT)
   tests(renderscript)
@@ -167,6 +174,14 @@ if (WITH_TEST_GENERATORS)
                                GENERATOR_NAME "${GEN_NAME}"
                                GENERATED_FUNCTION "${FUNC_NAME}"
                                GENERATOR_ARGS "target=host-user_context")
+    elseif(TEST_SRC STREQUAL "multitarget_aottest.cpp")
+      # Needs custom target string
+      halide_add_generator_dependency(TARGET "${TEST_RUNNER}"
+                               GENERATOR_TARGET "${GEN_NAME}${OBJ_GEN_EXE_SUFFIX}"
+                               GENERATOR_NAME "${GEN_NAME}"
+                               GENERATED_FUNCTION "${FUNC_NAME}"
+                               GENERATED_FUNCTION_NAMESPACE "HalideTest::"
+                               GENERATOR_ARGS "target=host-debug-c_plus_plus_name_mangling,host-c_plus_plus_name_mangling")
     # metadata_tester_aottest.cpp depends on two variants of metadata_generator
     elseif(TEST_SRC STREQUAL "metadata_tester_aottest.cpp")
       halide_add_generator_dependency(TARGET "${TEST_RUNNER}"
@@ -190,7 +205,7 @@ if (WITH_TEST_GENERATORS)
       halide_add_generator_dependency(TARGET "${TEST_RUNNER}"
                                GENERATOR_TARGET "cxx_mangling${OBJ_GEN_EXE_SUFFIX}"
                                GENERATOR_NAME "cxx_mangling"
-			       TARGET_SUFFIX "_2"
+                               TARGET_SUFFIX "_2"
                                GENERATED_FUNCTION "cxx_mangling"
                                GENERATED_FUNCTION_NAMESPACE "HalideTest::"
                                GENERATOR_ARGS "target=host-c_plus_plus_name_mangling"
@@ -200,7 +215,7 @@ if (WITH_TEST_GENERATORS)
                                GENERATOR_NAME "${GEN_NAME}"
                                GENERATED_FUNCTION "${FUNC_NAME}"
                                GENERATED_FUNCTION_NAMESPACE "HalideTest::"
-                               GENERATOR_ARGS "target=host-c_plus_plus_name_mangling")
+                               GENERATOR_ARGS "target=host-c_plus_plus_name_mangling-user_context")
       target_link_libraries("${TEST_RUNNER}" ${LIB_cxx_mangling})
     else()
       # All the other foo_test.cpp just depend on foo_generator.cpp

@@ -19,7 +19,7 @@ void CodeGen_Zynq_LLVM::visit(const Realize *op) {
     internal_assert(ends_with(op->name, ".stream"));
     llvm::StructType *kbuf_type = module->getTypeByName("struct.cma_buffer_t");
     internal_assert(kbuf_type);
-    llvm::Constant *one = llvm::ConstantInt::get(i32, 1);
+    llvm::Constant *one = llvm::ConstantInt::get(i32_t, 1);
     Value *slice_ptr = builder->CreateAlloca(kbuf_type, one, op->name);
     buffer_slices.push_back(slice_ptr);
 
@@ -44,7 +44,7 @@ void CodeGen_Zynq_LLVM::visit(const ProducerConsumer *op) {
         // the order of DMA ports in the driver
         llvm::StructType *kbuf_type = module->getTypeByName("struct.cma_buffer_t");
         internal_assert(kbuf_type);
-        Value *set_size = llvm::ConstantInt::get(i32, buffer_slices.size());
+        Value *set_size = llvm::ConstantInt::get(i32_t, buffer_slices.size());
         Value *slice_set = builder->CreateAlloca(kbuf_type, set_size);
         llvm::DataLayout d(module.get());
         size_t size_of_kbuf = d.getTypeAllocSize(kbuf_type);
@@ -104,7 +104,7 @@ void CodeGen_Zynq_LLVM::visit(const Call *op) {
         // cast to the i8* type
         address_of_subimage_origin =
           builder->CreatePointerCast(address_of_subimage_origin,
-                                     llvm::PointerType::get(i8, 0));
+                                     llvm::PointerType::get(i8_t, 0));
 
         // TODO check the lower demesion matches the buffer depth
         // TODO static check that the slice is within the bounds of kernel buffer

@@ -50,13 +50,16 @@ public:
             if (call->args.size() == 1) {
                 record(call->args[0]);
             } else {
+                // Do not look at anything inside a memoize_expr bracket.
                 for (size_t i = 1; i < call->args.size(); i++) {
                     record(call->args[i]);
                 }
             }
+        } else if (call->func.defined()) {
+            Function fn(call->func);
+            visit_function(fn);
+            IRGraphVisitor::visit(call);
         } else {
-            // Do not look at anything inside a memoize_expr bracket.
-            visit_function(call->func);
             IRGraphVisitor::visit(call);
         }
     }
@@ -106,7 +109,7 @@ public:
         info.type = expr.type();
         info.size_expr = info.type.bytes();
         info.value_expr = expr;
-        dependency_info[DependencyKey(info.type.bytes(), unique_name("memoize_tag", false))] = info;
+        dependency_info[DependencyKey(info.type.bytes(), unique_name("memoize_tag"))] = info;
     }
 
     // Used to make sure larger parameters come before smaller ones
@@ -291,10 +294,7 @@ public:
                                          (index / i.second.size_expr), Parameter()));
             index += i.second.size_expr;
         }
-        Stmt blocks;
-        for (size_t i = writes.size(); i > 0; i--) {
-            blocks = Block::make(writes[i - 1], blocks);
-        }
+        Stmt blocks = Block::make(writes);
 
         return blocks;
     }
@@ -430,9 +430,10 @@ private:
             computed_bounds_args.push_back(null_handle);
             computed_bounds_args.push_back(make_zero(f.output_types()[0]));
             std::string max_stage_num = std::to_string(f.updates().size());
+            const std::vector<std::string> f_args = f.args();
             for (int32_t i = 0; i < f.dimensions(); i++) {
-                Expr min = Variable::make(Int(32), op->name + ".s" + max_stage_num + "." + f.args()[i] + ".min");
-                Expr max = Variable::make(Int(32), op->name + ".s" + max_stage_num + "." + f.args()[i] + ".max");
+                Expr min = Variable::make(Int(32), op->name + ".s" + max_stage_num + "." + f_args[i] + ".min");
+                Expr max = Variable::make(Int(32), op->name + ".s" + max_stage_num + "." + f_args[i] + ".max");
                 computed_bounds_args.push_back(min);
                 computed_bounds_args.push_back(max - min);
                 computed_bounds_args.push_back(0); // TODO: Verify there is no use for the stride.

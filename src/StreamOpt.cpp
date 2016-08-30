@@ -87,7 +87,7 @@ class ReplaceReferencesWithStencil : public IRMutator {
             // find the stencil dimension given dim_name
             int dim_idx = -1;
             for(size_t i = 0; i < kernel.func.args().size(); i++)
-                if(ends_with(stage_dim_name, kernel.func.args()[i])) {
+                if(ends_with(stage_dim_name, "." + kernel.func.args()[i])) {
                     dim_idx = i;
                     break;
                 }

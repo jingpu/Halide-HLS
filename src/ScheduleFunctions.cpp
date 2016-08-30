@@ -19,6 +19,7 @@ using std::map;
 using std::vector;
 using std::pair;
 using std::make_pair;
+using std::set;
 
 namespace {
 // A structure representing a containing LetStmt, IfThenElse, or For
@@ -56,102 +57,43 @@ bool contains_impure_call(const Expr &expr) {
 }
 
 // Build a loop nest about a provide node using a schedule
-Stmt build_provide_loop_nest(Function f,
-                             string prefix,
-                             const vector<Expr> &site,
-                             const vector<Expr> &values,
-                             const Schedule &s,
-                             bool is_update) {
+Stmt build_provide_loop_nest_helper(string func_name,
+                                    string prefix,
+                                    const vector<string> &dims,
+                                    const vector<Expr> &site,
+                                    const vector<Expr> &values,
+                                    const vector<Expr> &predicates,
+                                    const Schedule &s,
+                                    bool is_update) {
+
 
     // We'll build it from inside out, starting from a store node,
     // then wrapping it in for loops.
 
     // Make the (multi-dimensional multi-valued) store node.
-    Stmt stmt = Provide::make(f.name(), values, site);
+    Stmt stmt = Provide::make(func_name, values, site);
 
-    // The dimensions for which we have a known static size.
-    map<string, Expr> known_size_dims;
+    // A map of the dimensions for which we know the extent is a
+    // multiple of some Expr. This can happen due to a bound, or
+    // align_bounds directive, or if a dim comes from the inside
+    // of a split.
+    map<string, Expr> dim_extent_alignment;
+
     // First hunt through the bounds for them.
     for (const Bound &i : s.bounds()) {
-        known_size_dims[i.var] = i.extent;
+        if (i.extent.defined()) {
+            dim_extent_alignment[i.var] = i.extent;
+        }
+        if (i.modulus.defined()) {
+            dim_extent_alignment[i.var] = i.modulus;
+        }
     }
     // Then use any reduction domain.
-    const ReductionDomain &rdom = s.reduction_domain();
-    if (rdom.defined()) {
-        for (const ReductionVariable &i : rdom.domain()) {
-            known_size_dims[i.var] = i.extent;
-        }
+    for (const ReductionVariable &i : s.rvars()) {
+        dim_extent_alignment[i.var] = i.extent;
     }
 
     vector<Split> splits = s.splits();
-
-    // Rebalance the split tree to make the outermost split first.
-    for (size_t i = 0; i < splits.size(); i++) {
-        for (size_t j = i+1; j < splits.size(); j++) {
-
-            Split &first = splits[i];
-            Split &second = splits[j];
-            if (first.outer == second.old_var) {
-                internal_assert(!second.is_rename())
-                    << "Rename of derived variable found in splits list. This should never happen.";
-
-                if (first.is_rename()) {
-                    // Given a rename:
-                    // X -> Y
-                    // And a split:
-                    // Y -> f * Z + W
-                    // Coalesce into:
-                    // X -> f * Z + W
-                    second.old_var = first.old_var;
-                    // Drop first entirely
-                    for (size_t k = i; k < splits.size()-1; k++) {
-                        splits[k] = splits[k+1];
-                    }
-                    splits.pop_back();
-                    // Start processing this split from scratch,
-                    // because we just clobbered it.
-                    j = i+1;
-                } else {
-                    // Given two splits:
-                    // X  ->  a * Xo  + Xi
-                    // (splits stuff other than Xo, including Xi)
-                    // Xo ->  b * Xoo + Xoi
-
-                    // Re-write to:
-                    // X  -> ab * Xoo + s0
-                    // s0 ->  a * Xoi + Xi
-                    // (splits on stuff other than Xo, including Xi)
-
-                    // The name Xo went away, because it was legal for it to
-                    // be X before, but not after.
-
-                    first.exact |= second.exact;
-                    second.exact = first.exact;
-                    second.old_var = unique_name('s');
-                    first.outer   = second.outer;
-                    second.outer  = second.inner;
-                    second.inner  = first.inner;
-                    first.inner   = second.old_var;
-                    Expr f = simplify(first.factor * second.factor);
-                    second.factor = first.factor;
-                    first.factor  = f;
-                    // Push the second split back to just after the first
-                    for (size_t k = j; k > i+1; k--) {
-                        std::swap(splits[k], splits[k-1]);
-                    }
-                }
-            }
-        }
-    }
-
-    Dim innermost_non_trivial_loop;
-    for (const Dim &d : s.dims()) {
-        if (d.for_type != ForType::Vectorized &&
-            d.for_type != ForType::Unrolled) {
-            innermost_non_trivial_loop = d;
-            break;
-        }
-    }
 
     // Define the function args in terms of the loop variables using the splits
     for (const Split &split : splits) {
@@ -163,7 +105,7 @@ Stmt build_provide_loop_nest(Function f,
             Expr old_min = Variable::make(Int(32), prefix + split.old_var + ".loop_min");
             Expr old_extent = Variable::make(Int(32), prefix + split.old_var + ".loop_extent");
 
-            known_size_dims[split.inner] = split.factor;
+            dim_extent_alignment[split.inner] = split.factor;
 
             Expr base = outer * split.factor + old_min;
             string base_name = prefix + split.inner + ".base";
@@ -171,7 +113,7 @@ Stmt build_provide_loop_nest(Function f,
             string old_var_name = prefix + split.old_var;
             Expr old_var = Variable::make(Int(32), old_var_name);
 
-            map<string, Expr>::iterator iter = known_size_dims.find(split.old_var);
+            map<string, Expr>::iterator iter = dim_extent_alignment.find(split.old_var);
 
             if (is_update) {
                 user_assert(split.tail != TailStrategy::ShiftInwards)
@@ -199,12 +141,15 @@ Stmt build_provide_loop_nest(Function f,
                 }
             }
 
-            if ((iter != known_size_dims.end()) &&
+            if ((iter != dim_extent_alignment.end()) &&
                 is_zero(simplify(iter->second % split.factor))) {
                 // We have proved that the split factor divides the
                 // old extent. No need to adjust the base or add an if
                 // statement.
-                known_size_dims[split.outer] = iter->second / split.factor;
+                dim_extent_alignment[split.outer] = iter->second / split.factor;
+            } else if (is_negative_const(split.factor) || is_zero(split.factor)) {
+                user_error << "Can't split " << split.old_var << " by " << split.factor
+                           << ". Split factors must be strictly positive\n";
             } else if (is_one(split.factor)) {
                 // The split factor trivially divides the old extent,
                 // but we know nothing new about the outer dimension.
@@ -232,14 +177,10 @@ Stmt build_provide_loop_nest(Function f,
                 // Adjust the base downwards to not compute off the
                 // end of the realization.
 
-                // Only mark the base as likely (triggering a loop
-                // partition) if the outer var is the innermost
-                // non-trivial loop and it's a serial loop. This
-                // usually is due to an unroll or vectorize call.
-                if (split.outer == innermost_non_trivial_loop.var &&
-                    innermost_non_trivial_loop.for_type == ForType::Serial) {
-                    base = likely(base);
-                }
+                // We'll only mark the base as likely (triggering a loop
+                // partition) if we're at or inside the innermost
+                // non-trivial loop.
+                base = likely_if_innermost(base);
 
                 base = Min::make(base, old_max + (1 - split.factor));
             } else {
@@ -275,14 +216,14 @@ Stmt build_provide_loop_nest(Function f,
 
             // Maintain the known size of the fused dim if
             // possible. This is important for possible later splits.
-            map<string, Expr>::iterator inner_dim = known_size_dims.find(split.inner);
-            map<string, Expr>::iterator outer_dim = known_size_dims.find(split.outer);
-            if (inner_dim != known_size_dims.end() &&
-                outer_dim != known_size_dims.end()) {
-                known_size_dims[split.old_var] = inner_dim->second*outer_dim->second;
+            map<string, Expr>::iterator inner_dim = dim_extent_alignment.find(split.inner);
+            map<string, Expr>::iterator outer_dim = dim_extent_alignment.find(split.outer);
+            if (inner_dim != dim_extent_alignment.end() &&
+                outer_dim != dim_extent_alignment.end()) {
+                dim_extent_alignment[split.old_var] = inner_dim->second*outer_dim->second;
             }
-
         } else {
+            // rename or purify
             stmt = substitute(prefix + split.old_var, outer, stmt);
             stmt = LetStmt::make(prefix + split.old_var, outer, stmt);
         }
@@ -306,15 +247,12 @@ Stmt build_provide_loop_nest(Function f,
     }
 
     // Put all the reduction domain predicate into the containers vector.
-    int n_predicates = 0;
-    if (rdom.defined()) {
-        vector<Expr> predicates = rdom.split_predicate();
-        n_predicates = predicates.size();
-        for (Expr pred : predicates) {
-            pred = qualify(prefix, pred);
-            Container c = {Container::If, 0, "", pred};
-            nest.push_back(c);
-        }
+    // Put all the reduction domain predicate into the containers vector.
+    int n_predicates = predicates.size();
+    for (Expr pred : predicates) {
+        pred = qualify(prefix, pred);
+        Container c = {Container::If, 0, "", pred};
+        nest.push_back(c);
     }
 
     // Resort the containers vector so that lets are as far outwards
@@ -375,7 +313,8 @@ Stmt build_provide_loop_nest(Function f,
     }
 
     // Define the bounds on the split dimensions using the bounds
-    // on the function args
+    // on the function args. If it is a purify, we should use the bounds
+    // from the dims instead.
     for (size_t i = splits.size(); i > 0; i--) {
         const Split &split = splits[i-1];
         Expr old_var_extent = Variable::make(Int(32), prefix + split.old_var + ".loop_extent");
@@ -398,12 +337,12 @@ Stmt build_provide_loop_nest(Function f,
             stmt = LetStmt::make(prefix + split.old_var + ".loop_min", 0, stmt);
             stmt = LetStmt::make(prefix + split.old_var + ".loop_max", fused_extent - 1, stmt);
             stmt = LetStmt::make(prefix + split.old_var + ".loop_extent", fused_extent, stmt);
-        } else {
-            // rename
+        } else if (split.is_rename()) {
             stmt = LetStmt::make(prefix + split.outer + ".loop_min", old_var_min, stmt);
             stmt = LetStmt::make(prefix + split.outer + ".loop_max", old_var_max, stmt);
             stmt = LetStmt::make(prefix + split.outer + ".loop_extent", old_var_extent, stmt);
         }
+        // Do nothing for purify
     }
 
     // Define the bounds on the outermost dummy dimension.
@@ -415,7 +354,7 @@ Stmt build_provide_loop_nest(Function f,
     }
 
     // Define the loop mins and extents in terms of the mins and maxs produced by bounds inference
-    for (const std::string &i : f.args()) {
+    for (const std::string &i : dims) {
         string var = prefix + i;
         Expr max = Variable::make(Int(32), var + ".max");
         Expr min = Variable::make(Int(32), var + ".min"); // Inject instance name here? (compute instance names during lowering)
@@ -426,30 +365,61 @@ Stmt build_provide_loop_nest(Function f,
         stmt = LetStmt::make(var + ".loop_max", max, stmt);
     }
 
+    // Define the loop mins and extents for the reduction domain (if there is any)
+    // in terms of the mins and maxs produced by bounds inference
+    for (const ReductionVariable &rv : s.rvars()) {
+        string p = prefix + rv.var;
+        Expr rmin = Variable::make(Int(32), p + ".min");
+        Expr rmax = Variable::make(Int(32), p + ".max");
+        stmt = LetStmt::make(p + ".loop_min", rmin, stmt);
+        stmt = LetStmt::make(p + ".loop_max", rmax, stmt);
+        stmt = LetStmt::make(p + ".loop_extent", rmax - rmin + 1, stmt);
+    }
+
+    return stmt;
+}
+
+// Build a loop nest about a provide node using a schedule
+Stmt build_provide_loop_nest(string func_name,
+                             string prefix,
+                             const vector<string> &dims,
+                             const Definition &def,
+                             bool is_update) {
+
+    internal_assert(!is_update == def.is_init());
+
+    // Default stored values
+    vector<Expr> site(def.args().size());
+    vector<Expr> values(def.values().size());
+    for (size_t i = 0; i < values.size(); i++) {
+        Expr v = def.values()[i];
+        v = qualify(prefix, v);
+        values[i] = v;
+        debug(3) << "Value " << i << " = " << v << "\n";
+    }
+
+    // Default stored locations
+    for (size_t i = 0; i < def.args().size(); i++) {
+        Expr s = def.args()[i];
+        s = qualify(prefix, s);
+        site[i] = s;
+        debug(3) << "Site " << i << " = " << s << "\n";
+    }
+
+    // Default schedule/values if there is no specialization
+    Stmt stmt = build_provide_loop_nest_helper(
+        func_name, prefix, dims, site, values, def.split_predicate(), def.schedule(), is_update);
+
     // Make any specialized copies
-    for (size_t i = s.specializations().size(); i > 0; i--) {
-        Expr c = s.specializations()[i-1].condition;
-        Schedule sched = s.specializations()[i-1].schedule;
-        const EQ *eq = c.as<EQ>();
-        const Variable *var = eq ? eq->a.as<Variable>() : c.as<Variable>();
+    const vector<Specialization> &specializations = def.specializations();
+    for (size_t i = specializations.size(); i > 0; i--) {
+        Expr c = specializations[i-1].condition;
+        const Definition &s_def = specializations[i-1].definition;
 
         Stmt then_case =
-            build_provide_loop_nest(f, prefix, site, values, sched, is_update);
+            build_provide_loop_nest(func_name, prefix, dims, s_def, is_update);
 
-        if (var && eq) {
-            then_case = simplify_exprs(substitute(var->name, eq->b, then_case));
-            Stmt else_case = stmt;
-            if (eq->b.type().is_bool()) {
-                else_case = simplify_exprs(substitute(var->name, !eq->b, else_case));
-            }
-            stmt = IfThenElse::make(c, then_case, else_case);
-        } else if (var) {
-            then_case = simplify_exprs(substitute(var->name, const_true(), then_case));
-            Stmt else_case = simplify_exprs(substitute(var->name, const_false(), stmt));
-            stmt = IfThenElse::make(c, then_case, else_case);
-        } else {
-            stmt = IfThenElse::make(c, then_case, stmt);
-        }
+        stmt = IfThenElse::make(c, then_case, stmt);
     }
 
     return stmt;
@@ -529,13 +499,14 @@ Stmt build_produce(Function f) {
                 stride_name += ".0";
             }
             string stage_name = f.name() + ".s0.";
+            const vector<string> f_args = f.args();
             for (int j = 0; j < f.outputs(); j++) {
 
                 vector<Expr> buffer_args(2);
 
                 vector<Expr> top_left;
                 for (int k = 0; k < f.dimensions(); k++) {
-                    string var = stage_name + f.args()[k];
+                    string var = stage_name + f_args[k];
                     top_left.push_back(Variable::make(Int(32), var + ".min"));
                 }
                 Expr host_ptr = Call::make(f, top_left, j);
@@ -544,7 +515,7 @@ Stmt build_produce(Function f) {
                 buffer_args[0] = host_ptr;
                 buffer_args[1] = make_zero(f.output_types()[j]);
                 for (int k = 0; k < f.dimensions(); k++) {
-                    string var = stage_name + f.args()[k];
+                    string var = stage_name + f_args[k];
                     Expr min = Variable::make(Int(32), var + ".min");
                     Expr max = Variable::make(Int(32), var + ".max");
                     Expr stride = Variable::make(Int(32), stride_name + ".stride." + std::to_string(k));
@@ -582,20 +553,8 @@ Stmt build_produce(Function f) {
     } else {
 
         string prefix = f.name() + ".s0.";
-
-        // Compute the site to store to as the function args
-        vector<Expr> site;
-
-        vector<Expr> values(f.values().size());
-        for (size_t i = 0; i < values.size(); i++) {
-            values[i] = qualify(prefix, f.values()[i]);
-        }
-
-        for (size_t i = 0; i < f.args().size(); i++) {
-            site.push_back(Variable::make(Int(32), prefix + f.args()[i]));
-        }
-
-        return build_provide_loop_nest(f, prefix, site, values, f.schedule(), false);
+        vector<string> dims = f.args();
+        return build_provide_loop_nest(f.name(), prefix, dims, f.definition(), false);
     }
 }
 
@@ -605,41 +564,12 @@ vector<Stmt> build_update(Function f) {
     vector<Stmt> updates;
 
     for (size_t i = 0; i < f.updates().size(); i++) {
-        UpdateDefinition r = f.updates()[i];
+        const Definition &def = f.update(i);
 
         string prefix = f.name() + ".s" + std::to_string(i+1) + ".";
 
-        vector<Expr> site(r.args.size());
-        vector<Expr> values(r.values.size());
-        for (size_t i = 0; i < values.size(); i++) {
-            Expr v = r.values[i];
-            v = qualify(prefix, v);
-            values[i] = v;
-            debug(3) << "Update value " << i << " = " << v << "\n";
-        }
-
-        for (size_t i = 0; i < r.args.size(); i++) {
-            Expr s = r.args[i];
-            s = qualify(prefix, s);
-            site[i] = s;
-            debug(3) << "Update site " << i << " = " << s << "\n";
-        }
-
-        Stmt loop = build_provide_loop_nest(f, prefix, site, values, r.schedule, true);
-
-        // Now define the bounds on the reduction domain
-        if (r.domain.defined()) {
-            const vector<ReductionVariable> &dom = r.domain.domain();
-            for (size_t i = 0; i < dom.size(); i++) {
-                string p = prefix + dom[i].var;
-                Expr rmin = Variable::make(Int(32), p + ".min");
-                Expr rmax = Variable::make(Int(32), p + ".max");
-                loop = LetStmt::make(p + ".loop_min", rmin, loop);
-                loop = LetStmt::make(p + ".loop_max", rmax, loop);
-                loop = LetStmt::make(p + ".loop_extent", rmax - rmin + 1, loop);
-            }
-        }
-
+        vector<string> dims = f.args();
+        Stmt loop = build_provide_loop_nest(f.name(), prefix, dims, def, true);
         updates.push_back(loop);
     }
 
@@ -650,11 +580,8 @@ pair<Stmt, Stmt> build_production(Function func) {
     Stmt produce = build_produce(func);
     vector<Stmt> updates = build_update(func);
 
-    // Build it from the last stage backwards.
-    Stmt merged_updates;
-    for (size_t s = updates.size(); s > 0; s--) {
-        merged_updates = Block::make(updates[s-1], merged_updates);
-    }
+    // Combine the update steps
+    Stmt merged_updates = Block::make(updates);
     return make_pair(produce, merged_updates);
 }
 
@@ -673,6 +600,10 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
             Expr max_var = Variable::make(Int(32), max_name);
             if (!b.min.defined()) {
                 b.min = min_var;
+            }
+            if (!b.extent.defined()) {
+                // This is just a bounds alignment, which always expands the region computed.
+                continue;
             }
 
             Expr max_val = (b.extent + b.min) - 1;
@@ -748,8 +679,9 @@ private:
         if (!is_output) {
             Region bounds;
             string name = func.name();
+            const vector<string> func_args = func.args();
             for (int i = 0; i < func.dimensions(); i++) {
-                string arg = func.args()[i];
+                const string &arg = func_args[i];
                 Expr min = Variable::make(Int(32), name + "." + arg + ".min_realized");
                 Expr extent = Variable::make(Int(32), name + "." + arg + ".extent_realized");
                 bounds.push_back(Range(min, extent));
@@ -1075,37 +1007,40 @@ void validate_schedule(Function f, Stmt s, const Target &target, bool is_output)
 
     // Emit a warning if only some of the steps have been scheduled.
     bool any_scheduled = f.schedule().touched();
-    for (const UpdateDefinition &r : f.updates()) {
-        any_scheduled = any_scheduled || r.schedule.touched();
+    for (const Definition &r : f.updates()) {
+        any_scheduled = any_scheduled || r.schedule().touched();
     }
     if (any_scheduled) {
         for (size_t i = 0; i < f.updates().size(); i++) {
-            const UpdateDefinition &r = f.updates()[i];
-            if (!r.schedule.touched()) {
-                std::cerr << "Warning: Update step " << i
-                          << " of function " << f.name()
-                          << " has not been scheduled, even though some other"
-                          << " steps have been. You may have forgotten to"
-                          << " schedule it. If this was intentional, call "
-                          << f.name() << ".update(" << i << ") to suppress"
-                          << " this warning.\n";
+            const Definition &r = f.update(i);
+            if (!r.schedule().touched()) {
+                user_warning << "Warning: Update step " << i
+                             << " of function " << f.name()
+                             << " has not been scheduled, even though some other"
+                             << " steps have been. You may have forgotten to"
+                             << " schedule it. If this was intentional, call "
+                             << f.name() << ".update(" << i << ") to suppress"
+                             << " this warning.\n";
             }
         }
     }
 
     // If the func is scheduled on the gpu, check that the relevant
     // api is enabled in the target.
-    vector<Schedule> schedules;
-    schedules.push_back(f.schedule());
-    for (const UpdateDefinition &u : f.updates()) {
-        schedules.push_back(u.schedule);
+    vector<Definition> definitions;
+    definitions.push_back(f.definition());
+    for (const Definition &def : f.updates()) {
+        definitions.push_back(def);
     }
-    for (size_t i = 0; i < schedules.size(); i++) {
-        for (const Specialization &s : schedules[i].specializations()) {
-            schedules.push_back(s.schedule);
+
+    for (size_t i = 0; i < definitions.size(); i++) {
+        for (const Specialization &s : definitions[i].specializations()) {
+            definitions.push_back(s.definition);
         }
     }
-    for (const Schedule &s : schedules) {
+
+    for (const Definition &def : definitions) {
+        const Schedule &s = def.schedule();
         for (const Dim &d : s.dims()) {
             if (!target.supports_device_api(d.device_api)) {
                 user_error << "Schedule for Func " << f.name()
@@ -1130,8 +1065,12 @@ void validate_schedule(Function f, Stmt s, const Target &target, bool is_output)
         }
     }
 
-    // Inlining is always allowed
+    // Inlining is allowed only if there is no specialization.
     if (store_at.is_inline() && compute_at.is_inline()) {
+        user_assert(f.definition().specializations().empty())
+            << "Func " << f.name() << " is scheduled inline, so it"
+            << " must not have any specializations. Specialize on the"
+            << " scheduled Func instead.\n";
         return;
     }
 
@@ -1187,7 +1126,9 @@ class RemoveLoopsOverOutermost : public IRMutator {
     using IRMutator::visit;
 
     void visit(const For *op) {
-        if (ends_with(op->name, ".__outermost") && is_one(simplify(op->extent))) {
+        if (ends_with(op->name, ".__outermost") &&
+            is_one(simplify(op->extent)) &&
+            op->device_api == DeviceAPI::None) {
             stmt = mutate(substitute(op->name, op->min, op->body));
         } else {
             IRMutator::visit(op);
@@ -1235,8 +1176,8 @@ Stmt schedule_functions(const vector<Function> &outputs,
         }
 
         validate_schedule(f, s, target, is_output);
-        if (f.has_pure_definition() &&
-            !f.has_update_definition() &&
+
+        if (f.can_be_inlined() &&
             f.schedule().compute_level().is_inline()) {
             debug(1) << "Inlining " << order[i-1] << '\n';
             s = inline_function(s, f);

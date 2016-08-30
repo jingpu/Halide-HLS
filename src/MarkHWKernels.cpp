@@ -38,8 +38,8 @@ class GetCallees : public IRVisitor {
 
     void visit(const Call *op) {
         IRVisitor::visit(op);
-        if(op->call_type == Call::Halide) {
-            Function f = op->func;
+        if(op->call_type == Call::Halide && op->func.defined()) {
+            Function f = Function(op->func);
             funcs[f.name()] = f;
         } else if (op->call_type == Call::Image) {
             internal_assert(op->param.defined());
@@ -74,10 +74,10 @@ public:
         output_func.schedule().tap_funcs() = tap_funcs;
         output_func.schedule().tap_params() = tap_params;
 
-        debug(2) << "marked inputs: " << input_funcs << "\n";
-        debug(2) << "marked kernels: " << kernel_funcs << "\n";
-        debug(2) << "marked tap funcs: " << tap_funcs << "\n";
-        debug(2) << "marked tap params: " << tap_params << "\n";
+        debug(0) << "marked inputs: " << input_funcs << "\n";
+        debug(0) << "marked kernels: " << kernel_funcs << "\n";
+        debug(0) << "marked tap funcs: " << tap_funcs << "\n";
+        debug(0) << "marked tap params: " << tap_params << "\n";
 
 
         for (auto &&p : kernel_funcs) {

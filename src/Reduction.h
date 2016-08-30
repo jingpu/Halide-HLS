@@ -14,6 +14,14 @@ namespace Internal {
 struct ReductionVariable {
     std::string var;
     Expr min, extent;
+
+    /** This lets you use a ReductionVariable as a key in a map of the form
+     * map<ReductionVariable, Foo, ReductionVariable::Compare> */
+    struct Compare {
+        bool operator()(const ReductionVariable &a, const ReductionVariable &b) const {
+            return a.var < b.var;
+        }
+    };
 };
 
 struct ReductionDomainContents;
@@ -23,6 +31,15 @@ struct ReductionDomainContents;
 class ReductionDomain {
     IntrusivePtr<ReductionDomainContents> contents;
 public:
+    /** This lets you use a ReductionDomain as a key in a map of the form
+     * map<ReductionDomain, Foo, ReductionDomain::Compare> */
+    struct Compare {
+        bool operator()(const ReductionDomain &a, const ReductionDomain &b) const {
+            internal_assert(a.contents.defined() && b.contents.defined());
+            return a.contents < b.contents;
+        }
+    };
+
     /** Construct a new nullptr reduction domain */
     ReductionDomain() : contents(nullptr) {}
 
@@ -31,6 +48,9 @@ public:
      * with the start of the vector being innermost, and the end of
      * the vector being outermost. */
     EXPORT ReductionDomain(const std::vector<ReductionVariable> &domain);
+
+    /** Return a deep copy of this ReductionDomain. */
+    EXPORT ReductionDomain deep_copy() const;
 
     /** Is this handle non-nullptr */
     bool defined() const {
@@ -54,6 +74,9 @@ public:
     /** Return the predicate defined on this reducation demain. */
     EXPORT Expr predicate() const;
 
+    /** Set the predicate, replacing any previously set predicate. */
+    EXPORT void set_predicate(Expr);
+
     /** Split predicate into vector of ANDs. If there is no predicate (i.e. all
      * iteration domain in this reduction domain is valid), this returns an
      * empty vector. */
@@ -66,6 +89,14 @@ public:
     /** Check if a RDom has been frozen. If so, it is an error to add new
      * predicates. */
     EXPORT bool frozen() const;
+
+    /** Pass an IRVisitor through to all Exprs referenced in the
+     * ReductionDomain. */
+    void accept(IRVisitor *) const;
+
+    /** Pass an IRMutator through to all Exprs referenced in the
+     * ReductionDomain. */
+    void mutate(IRMutator *);
 };
 
 EXPORT void split_predicate_test();

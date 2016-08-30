@@ -180,5 +180,26 @@ bool Type::can_represent(double x) const {
     }
 }
 
+bool Type::same_handle_type(const Type &other) const {
+    const halide_handle_cplusplus_type *first = handle_type;
+    const halide_handle_cplusplus_type *second = other.handle_type;
+
+    if (first == second) {
+        return true;
+    }
+
+    if (first == nullptr) {
+        first = halide_handle_traits<void*>::type_info();
+    }
+    if (second == nullptr) {
+        second = halide_handle_traits<void*>::type_info();
+    }
+
+    return first->inner_name == second->inner_name &&
+        first->namespaces == second->namespaces &&
+        first->enclosing_types == second->enclosing_types &&
+        first->cpp_type_modifiers == second->cpp_type_modifiers &&
+        first->reference_type == second->reference_type;
+}
 
 }

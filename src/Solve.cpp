@@ -188,7 +188,6 @@ private:
                 expr = a + b;
             }
         }
-
     }
 
     void visit(const Sub *op) {
@@ -246,7 +245,7 @@ private:
                 // f(x)*a - f(x)*b -> f(x)*(a - b)
                 expr = mutate(mul_a->a * (mul_a->b - mul_b->b));
             } else if (mul_a && mul_b && equal(mul_a->b, mul_b->b)) {
-                // f(x)*a - g(x)*a -> (f(x) - g(x)*a);
+                // f(x)*a - g(x)*a -> (f(x) - g(x))*a;
                 expr = mutate((mul_a->a - mul_b->a) * mul_a->b);
             } else {
                 fail(a - b);
@@ -323,7 +322,8 @@ private:
 
     void visit(const Call *op) {
         // Ignore likely intrinsics
-        if (op->is_intrinsic(Call::likely)) {
+        if (op->is_intrinsic(Call::likely) ||
+            op->is_intrinsic(Call::likely_if_innermost)) {
             expr = mutate(op->args[0]);
         } else {
             IRMutator::visit(op);
@@ -331,7 +331,7 @@ private:
     }
 
     template<typename T>
-    void visit_commutative_op(const T *op) {
+    void visit_min_max_op(const T *op, bool is_min) {
         bool old_uses_var = uses_var;
         uses_var = false;
         Expr a = mutate(op->a);
@@ -344,31 +344,160 @@ private:
 
         if (b_uses_var && !a_uses_var) {
             std::swap(a, b);
-        } else if (a_uses_var && b_uses_var) {
-            fail(T::make(a, b));
+            std::swap(a_uses_var, b_uses_var);
         }
 
-        if (a.same_as(op->a) && b.same_as(op->b)) {
-            expr = op;
+        const Add *add_a = a.as<Add>();
+        const Add *add_b = b.as<Add>();
+        const Sub *sub_a = a.as<Sub>();
+        const Sub *sub_b = b.as<Sub>();
+        const Mul *mul_a = a.as<Mul>();
+        const Mul *mul_b = b.as<Mul>();
+        const T *t_a = a.as<T>();
+        const T *t_b = b.as<T>();
+
+        expr = Expr();
+
+        if (a_uses_var && !b_uses_var) {
+            if (t_a) {
+                // op(op(f(x), a), b) -> op(f(x), op(a, b))
+                expr = mutate(T::make(t_a->a, T::make(t_a->b, b)));
+            }
+        } else if (a_uses_var && b_uses_var) {
+            if (equal(a, b)) {
+                // op(f(x), f(x)) -> f(x)
+                expr = a;
+            } else if (t_a) {
+                // op(op(f(x), a), g(x)) -> op(op(f(x), g(x)), a)
+                expr = mutate(T::make(T::make(t_a->a, b), t_a->b));
+            } else if (t_b) {
+                // op(f(x), op(g(x), a)) -> op(op(f(x), g(x)), a)
+                expr = mutate(T::make(T::make(a, t_b->a), t_b->b));
+            } else if (add_a && add_b && equal(add_a->a, add_b->a)) {
+                // op(f(x) + a, f(x) + b) -> f(x) + op(a, b)
+                expr = mutate(add_a->a + T::make(add_a->b, add_b->b));
+            } else if (add_a && add_b && equal(add_a->b, add_b->b)) {
+                // op(f(x) + a, g(x) + a) -> op(f(x), g(x)) + a;
+                expr = mutate(T::make(add_a->a, add_b->a)) + add_a->b;
+            } else if (add_a && equal(add_a->a, b)) {
+                // op(f(x) + a, f(x)) -> f(x) + op(a, 0)
+                expr = mutate(b + T::make(add_a->b, make_zero(op->type)));
+            } else if (add_b && equal(add_b->a, a)) {
+                // op(f(x), f(x) + a) -> f(x) + op(a, 0)
+                expr = mutate(a + T::make(add_b->b, make_zero(op->type)));
+            } else if (sub_a && sub_b && equal(sub_a->a, sub_b->a)) {
+                // op(f(x) - a, f(x) - b) -> f(x) - op(a, b)
+                expr = mutate(sub_a->a - T::make(sub_a->b, sub_b->b));
+            } else if (sub_a && sub_b && equal(sub_a->b, sub_b->b)) {
+                // op(f(x) - a, g(x) - a) -> op(f(x), g(x)) - a
+                expr = mutate(T::make(sub_a->a, sub_b->a)) - sub_a->b;
+            } else if (sub_a && equal(sub_a->a, b)) {
+                // op(f(x) - a, f(x)) -> f(x) - op(a, 0)
+                expr = mutate(b - T::make(sub_a->b, make_zero(op->type)));
+            } else if (sub_b && equal(sub_b->a, a)) {
+                // op(f(x), f(x) - a) -> f(x) - op(a, 0)
+                expr = mutate(a - T::make(sub_b->b, make_zero(op->type)));
+            } else if (mul_a && mul_b && equal(mul_a->b, mul_b->b) && is_positive_const(mul_a->b)) {
+                // Positive a: min(f(x)*a, g(x)*a) -> min(f(x), g(x))*a
+                //             max(f(x)*a, g(x)*a) -> max(f(x), g(x))*a
+                expr = mutate(T::make(mul_a->a, mul_b->a)) * mul_a->b;
+            } else if (mul_a && mul_b && equal(mul_a->b, mul_b->b) && is_negative_const(mul_a->b)) {
+                if (is_min) {
+                    // Negative a: min(f(x)*a, g(x)*a) -> max(f(x), g(x))*a
+                    expr = mutate(Max::make(mul_a->a, mul_b->a)) * mul_a->b;
+                } else {
+                    // Negative a: max(f(x)*a, g(x)*a) -> min(f(x), g(x))*a
+                    expr = mutate(Min::make(mul_a->a, mul_b->a)) * mul_a->b;
+                }
+            } else {
+                fail(T::make(a, b));
+            }
         } else {
-            expr = T::make(a, b);
+            // Do some constant-folding
+            if (is_const(a) && is_const(b)) {
+                expr = simplify(T::make(a, b));
+            }
+        }
+
+        if (!expr.defined()) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                expr = op;
+            } else {
+                expr = T::make(a, b);
+            }
         }
     }
 
     void visit(const Min *op) {
-        visit_commutative_op(op);
+        visit_min_max_op(op, true);
     }
 
     void visit(const Max *op) {
-        visit_commutative_op(op);
+        visit_min_max_op(op, false);
+    }
+
+    template<typename T>
+    void visit_and_or_op(const T *op) {
+        bool old_uses_var = uses_var;
+        uses_var = false;
+        Expr a = mutate(op->a);
+        bool a_uses_var = uses_var;
+
+        uses_var = false;
+        Expr b = mutate(op->b);
+        bool b_uses_var = uses_var;
+        uses_var = old_uses_var || a_uses_var || b_uses_var;
+
+        if (b_uses_var && !a_uses_var) {
+            std::swap(a, b);
+            std::swap(a_uses_var, b_uses_var);
+        }
+
+        const T *t_a = a.as<T>();
+        const T *t_b = b.as<T>();
+
+        expr = Expr();
+
+        if (a_uses_var && !b_uses_var) {
+            if (t_a) {
+                // op(op(f(x), a), b) -> op(f(x), op(a, b))
+                expr = mutate(T::make(t_a->a, T::make(t_a->b, b)));
+            }
+        } else if (a_uses_var && b_uses_var) {
+            if (equal(a, b)) {
+                // op(f(x), f(x)) -> f(x)
+                expr = a;
+            } else if (t_a) {
+                // op(op(f(x), a), g(x)) -> op(op(f(x), g(x)), a)
+                expr = mutate(T::make(T::make(t_a->a, b), t_a->b));
+            } else if (t_b) {
+                // op(f(x), op(g(x), a)) -> op(op(f(x), g(x)), a)
+                expr = mutate(T::make(T::make(a, t_b->a), t_b->b));
+            } else {
+                fail(T::make(a, b));
+            }
+        } else {
+            // Do some constant-folding
+            if (is_const(a) && is_const(b)) {
+                expr = simplify(T::make(a, b));
+            }
+        }
+
+        if (!expr.defined()) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                expr = op;
+            } else {
+                expr = T::make(a, b);
+            }
+        }
     }
 
     void visit(const Or *op) {
-        visit_commutative_op(op);
+        visit_and_or_op(op);
     }
 
     void visit(const And *op) {
-        visit_commutative_op(op);
+        visit_and_or_op(op);
     }
 
     template<typename Cmp, typename Opp>
@@ -549,41 +678,6 @@ private:
 
 };
 
-Expr pos_inf = Variable::make(Int(32), "pos_inf");
-Expr neg_inf = Variable::make(Int(32), "neg_inf");
-
-Expr interval_max(Expr a, Expr b) {
-    if (a.same_as(pos_inf) || b.same_as(pos_inf)) {
-        return pos_inf;
-    } else if (a.same_as(neg_inf)) {
-        return b;
-    } else if (b.same_as(neg_inf)) {
-        return a;
-    } else {
-        return max(a, b);
-    }
-}
-
-Expr interval_min(Expr a, Expr b) {
-    if (a.same_as(neg_inf) || b.same_as(neg_inf)) {
-        return neg_inf;
-    } else if (a.same_as(pos_inf)) {
-        return b;
-    } else if (b.same_as(pos_inf)) {
-        return a;
-    } else {
-        return min(a, b);
-    }
-}
-
-Interval interval_intersection(Interval ia, Interval ib) {
-    return Interval(interval_max(ia.min, ib.min), interval_min(ia.max, ib.max));
-}
-
-Interval interval_union(Interval ia, Interval ib) {
-    return Interval(interval_min(ia.min, ib.min), interval_max(ia.max, ib.max));
-}
-
 class SolveForInterval : public IRVisitor {
 
     // The var we're solving for
@@ -609,10 +703,10 @@ class SolveForInterval : public IRVisitor {
     void fail() {
         if (outer) {
             // If we're looking for an outer bound, then return an infinite interval.
-            result = Interval(neg_inf, pos_inf);
+            result = Interval::everything();
         } else {
             // If we're looking for an inner bound, return an empty interval
-            result = Interval(pos_inf, neg_inf);
+            result = Interval::nothing();
         }
     }
 
@@ -620,12 +714,34 @@ class SolveForInterval : public IRVisitor {
         internal_assert(op->type.is_bool());
         if ((op->value && target) ||
             (!op->value && !target)) {
-            result = Interval(neg_inf, pos_inf);
+            result = Interval::everything();
         } else if ((!op->value && target) ||
                    (op->value && !target)) {
-            result = Interval(pos_inf, neg_inf);
+            result = Interval::nothing();
         } else {
             fail();
+        }
+    }
+
+    Interval interval_union(Interval ia, Interval ib) {
+        if (outer) {
+            // The regular union is already conservative in the right direction
+            return Interval::make_union(ia, ib);
+        } else {
+            // If we can prove there's overlap, we can still use the regular union
+            Interval intersection = Interval::make_intersection(ia, ib);
+            if (!intersection.is_empty() &&
+                (!intersection.is_bounded() ||
+                 can_prove(intersection.min <= intersection.max))) {
+                return Interval::make_union(ia, ib);
+            } else {
+                // Just take one of the two sides
+                if (ia.is_empty()) {
+                    return ib;
+                } else {
+                    return ia;
+                }
+            }
         }
     }
 
@@ -638,7 +754,7 @@ class SolveForInterval : public IRVisitor {
             debug(3) << "And intersecting: " << Expr(op) << "\n"
                      << "  " << ia.min << " " << ia.max << "\n"
                      << "  " << ib.min << " " << ib.max << "\n";
-            result = interval_intersection(ia, ib);
+            result = Interval::make_intersection(ia, ib);
         } else {
             debug(3) << "And union:" << Expr(op) << "\n"
                      << "  " << ia.min << " " << ia.max << "\n"
@@ -656,7 +772,7 @@ class SolveForInterval : public IRVisitor {
             debug(3) << "Or intersecting:" << Expr(op) << "\n"
                      << "  " << ia.min << " " << ia.max << "\n"
                      << "  " << ib.min << " " << ib.max << "\n";
-            result = interval_intersection(ia, ib);
+            result = Interval::make_intersection(ia, ib);
         } else {
             debug(3) << "Or union:" << Expr(op) << "\n"
                      << "  " << ia.min << " " << ia.max << "\n"
@@ -676,13 +792,18 @@ class SolveForInterval : public IRVisitor {
         // If it's a bool, we might need to know the intervals over
         // which it's definitely or definitely false. We'll do this
         // lazily and populate a map. See the Variable visitor.
-        scope.push(op->name, op->value);
+        bool uses_var = expr_uses_var(op->value, var) || expr_uses_vars(op->value, scope);
+        if (uses_var) {
+            scope.push(op->name, op->value);
+        }
         op->body.accept(this);
-        scope.pop(op->name);
-        if (result.min.defined() && expr_uses_var(result.min, op->name)) {
+        if (uses_var) {
+            scope.pop(op->name);
+        }
+        if (result.has_lower_bound() && expr_uses_var(result.min, op->name)) {
             result.min = Let::make(op->name, op->value, result.min);
         }
-        if (result.max.defined() && expr_uses_var(result.max, op->name)) {
+        if (result.has_upper_bound() && expr_uses_var(result.max, op->name)) {
             result.max = Let::make(op->name, op->value, result.max);
         }
     }
@@ -715,21 +836,35 @@ class SolveForInterval : public IRVisitor {
         cond.accept(this);
     }
 
-    // Is it legal to make the condition less frequently true -
-    // i.e. replace it with a sufficient condition (something that
-    // implies it).
-    bool can_tighten_condition() {
-        return !(outer ^ target);
-    }
+    // The LE and GE visitors, when applied to min and max nodes,
+    // expand into larger expressions that duplicate each term. This
+    // can create combinatorially large expressions to solve. The part
+    // of each expression that depends on the variable is fixed, there
+    // are just many different right-hand-sides. If we solve the
+    // expressions once for a symbolic RHS, we can cache and reuse
+    // that solution over and over, taming the exponential beast.
+    std::map<Expr, Interval, IRDeepCompare> cache_f, cache_t;
 
-    // Is it legal to make the condition more frequently true -
-    // i.e. replace it with a necessary condition (something it
-    // implies)
-    bool can_relax_condition() {
-        return outer ^ target;
+    // Solve an expression, or set result to the previously found solution.
+    void cached_solve(Expr cond) {
+        auto &cache = target ? cache_t : cache_f;
+        auto it = cache.find(cond);
+        if (it == cache.end()) {
+            // Cache miss
+            already_solved = false;
+            cond.accept(this);
+            already_solved = true;
+            cache[cond] = result;
+        } else {
+            // Cache hit
+            result = it->second;
+        }
     }
 
     void visit(const LE *le) {
+        static string b_name = unique_name('b');
+        static string c_name = unique_name('c');
+
         const Variable *v = le->a.as<Variable>();
         if (!already_solved) {
             Expr solved = solve_expression(le, var, scope);
@@ -742,32 +877,41 @@ class SolveForInterval : public IRVisitor {
             }
         } else if (v && v->name == var) {
             if (target) {
-                result = Interval(neg_inf, le->b);
+                result = Interval(Interval::neg_inf, le->b);
             } else {
-                result = Interval(le->b + 1, pos_inf);
+                result = Interval(le->b + 1, Interval::pos_inf);
             }
         } else if (const Max *max_a = le->a.as<Max>()) {
             // Rewrite (max(a, b) <= c) <==> (a <= c && (b <= c || a >= b))
-            // Also allow re-solving the new equations.
             Expr a = max_a->a, b = max_a->b, c = le->b;
-            Expr cond = simplify((a <= c) && (b <= c || a >= b));
-            if (equal(cond, le)) {
-                fail();
-            } else {
-                already_solved = false;
-                cond.accept(this);
-                already_solved = true;
+
+            // To avoid exponential behaviour, make b and c abstract
+            // variables, and see if we've solved something like this
+            // before...
+            Expr b_var = Variable::make(b.type(), b_name);
+            Expr c_var = Variable::make(c.type(), c_name);
+            cached_solve((a <= c_var) && (b_var <= c_var || a >= b_var));
+            if (result.has_upper_bound()) {
+                result.min = Let::make(b_name, b, result.min);
+                result.min = Let::make(c_name, c, result.min);
+            }
+            if (result.has_upper_bound()) {
+                result.max = Let::make(b_name, b, result.max);
+                result.max = Let::make(c_name, c, result.max);
             }
         } else if (const Min *min_a = le->a.as<Min>()) {
             // Rewrite (min(a, b) <= c) <==> (a <= c || (b <= c && a >= b))
             Expr a = min_a->a, b = min_a->b, c = le->b;
-            Expr cond = simplify((a <= c) || (b <= c && a >= b));
-            if (equal(cond, le)) {
-                fail();
-            } else {
-                already_solved = false;
-                cond.accept(this);
-                already_solved = true;
+            Expr b_var = Variable::make(b.type(), b_name);
+            Expr c_var = Variable::make(c.type(), c_name);
+            cached_solve((a <= c_var) || (b_var <= c_var && a >= b_var));
+            if (result.has_lower_bound()) {
+                result.min = Let::make(b_name, b, result.min);
+                result.min = Let::make(c_name, c, result.min);
+            }
+            if (result.has_upper_bound()) {
+                result.max = Let::make(b_name, b, result.max);
+                result.max = Let::make(c_name, c, result.max);
             }
         } else {
             fail();
@@ -775,6 +919,9 @@ class SolveForInterval : public IRVisitor {
     }
 
     void visit(const GE *ge) {
+        static string b_name = unique_name('b');
+        static string c_name = unique_name('c');
+
         const Variable *v = ge->a.as<Variable>();
         if (!already_solved) {
             Expr solved = solve_expression(ge, var, scope);
@@ -787,25 +934,39 @@ class SolveForInterval : public IRVisitor {
             }
         } else if (v && v->name == var) {
             if (target) {
-                result = Interval(ge->b, pos_inf);
+                result = Interval(ge->b, Interval::pos_inf);
             } else {
-                result = Interval(neg_inf, ge->b - 1);
+                result = Interval(Interval::neg_inf, ge->b - 1);
             }
         } else if (const Max *max_a = ge->a.as<Max>()) {
             // Rewrite (max(a, b) >= c) <==> (a >= c || (b >= c && a <= b))
             // Also allow re-solving the new equations.
             Expr a = max_a->a, b = max_a->b, c = ge->b;
-            Expr cond = simplify((a >= c) || (b >= c && a <= b));
-            already_solved = false;
-            cond.accept(this);
-            already_solved = true;
+            Expr b_var = Variable::make(b.type(), b_name);
+            Expr c_var = Variable::make(c.type(), c_name);
+            cached_solve((a >= c_var) || (b_var >= c_var && a <= b_var));
+            if (result.has_lower_bound()) {
+                result.min = Let::make(b_name, b, result.min);
+                result.min = Let::make(c_name, c, result.min);
+            }
+            if (result.has_upper_bound()) {
+                result.max = Let::make(b_name, b, result.max);
+                result.max = Let::make(c_name, c, result.max);
+            }
         } else if (const Min *min_a = ge->a.as<Min>()) {
             // Rewrite (min(a, b) >= c) <==> (a >= c && (b >= c || a <= b))
             Expr a = min_a->a, b = min_a->b, c = ge->b;
-            Expr cond = simplify((a >= c) && (b >= c || a <= b));
-            already_solved = false;
-            cond.accept(this);
-            already_solved = true;
+            Expr b_var = Variable::make(b.type(), b_name);
+            Expr c_var = Variable::make(c.type(), c_name);
+            cached_solve((a >= c_var) && (b_var >= c_var || a <= b_var));
+            if (result.has_lower_bound()) {
+                result.min = Let::make(b_name, b, result.min);
+                result.min = Let::make(c_name, c, result.min);
+            }
+            if (result.has_upper_bound()) {
+                result.max = Let::make(b_name, b, result.max);
+                result.max = Let::make(c_name, c, result.max);
+            }
         } else {
             fail();
         }
@@ -875,9 +1036,9 @@ class AndConditionOverDomain : public IRMutator {
 
     Interval get_bounds(Expr a) {
         Interval bounds = bounds_of_expr_in_scope(a, scope);
-        if (!bounds.min.same_as(bounds.max) ||
-            !bounds.min.defined() ||
-            !bounds.max.defined()) {
+        if (!bounds.is_single_point() ||
+            !bounds.has_lower_bound() ||
+            !bounds.has_upper_bound()) {
             relaxed = true;
         }
         return bounds;
@@ -917,7 +1078,10 @@ class AndConditionOverDomain : public IRMutator {
             a = make_smaller(op->a);
             b = make_bigger(op->b);
         }
-        if (!a.defined() || !b.defined()) {
+        if (a.same_as(Interval::pos_inf) ||
+            b.same_as(Interval::pos_inf) ||
+            a.same_as(Interval::neg_inf) ||
+            b.same_as(Interval::neg_inf)) {
             fail();
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
@@ -949,11 +1113,11 @@ class AndConditionOverDomain : public IRMutator {
             // Rewrite to the difference is zero.
             Expr delta = simplify(op->a - op->b);
             Interval i = get_bounds(delta);
-            if (!i.min.defined() || !i.max.defined()) {
+            if (!i.has_lower_bound() || !i.has_upper_bound()) {
                 fail();
                 return;
             }
-            if (is_one(simplify(i.min == i.max))) {
+            if (can_prove(i.min == i.max)) {
                 // The expression does not vary, so an equivalent condition is:
                 expr = (i.min == 0);
             } else {
@@ -982,7 +1146,7 @@ class AndConditionOverDomain : public IRMutator {
         if (scope.contains(op->name) && op->type.is_bool()) {
             Interval i = scope.get(op->name);
             if (!flipped) {
-                if (interval_has_lower_bound(i) && i.min.defined()) {
+                if (i.has_lower_bound()) {
                     // Sufficient condition: if this boolean var
                     // could ever be false, then return false.
                     expr = i.min;
@@ -990,7 +1154,7 @@ class AndConditionOverDomain : public IRMutator {
                     expr = const_false();
                 }
             } else {
-                if (interval_has_upper_bound(i) && i.max.defined()) {
+                if (i.has_upper_bound()) {
                     // Necessary condition: if this boolean var could
                     // ever be true, return true.
                     expr = i.max;
@@ -1029,20 +1193,20 @@ class AndConditionOverDomain : public IRMutator {
         }
 
         if (!value_bounds.max.same_as(op->value) || !value_bounds.min.same_as(op->value)) {
-            string min_name = unique_name(op->name + ".min", false);
-            string max_name = unique_name(op->name + ".max", false);
+            string min_name = unique_name(op->name + ".min");
+            string max_name = unique_name(op->name + ".max");
             Expr min_var, max_var;
-            if (!value_bounds.min.defined() ||
+            if (!value_bounds.has_lower_bound() ||
                 (is_const(value_bounds.min) && value_bounds.min.as<Variable>())) {
                 min_var = value_bounds.min;
-                value_bounds.min = Expr();
+                value_bounds.min = Interval::neg_inf;
             } else {
                 min_var = Variable::make(value_bounds.min.type(), min_name);
             }
-            if (!value_bounds.max.defined() ||
+            if (!value_bounds.has_upper_bound() ||
                 (is_const(value_bounds.max) && value_bounds.max.as<Variable>())) {
                 max_var = value_bounds.max;
-                value_bounds.max = Expr();
+                value_bounds.max = Interval::pos_inf;
             } else {
                 max_var = Variable::make(value_bounds.max.type(), max_name);
             }
@@ -1054,10 +1218,10 @@ class AndConditionOverDomain : public IRMutator {
             if (expr_uses_var(expr, op->name)) {
                 expr = Let::make(op->name, op->value, expr);
             }
-            if (value_bounds.min.defined() && expr_uses_var(expr, min_name)) {
+            if (value_bounds.has_lower_bound() && expr_uses_var(expr, min_name)) {
                 expr = Let::make(min_name, value_bounds.min, expr);
             }
-            if (value_bounds.max.defined() && expr_uses_var(expr, max_name)) {
+            if (value_bounds.has_upper_bound() && expr_uses_var(expr, max_name)) {
                 expr = Let::make(max_name, value_bounds.max, expr);
             }
         } else {
@@ -1070,6 +1234,19 @@ class AndConditionOverDomain : public IRMutator {
                 expr = Let::make(op->name, op->value, body);
             }
         }
+    }
+
+    // Other unhandled sources of bools
+    void visit(const Cast *op) {
+        fail();
+    }
+
+    void visit(const Load *op) {
+        fail();
+    }
+
+    void visit(const Call *op) {
+        fail();
     }
 
 public:
@@ -1105,10 +1282,11 @@ Interval solve_for_inner_interval(Expr c, const std::string &var) {
     c.accept(&s);
     internal_assert(s.result.min.defined() && s.result.max.defined())
         << "solve_for_inner_interval returned undefined Exprs: " << c << "\n";
-    if (is_one(simplify(s.result.min > s.result.max))) {
-        // Empty interval
-        s.result.min = pos_inf;
-        s.result.max = neg_inf;
+    s.result.min = simplify(common_subexpression_elimination(s.result.min));
+    s.result.max = simplify(common_subexpression_elimination(s.result.max));
+    if (s.result.is_bounded() &&
+        can_prove(s.result.min > s.result.max)) {
+        return Interval::nothing();
     }
     return s.result;
 }
@@ -1118,28 +1296,13 @@ Interval solve_for_outer_interval(Expr c, const std::string &var) {
     c.accept(&s);
     internal_assert(s.result.min.defined() && s.result.max.defined())
         << "solve_for_outer_interval returned undefined Exprs: " << c << "\n";
-    if (is_one(simplify(s.result.min > s.result.max))) {
-        // Empty interval
-        s.result.min = pos_inf;
-        s.result.max = neg_inf;
+    s.result.min = simplify(common_subexpression_elimination(s.result.min));
+    s.result.max = simplify(common_subexpression_elimination(s.result.max));
+    if (s.result.is_bounded() &&
+        can_prove(s.result.min > s.result.max)) {
+        return Interval::nothing();
     }
     return s.result;
-}
-
-bool interval_has_lower_bound(const Interval &i) {
-    return !i.min.same_as(neg_inf);
-}
-
-bool interval_has_upper_bound(const Interval &i) {
-    return !i.max.same_as(pos_inf);
-}
-
-bool interval_is_empty(const Interval &i) {
-    return i.min.same_as(pos_inf) || i.max.same_as(neg_inf);
-}
-
-bool interval_is_everything(const Interval &i) {
-    return i.min.same_as(neg_inf) && i.max.same_as(pos_inf);
 }
 
 Expr and_condition_over_domain(Expr e, const Scope<Interval> &varying) {
@@ -1205,6 +1368,8 @@ void solve_test() {
     check_solve(min(5, x), min(x, 5));
     check_solve(max(5, (5+x)*y), max(x*y + 5*y, 5));
     check_solve(5*y + 3*x == 2, ((x == ((2 - (5*y))/3)) && (((2 - (5*y)) % 3) == 0)));
+    check_solve(min(min(z, x), min(x, y)), min(x, min(y, z)));
+    check_solve(min(x + y, x + 5), x + min(y, 5));
 
     // A let statement
     check_solve(Let::make("z", 3 + 5*x, y + z < 8),
@@ -1269,8 +1434,8 @@ void solve_test() {
     check_solve(4 > y*x, x*y < 4);
 
     // Now test solving for an interval
-    check_inner_interval(x > 0, 1, pos_inf);
-    check_inner_interval(x < 100, neg_inf, 99);
+    check_inner_interval(x > 0, 1, Interval::pos_inf);
+    check_inner_interval(x < 100, Interval::neg_inf, 99);
     check_outer_interval(x > 0 && x < 100, 1, 99);
     check_inner_interval(x > 0 && x < 100, 1, 99);
 
@@ -1279,7 +1444,7 @@ void solve_test() {
     check_outer_interval(Let::make("c", x > 0, c && x < 100), 1, 99);
 
     check_outer_interval((x >= 10 && x <= 90) && sin(x) > 0.5f, 10, 90);
-    check_inner_interval((x >= 10 && x <= 90) && sin(x) > 0.6f, pos_inf, neg_inf);
+    check_inner_interval((x >= 10 && x <= 90) && sin(x) > 0.6f, Interval::pos_inf, Interval::neg_inf);
 
     check_inner_interval(x == 10, 10, 10);
     check_outer_interval(x == 10, 10, 10);
@@ -1287,14 +1452,14 @@ void solve_test() {
     check_inner_interval(!(x != 10), 10, 10);
     check_outer_interval(!(x != 10), 10, 10);
 
-    check_inner_interval(3*x + 4 < 27, neg_inf, 7);
-    check_outer_interval(3*x + 4 < 27, neg_inf, 7);
+    check_inner_interval(3*x + 4 < 27, Interval::neg_inf, 7);
+    check_outer_interval(3*x + 4 < 27, Interval::neg_inf, 7);
 
     check_inner_interval(min(x, y) > 17, 18, y);
-    check_outer_interval(min(x, y) > 17, 18, pos_inf);
+    check_outer_interval(min(x, y) > 17, 18, Interval::pos_inf);
 
-    check_inner_interval(x/5 < 17, neg_inf, 84);
-    check_outer_interval(x/5 < 17, neg_inf, 84);
+    check_inner_interval(x/5 < 17, Interval::neg_inf, 84);
+    check_outer_interval(x/5 < 17, Interval::neg_inf, 84);
 
     // Test anding a condition over a domain
     check_and_condition(x > 0, const_true(), Interval(1, y));
@@ -1320,6 +1485,37 @@ void solve_test() {
     check_and_condition((x == 5) && (y != 3), y != 3, Interval(5, 5));
     check_and_condition((x != 0) && (y != 0), const_false(), Interval(-10, 10));
     check_and_condition((x != 0) && (y != 0), y != 0, Interval(-20, -10));
+
+    {
+        // This case used to break due to signed integer overflow in
+        // the simplifier.
+        Expr a16 = Load::make(Int(16), "a", {x}, Buffer(), Parameter());
+        Expr b16 = Load::make(Int(16), "b", {x}, Buffer(), Parameter());
+        Expr lhs = pow(cast<int32_t>(a16), 2) + pow(cast<int32_t>(b16), 2);
+
+        Scope<Interval> s;
+        s.push("x", Interval(-10, 10));
+        Expr cond = and_condition_over_domain(lhs < 0, s);
+        internal_assert(!is_one(simplify(cond)));
+    }
+
+    {
+        // This cause use to cause infinite recursion:
+        Expr t = Variable::make(Int(32), "t");
+        Expr test = (x <= min(max((y - min(((z*x) + t), t)), 1), 0));
+        Interval result = solve_for_outer_interval(test, "z");
+    }
+
+    {
+        // This case caused exponential behavior
+        Expr t = Variable::make(Int(32), "t");
+        for (int i = 0; i < 50; i++) {
+            t = min(t, Variable::make(Int(32), unique_name('v')));
+            t = max(t, Variable::make(Int(32), unique_name('v')));
+        }
+        solve_for_outer_interval(t <= 5, "t");
+        solve_for_inner_interval(t <= 5, "t");
+    }
 
     debug(0) << "Solve test passed\n";
 

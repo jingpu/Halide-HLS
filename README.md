@@ -1,7 +1,7 @@
 # Halide to CPU/FPGA
 ============
 
-The current compiler is based on Halide release 2016/04/27 (https://github.com/halide/Halide/releases).
+The current compiler is based on Halide release 2016/08/04 (https://github.com/halide/Halide/releases).
 
 Intructions for building examples can be found at the wiki page:
 https://github.com/jingpu/Halide-HLS/wiki

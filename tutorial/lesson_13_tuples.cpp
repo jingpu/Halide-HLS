@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
     single_valued(x, y) = x + y;
 
     // One way to write a Func that returns a collection of values is
-    // to add an additional dimension which indexes that
+    // to add an additional dimension that indexes that
     // collection. This is how we typically deal with color. For
     // example, the Func below represents a collection of three values
     // for every x, y coordinate indexed by c.
@@ -76,9 +76,9 @@ int main(int argc, char **argv) {
 
     // A third alternative is to define a Func as evaluating to a
     // Tuple instead of an Expr. A Tuple is a fixed-size collection of
-    // Exprs which may have different type. The following function
-    // evaluates to an integer value (x+y), and a floating point value
-    // (sin(x*y)).
+    // Exprs. Each Expr in a Tuple may have a different type. The
+    // following function evaluates to an integer value (x+y), and a
+    // floating point value (sin(x*y)).
     Func multi_valued;
     multi_valued(x, y) = Tuple(x + y, sin(x * y));
 
@@ -144,8 +144,8 @@ int main(int argc, char **argv) {
         input_func(x) = sin(x);
         Image<float> input = input_func.realize(100);
 
-        // Then we define a 2-valued Tuple which tracks the maximum
-        // value and its index.
+        // Then we define a 2-valued Tuple which tracks the index of
+        // the maximum value and the value itself.
         Func arg_max;
 
         // Pure definition.
@@ -209,8 +209,7 @@ int main(int argc, char **argv) {
             Complex(Expr r, Expr i) : real(r), imag(i) {}
 
             // Construct from a call to a Func by treating it as a Tuple
-            Complex(FuncRefExpr t) : Complex(Tuple(t)) {}
-            Complex(FuncRefVar t) : Complex(Tuple(t)) {}
+            Complex(FuncRef t) : Complex(Tuple(t)) {}
 
             // Convert to a Tuple
             operator Tuple() const {

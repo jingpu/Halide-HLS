@@ -1,4 +1,4 @@
-#if LLVM_VERSION < 36 || WITH_NATIVE_CLIENT
+#if LLVM_VERSION < 36
 #include "BitWriter_3_2.35/ReaderWriter_3_2.h"
 #else
 #include "BitWriter_3_2/ReaderWriter_3_2.h"
@@ -164,7 +164,7 @@ void CodeGen_Renderscript_Dev::add_kernel(Stmt stmt, const std::string &kernel_n
         debug(2) << "  adding argument type at " << i << ": "
                  << bounds_names.names[i] << "\n";
         if (!bounds_names.names[i].empty()) {
-            arg_types.push_back(i32);
+            arg_types.push_back(i32_t);
         }
     }
 
@@ -271,18 +271,18 @@ void CodeGen_Renderscript_Dev::init_module() {
     NamedMDNode *meta_llvm_module_flags = module->getOrInsertNamedMetadata("llvm.module.flags");
     {
         LLVMMDNodeArgumentType md_args[] = {
-            value_as_metadata_type(ConstantInt::get(i32, 1)),
+            value_as_metadata_type(ConstantInt::get(i32_t, 1)),
             MDString::get(*context, "wchar_size"),
-            value_as_metadata_type(ConstantInt::get(i32, 4))
+            value_as_metadata_type(ConstantInt::get(i32_t, 4))
         };
         meta_llvm_module_flags->addOperand(MDNode::get(*context, md_args));
     }
 
     {
         LLVMMDNodeArgumentType md_args[] = {
-            value_as_metadata_type(ConstantInt::get(i32, 1)),
+            value_as_metadata_type(ConstantInt::get(i32_t, 1)),
             MDString::get(*context, "min_enum_size"),
-            value_as_metadata_type(ConstantInt::get(i32, 4))
+            value_as_metadata_type(ConstantInt::get(i32_t, 4))
         };
         meta_llvm_module_flags->addOperand(MDNode::get(*context, md_args));
     }
@@ -559,9 +559,6 @@ static inline size_t writeAndroidBitcodeWrapper(AndroidBitcodeWrapper *wrapper,
 }
 
 vector<char> CodeGen_Renderscript_Dev::compile_to_src() {
-
-    // Generic llvm optimizations on the module.
-    optimize_module();
 
     debug(2) << "CodeGen_Renderscript_Dev::compile_to_src resultant module:\n";
     if (debug::debug_level >= 2) {

@@ -5,37 +5,6 @@
 namespace Halide {
 namespace Internal {
 
-namespace {
-
-const IntImm *make_immortal_int(int x) {
-    IntImm *i = new IntImm;
-    i->ref_count.increment();
-    i->type = Int(32);
-    i->value = x;
-    return i;
-}
-
-}
-
-const IntImm *IntImm::small_int_cache[] = {make_immortal_int(-8),
-                                           make_immortal_int(-7),
-                                           make_immortal_int(-6),
-                                           make_immortal_int(-5),
-                                           make_immortal_int(-4),
-                                           make_immortal_int(-3),
-                                           make_immortal_int(-2),
-                                           make_immortal_int(-1),
-                                           make_immortal_int(0),
-                                           make_immortal_int(1),
-                                           make_immortal_int(2),
-                                           make_immortal_int(3),
-                                           make_immortal_int(4),
-                                           make_immortal_int(5),
-                                           make_immortal_int(6),
-                                           make_immortal_int(7),
-                                           make_immortal_int(8)};
-
-
 Expr Cast::make(Type t, Expr v) {
     internal_assert(v.defined()) << "Cast of undefined\n";
     internal_assert(t.lanes() == v.type().lanes()) << "Cast may not change vector widths\n";
@@ -478,12 +447,31 @@ Stmt Realize::make(const std::string &name, const std::vector<Type> &types, cons
 
 Stmt Block::make(Stmt first, Stmt rest) {
     internal_assert(first.defined()) << "Block of undefined\n";
-    // rest is allowed to be null
+    internal_assert(rest.defined()) << "Block of undefined\n";
 
     Block *node = new Block;
-    node->first = first;
-    node->rest = rest;
+
+    if (const Block *b = first.as<Block>()) {
+        // Use a canonical block nesting order
+        node->first = b->first;
+        node->rest  = Block::make(b->rest, rest);
+    } else {
+        node->first = first;
+        node->rest = rest;
+    }
+
     return node;
+}
+
+Stmt Block::make(const std::vector<Stmt> &stmts) {
+    if (stmts.empty()) {
+        return Stmt();
+    }
+    Stmt result = stmts.back();
+    for (size_t i = stmts.size()-1; i > 0; i--) {
+        result = Block::make(stmts[i-1], result);
+    }
+    return result;
 }
 
 Stmt IfThenElse::make(Expr condition, Stmt then_case, Stmt else_case) {
@@ -506,22 +494,15 @@ Stmt Evaluate::make(Expr v) {
 }
 
 Expr Call::make(Type type, std::string name, const std::vector<Expr> &args, CallType call_type,
-                Function func, int value_index,
+                IntrusivePtr<FunctionContents> func, int value_index,
                 Buffer image, Parameter param) {
     for (size_t i = 0; i < args.size(); i++) {
         internal_assert(args[i].defined()) << "Call of undefined\n";
     }
     if (call_type == Halide) {
-        internal_assert(value_index >= 0 &&
-                        value_index < func.outputs())
-            << "Value index out of range in call to halide function\n";
-        internal_assert((func.has_pure_definition() || func.has_extern_definition()))
-            << "Call to undefined halide function\n";
-        internal_assert((int)args.size() <= func.dimensions())
-            << "Call node with too many arguments.\n";
         for (size_t i = 0; i < args.size(); i++) {
             internal_assert(args[i].type() == Int(32))
-                << "Args to call to halide function must be type Int(32)\n";
+            << "Args to call to halide function must be type Int(32)\n";
         }
     } else if (call_type == Image) {
         internal_assert((param.defined() || image.defined()))
@@ -596,50 +577,10 @@ template<> void StmtNode<Block>::accept(IRVisitor *v) const { v->visit((const Bl
 template<> void StmtNode<IfThenElse>::accept(IRVisitor *v) const { v->visit((const IfThenElse *)this); }
 template<> void StmtNode<Evaluate>::accept(IRVisitor *v) const { v->visit((const Evaluate *)this); }
 
-template<> IRNodeType ExprNode<IntImm>::_type_info = {};
-template<> IRNodeType ExprNode<UIntImm>::_type_info = {};
-template<> IRNodeType ExprNode<FloatImm>::_type_info = {};
-template<> IRNodeType ExprNode<StringImm>::_type_info = {};
-template<> IRNodeType ExprNode<Cast>::_type_info = {};
-template<> IRNodeType ExprNode<Variable>::_type_info = {};
-template<> IRNodeType ExprNode<Add>::_type_info = {};
-template<> IRNodeType ExprNode<Sub>::_type_info = {};
-template<> IRNodeType ExprNode<Mul>::_type_info = {};
-template<> IRNodeType ExprNode<Div>::_type_info = {};
-template<> IRNodeType ExprNode<Mod>::_type_info = {};
-template<> IRNodeType ExprNode<Min>::_type_info = {};
-template<> IRNodeType ExprNode<Max>::_type_info = {};
-template<> IRNodeType ExprNode<EQ>::_type_info = {};
-template<> IRNodeType ExprNode<NE>::_type_info = {};
-template<> IRNodeType ExprNode<LT>::_type_info = {};
-template<> IRNodeType ExprNode<LE>::_type_info = {};
-template<> IRNodeType ExprNode<GT>::_type_info = {};
-template<> IRNodeType ExprNode<GE>::_type_info = {};
-template<> IRNodeType ExprNode<And>::_type_info = {};
-template<> IRNodeType ExprNode<Or>::_type_info = {};
-template<> IRNodeType ExprNode<Not>::_type_info = {};
-template<> IRNodeType ExprNode<Select>::_type_info = {};
-template<> IRNodeType ExprNode<Load>::_type_info = {};
-template<> IRNodeType ExprNode<Ramp>::_type_info = {};
-template<> IRNodeType ExprNode<Broadcast>::_type_info = {};
-template<> IRNodeType ExprNode<Call>::_type_info = {};
-template<> IRNodeType ExprNode<Let>::_type_info = {};
-template<> IRNodeType StmtNode<LetStmt>::_type_info = {};
-template<> IRNodeType StmtNode<AssertStmt>::_type_info = {};
-template<> IRNodeType StmtNode<ProducerConsumer>::_type_info = {};
-template<> IRNodeType StmtNode<For>::_type_info = {};
-template<> IRNodeType StmtNode<Store>::_type_info = {};
-template<> IRNodeType StmtNode<Provide>::_type_info = {};
-template<> IRNodeType StmtNode<Allocate>::_type_info = {};
-template<> IRNodeType StmtNode<Free>::_type_info = {};
-template<> IRNodeType StmtNode<Realize>::_type_info = {};
-template<> IRNodeType StmtNode<Block>::_type_info = {};
-template<> IRNodeType StmtNode<IfThenElse>::_type_info = {};
-template<> IRNodeType StmtNode<Evaluate>::_type_info = {};
-
 Call::ConstString Call::debug_to_file = "debug_to_file";
 Call::ConstString Call::shuffle_vector = "shuffle_vector";
 Call::ConstString Call::interleave_vectors = "interleave_vectors";
+Call::ConstString Call::concat_vectors = "concat_vectors";
 Call::ConstString Call::reinterpret = "reinterpret";
 Call::ConstString Call::bitwise_and = "bitwise_and";
 Call::ConstString Call::bitwise_not = "bitwise_not";
@@ -679,12 +620,13 @@ Call::ConstString Call::stringify = "stringify";
 Call::ConstString Call::memoize_expr = "memoize_expr";
 Call::ConstString Call::copy_memory = "copy_memory";
 Call::ConstString Call::likely = "likely";
-Call::ConstString Call::make_int64 = "make_int64";
-Call::ConstString Call::make_float64 = "make_float64";
+Call::ConstString Call::likely_if_innermost = "likely_if_innermost";
 Call::ConstString Call::register_destructor = "register_destructor";
 Call::ConstString Call::div_round_to_zero = "div_round_to_zero";
 Call::ConstString Call::mod_round_to_zero = "mod_round_to_zero";
-
+Call::ConstString Call::slice_vector = "slice_vector";
+Call::ConstString Call::call_cached_indirect_function = "call_cached_indirect_function";
+Call::ConstString Call::signed_integer_overflow = "signed_integer_overflow";
 
 }
 }

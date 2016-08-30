@@ -3,6 +3,7 @@
 #include "IREquality.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
+#include "IRMutator.h"
 #include "Reduction.h"
 #include "Simplify.h"
 
@@ -11,19 +12,9 @@ namespace Internal {
 
 namespace {
 
-/* Split AND predicate into vector of ANDs. */
-void split_predicate_helper(Expr pred, std::vector<Expr> &result) {
-    if (const And *a = pred.as<And>()) {
-        split_predicate_helper(a->a, result);
-        split_predicate_helper(a->b, result);
-    } else if (!is_one(pred)) {
-        result.push_back(pred);
-    }
-}
-
 void check(Expr pred, std::vector<Expr> &expected) {
     std::vector<Expr> result;
-    split_predicate_helper(pred, result);
+    split_into_ands(pred, result);
     bool is_equal = true;
 
     if (result.size() != expected.size()) {
@@ -104,7 +95,38 @@ struct ReductionDomainContents {
     Expr predicate;
     bool frozen;
 
-    ReductionDomainContents() : predicate(const_true()), frozen(false) {}
+    ReductionDomainContents() : predicate(const_true()), frozen(false) {
+    }
+
+    // Pass an IRVisitor through to all Exprs referenced in the ReductionDomainContents
+    void accept(IRVisitor *visitor) {
+        for (const ReductionVariable &rvar : domain) {
+            if (rvar.min.defined()) {
+                rvar.min.accept(visitor);
+            }
+            if (rvar.extent.defined()) {
+                rvar.extent.accept(visitor);
+            }
+        }
+        if (predicate.defined()) {
+            predicate.accept(visitor);
+        }
+    }
+
+    // Pass an IRMutator through to all Exprs referenced in the ReductionDomainContents
+    void mutate(IRMutator *mutator) {
+        for (ReductionVariable &rvar : domain) {
+            if (rvar.min.defined()) {
+                rvar.min = mutator->mutate(rvar.min);
+            }
+            if (rvar.extent.defined()) {
+                rvar.extent = mutator->mutate(rvar.extent);
+            }
+        }
+        if (predicate.defined()) {
+            predicate = mutator->mutate(predicate);
+        }
+    }
 };
 
 template<>
@@ -115,33 +137,84 @@ EXPORT void destroy<Halide::Internal::ReductionDomainContents>(const ReductionDo
 
 ReductionDomain::ReductionDomain(const std::vector<ReductionVariable> &domain) :
     contents(new ReductionDomainContents) {
-    contents.ptr->domain = domain;
+    contents->domain = domain;
+}
+
+ReductionDomain ReductionDomain::deep_copy() const {
+    if (!contents.defined()) {
+        return ReductionDomain();
+    }
+    ReductionDomain copy(contents->domain);
+    copy.contents->predicate = contents->predicate;
+    copy.contents->frozen = contents->frozen;
+    return copy;
 }
 
 const std::vector<ReductionVariable> &ReductionDomain::domain() const {
-    return contents.ptr->domain;
+    return contents->domain;
+}
+
+namespace {
+class DropSelfReferences : public IRMutator {
+    using IRMutator::visit;
+
+    void visit(const Variable *op) {
+        if (op->reduction_domain.defined()) {
+            user_assert(op->reduction_domain.same_as(domain))
+                << "An RDom's predicate may only refer to its own RVars, "
+                << " not the RVars of some other RDom. "
+                << "Cannot set the predicate to : " << predicate << "\n";
+            expr = Variable::make(op->type, op->name);
+        } else {
+            expr = op;
+        }
+    }
+public:
+    Expr predicate;
+    const ReductionDomain &domain;
+    DropSelfReferences(Expr p, const ReductionDomain &d) :
+        predicate(p), domain(d) {}
+};
+}
+
+void ReductionDomain::set_predicate(Expr p) {
+    // The predicate can refer back to the RDom. We need to break
+    // those cycles to prevent a leak.
+    contents->predicate = DropSelfReferences(p, *this).mutate(p);
 }
 
 void ReductionDomain::where(Expr predicate) {
-    contents.ptr->predicate = simplify(contents.ptr->predicate && predicate);
+    set_predicate(simplify(contents->predicate && predicate));
 }
 
 Expr ReductionDomain::predicate() const {
-    return contents.ptr->predicate;
+    return contents->predicate;
 }
 
 std::vector<Expr> ReductionDomain::split_predicate() const {
     std::vector<Expr> predicates;
-    split_predicate_helper(contents.ptr->predicate, predicates);
+    split_into_ands(contents->predicate, predicates);
     return predicates;
 }
 
 void ReductionDomain::freeze() {
-    contents.ptr->frozen = true;
+    contents->frozen = true;
 }
 
 bool ReductionDomain::frozen() const {
-    return contents.ptr->frozen;
+    return contents->frozen;
+}
+
+void ReductionDomain::accept(IRVisitor *visitor) const {
+    if (contents.defined()) {
+        contents->accept(visitor);
+    }
+}
+
+void ReductionDomain::mutate(IRMutator *mutator) {
+    if (contents.defined()) {
+        contents->mutate(mutator);
+    }
 }
 
 }

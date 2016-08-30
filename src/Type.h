@@ -142,20 +142,69 @@ template<> struct halide_c_type_to_name<float> { static const bool known_type = 
 template<> struct halide_c_type_to_name<double> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "double"}; } };
 template<> struct halide_c_type_to_name<struct buffer_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Struct,  "buffer_t"}; } };
 
+// You can make arbitrary user-defined types be "Known" by adding your own specialization of 
+// halide_c_type_to_name in your code; this is useful for making Param<> arguments for Generators
+// type safe. e.g.,
+//
+//    struct MyFunStruct { ... };
+//
+//    ...
+//
+//    template<> 
+//    struct halide_c_type_to_name<struct MyFunStruct> { 
+//      static const bool known_type = true; 
+//      static halide_cplusplus_type_name name() { 
+//        return { halide_cplusplus_type_name::Struct,  "MyFunStruct"}; 
+//      } 
+//    };
+//
+//    ...
+//
+//    class MyGenerator : public Generator<MyGenerator> {
+//       Param<const MyFunStruct *> my_struct_ptr;
+//       ...
+//    };
+
+// Default case (should be only Unknown types, since we specialize for Known types below).
+// We require that all unknown types be pointers, and translate them all to void*
+// (preserving const-ness and volatile-ness).
 template<typename T, bool KnownType>
 struct halide_internal_handle_traits {
-    static const halide_handle_cplusplus_type *type_info(bool is_ptr, halide_handle_cplusplus_type::ReferenceType ref_type) { return nullptr; }
+    static const halide_handle_cplusplus_type *type_info(bool is_ptr, 
+            halide_handle_cplusplus_type::ReferenceType ref_type) { 
+        static_assert(!KnownType, "Only unknown types handled here");
+        internal_assert(is_ptr) << "Unknown types must be pointers";
+        internal_assert(ref_type == halide_handle_cplusplus_type::NotReference) << "Unknown types must not be references";
+        static const halide_handle_cplusplus_type the_info{
+            {halide_cplusplus_type_name::Simple, "void"},
+            {}, 
+            {},
+            { 
+                (uint8_t)(halide_handle_cplusplus_type::Pointer |
+                    (std::is_const<T>::value ? halide_handle_cplusplus_type::Const : 0) |
+                    (std::is_volatile<T>::value ? halide_handle_cplusplus_type::Volatile : 0))
+            },
+            halide_handle_cplusplus_type::NotReference
+        };
+        return &the_info;
+    }
 };
 
+// Known types
 template<typename T>
 struct halide_internal_handle_traits<T, true> {
     static const halide_handle_cplusplus_type *type_info(bool is_ptr, halide_handle_cplusplus_type::ReferenceType ref_type) {
         static const halide_handle_cplusplus_type the_info{
-            halide_c_type_to_name<typename std::remove_cv<T>::type>::name(), {}, {},
-            { (uint8_t)((is_ptr ? halide_handle_cplusplus_type::Pointer : 0) |
-              (std::is_const<T>::value ? halide_handle_cplusplus_type::Const : 0) |
-              (std::is_volatile<T>::value ? halide_handle_cplusplus_type::Volatile : 0))},
-            ref_type};
+            halide_c_type_to_name<typename std::remove_cv<T>::type>::name(), 
+            {}, 
+            {},
+            { 
+                (uint8_t)((is_ptr ? halide_handle_cplusplus_type::Pointer : 0) |
+                    (std::is_const<T>::value ? halide_handle_cplusplus_type::Const : 0) |
+                    (std::is_volatile<T>::value ? halide_handle_cplusplus_type::Volatile : 0))
+            },
+            ref_type
+        };
         return &the_info;
     }
 };
@@ -311,29 +360,7 @@ struct Type {
     bool is_handle() const {return code() == Handle;}
 
     /** Check that the type name of two handles matches. */
-    bool same_handle_type(const Type &other) const {
-        const halide_handle_cplusplus_type *first = handle_type;
-        const halide_handle_cplusplus_type *second = other.handle_type;
-
-        if (first == second) {
-            return true;
-        }
-
-        static halide_handle_cplusplus_type void_type(halide_cplusplus_type_name(halide_cplusplus_type_name::Simple, "void"));
-
-        if (first == nullptr) {
-            first = &void_type;
-        }
-        if (second == nullptr) {
-            second = &void_type;
-        }
-
-        return first->inner_name == second->inner_name &&
-               first->namespaces == second->namespaces &&
-               first->enclosing_types == second->enclosing_types &&
-               first->cpp_type_modifiers == second->cpp_type_modifiers &&
-               first->reference_type == second->reference_type;
-    }
+    EXPORT bool same_handle_type(const Type &other) const;
 
     /** Compare two types for equality */
     bool operator==(const Type &other) const {
