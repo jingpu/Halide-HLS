@@ -124,7 +124,7 @@ void CodeGen_HLS_Testbench::visit(const Call *op) {
         } else {
             internal_error;
         }
-        rhs << a1 << ", " << a2 << ", const_cast<void *>(" << a3 << ")";
+        rhs << a1 << ", " << a2 << ", " << a3;
         for (size_t i = 4; i < op->args.size(); i++) {
             rhs << ", " << print_expr(op->args[i]);
         }
