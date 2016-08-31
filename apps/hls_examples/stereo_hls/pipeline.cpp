@@ -62,7 +62,7 @@ public:
         : left(UInt(8), 3), right(UInt(8), 3),
           left_remap(UInt(8), 3), right_remap(UInt(8), 3),
           SAD("SAD"), offset("offset"), output("output"), hw_output("hw_output"),
-          win(0, 1, 0, 1),
+          win(-windowR, windowR*2, -windowR, windowR*2),
           search(0, searchR)
     {
         right_padded = BoundaryConditions::constant_exterior(right, 0);
@@ -295,7 +295,7 @@ void compile_hls() {
     //hw_output.accelerate({right_padded, left_padded, right_remap_padded, left_remap_padded}, x_in, xo);
     //right_remapped.linebuffer();
     //left_remapped.linebuffer();
-    output.print_loop_nest();
+    //output.print_loop_nest();
     // Create the target for HLS simulation
     Target hls_target = get_target_from_environment();
     hls_target.set_feature(Target::CPlusPlusMangling);
