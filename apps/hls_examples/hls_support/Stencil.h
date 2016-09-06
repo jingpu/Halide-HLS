@@ -268,10 +268,10 @@ void subimage_to_stream(const struct buffer_t *buf_noop,
     assert(subimage_extent_2 % EXTENT_2 == 0);
     assert(subimage_extent_3 % EXTENT_3 == 0);
     (void) buf_noop;  // avoid unused warnning
-    for(size_t idx_3 = 0; idx_3 < subimage_extent_3; idx_3 += EXTENT_3)
-    for(size_t idx_2 = 0; idx_2 < subimage_extent_2; idx_2 += EXTENT_2)
-    for(size_t idx_1 = 0; idx_1 < subimage_extent_1; idx_1 += EXTENT_1)
-    for(size_t idx_0 = 0; idx_0 < subimage_extent_0; idx_0 += EXTENT_0) {
+    for(size_t idx_3 = 0; idx_3 < (unsigned)subimage_extent_3; idx_3 += EXTENT_3)
+    for(size_t idx_2 = 0; idx_2 < (unsigned)subimage_extent_2; idx_2 += EXTENT_2)
+    for(size_t idx_1 = 0; idx_1 < (unsigned)subimage_extent_1; idx_1 += EXTENT_1)
+    for(size_t idx_0 = 0; idx_0 < (unsigned)subimage_extent_0; idx_0 += EXTENT_0) {
         Stencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> stencil;
         for(size_t st_idx_3 = 0; st_idx_3 < EXTENT_3; st_idx_3++)
         for(size_t st_idx_2 = 0; st_idx_2 < EXTENT_2; st_idx_2++)
@@ -300,10 +300,10 @@ void stream_to_subimage(const struct buffer_t *buf_noop,
     assert(subimage_extent_2 % EXTENT_2 == 0);
     assert(subimage_extent_3 % EXTENT_3 == 0);
     (void) buf_noop;  // avoid unused warnning
-    for(size_t idx_3 = 0; idx_3 < subimage_extent_3; idx_3 += EXTENT_3)
-    for(size_t idx_2 = 0; idx_2 < subimage_extent_2; idx_2 += EXTENT_2)
-    for(size_t idx_1 = 0; idx_1 < subimage_extent_1; idx_1 += EXTENT_1)
-    for(size_t idx_0 = 0; idx_0 < subimage_extent_0; idx_0 += EXTENT_0) {
+    for(size_t idx_3 = 0; idx_3 < (unsigned)subimage_extent_3; idx_3 += EXTENT_3)
+    for(size_t idx_2 = 0; idx_2 < (unsigned)subimage_extent_2; idx_2 += EXTENT_2)
+    for(size_t idx_1 = 0; idx_1 < (unsigned)subimage_extent_1; idx_1 += EXTENT_1)
+    for(size_t idx_0 = 0; idx_0 < (unsigned)subimage_extent_0; idx_0 += EXTENT_0) {
         AxiPackedStencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> axi_stencil = stream.read();
         Stencil<T, EXTENT_0, EXTENT_1, EXTENT_2, EXTENT_3> stencil = axi_stencil;
         for(size_t st_idx_3 = 0; st_idx_3 < EXTENT_3; st_idx_3++)
