@@ -67,6 +67,16 @@ EXPORT Tuple argmax(RDom, Expr, const std::string &s = "argmax");
 EXPORT Tuple argmin(RDom, Expr, const std::string &s = "argmin");
 // @}
 
+
+/** Returns an Expr or Tuple the same as argmax()/argmin().
+ * The interface is implemented using multi-level tree of reduction functions.
+ */
+// @{
+EXPORT Tuple argmax_tree(Expr, int radix = 2, const std::string &s = "argmax_tree");
+EXPORT Tuple argmin_tree(Expr, int radix = 2, const std::string &s = "argmin_tree");
+EXPORT Tuple argmax_tree(RDom, Expr, int radix = 2, const std::string &s = "argmax_tree");
+EXPORT Tuple argmin_tree(RDom, Expr, int radix = 2, const std::string &s = "argmin_tree");
+// @}
 }
 
 #endif

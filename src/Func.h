@@ -163,6 +163,8 @@ public:
     // @{
     EXPORT Func rfactor(std::vector<std::pair<RVar, Var>> preserved);
     EXPORT Func rfactor(RVar r, Var v);
+    EXPORT Func argmaxmin_rfactor(std::vector<std::pair<RVar, Var>> preserved, bool is_argmax = true);
+    EXPORT Func argmaxmin_rfactor(RVar r, Var v, bool is_argmax = true);
     // @}
 
     /** Scheduling calls that control how the domain of this stage is

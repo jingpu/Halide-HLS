@@ -69,6 +69,40 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+    // Try some tree implementations of argmax/argmin
+    evaluate_may_gpu(argmax_tree(g(r.x, r.y)), &best_x, &best_y, &best_val);
+
+    if (best_x != 50 || best_y != 40 || best_val != 4100) {
+        printf("Inline arg max of g is %d %d (%d), but should have been %d %d (%d)\n",
+               best_x, best_y, best_val, 50, 40, 4100);
+        return -1;
+    }
+    evaluate_may_gpu(argmin_tree(g(r.x, r.y), 5), &best_x, &best_y, &best_val);
+
+    if (best_x != 0 || best_y != 99 || best_val != -1881) {
+        printf("Inline arg max of g is %d %d (%d), but should have been %d %d (%d)\n",
+               best_x, best_y, best_val, 50, 40, 4100);
+        return -1;
+    }
+
+    {
+        //Func tmp;
+        //tmp(_) = argmax_tree(g(r.x, r.y), 5);
+        //tmp.compile_to_lowered_stmt("argmin2d.ir.html", {}, HTML);
+    }
+    Func arg_min_tree;
+    r = RDom(0, 100);
+    arg_min_tree(y) = argmin_tree(g(r.x, y), 4);
+    //arg_min_tree.print_loop_nest();
+    //arg_min_tree.compile_to_lowered_stmt("argmin.ir.html", {}, HTML);
+    evaluate_may_gpu(arg_min_tree(99), &best_x, &best_val);
+
+    if (best_x != 0 || best_val != -1881) {
+        printf("Inline arg min of g is %d 99 (%d), but should have been %d 99 (%d)\n",
+               best_x, best_val, 0, -1881);
+        return -1;
+    }
+
 
     // Try an in place argmax, using an elements at various places in
     // the sequence as the initial guess.  This tests some edge cases

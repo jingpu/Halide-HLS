@@ -305,11 +305,11 @@ void associativity_test() {
     Expr g_call = Call::make(Int(32), "g", {rx}, Call::CallType::Halide, nullptr, 0);
 
 
-    // f(x) = min(f(x), int16(z))
+    // f(x) = min(f(x), y + int16(z))
     check_associativity("f", {x}, {min(f_call_0, y + Cast::make(Int(16), z))},
                         true, {{min(x, y), Int(32).max(), {"x", f_call_0}, {"y", y + Cast::make(Int(16), z)}}});
 
-    // f(x) = f(x) + g(rx) + y + z
+    // f(x) = y + z + f(x)
     check_associativity("f", {x}, {y + z + f_call_0},
                         true, {{x + y, make_const(Int(32), 0), {"x", f_call_0}, {"y", y + z}}});
 

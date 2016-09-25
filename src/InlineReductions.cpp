@@ -5,6 +5,7 @@
 #include "IRMutator.h"
 #include "Debug.h"
 #include "CSE.h"
+#include "Simplify.h"
 
 namespace Halide {
 
@@ -16,17 +17,17 @@ namespace Internal {
 
 class FindFreeVars : public IRMutator {
 public:
+    const string &name;
     vector<Var> free_vars;
     vector<Expr> call_args;
     RDom rdom;
 
     FindFreeVars(RDom r, const string &n) :
-        rdom(r), explicit_rdom(r.defined()), name(n) {
+        name(n), rdom(r), explicit_rdom(r.defined()) {
     }
 
 private:
     bool explicit_rdom;
-    const string &name;
 
     Scope<int> internal;
 
@@ -101,6 +102,8 @@ private:
 };
 }
 
+using namespace Internal;
+
 Expr sum(Expr e, const std::string &name) {
     return sum(RDom(), e, name);
 }
@@ -163,6 +166,26 @@ Expr minimum(RDom r, Expr e, const std::string &name) {
     return f(v.call_args);
 }
 
+Func argmaxmin_func(Expr e, const Internal::FindFreeVars &v, bool is_argmax) {
+    Func f(v.name);
+
+    Tuple initial_tup(vector<Expr>(v.rdom.dimensions()+1));
+    Tuple update_tup(vector<Expr>(v.rdom.dimensions()+1));
+    for (int i = 0; i < v.rdom.dimensions(); i++) {
+        initial_tup[i] = 0;
+        update_tup[i] = v.rdom[i];
+    }
+    int value_index = (int)initial_tup.size()-1;
+    initial_tup[value_index] = is_argmax ? e.type().min() : e.type().max();
+    update_tup[value_index] = e;
+
+    f(v.free_vars) = initial_tup;
+    Expr better = is_argmax ? e > f(v.free_vars)[value_index] :
+        e < f(v.free_vars)[value_index];
+    f(v.free_vars) = tuple_select(better, update_tup, f(v.free_vars));
+    return f;
+}
+
 Tuple argmax(Expr e, const std::string &name) {
     return argmax(RDom(), e, name);
 }
@@ -171,24 +194,9 @@ Tuple argmax(RDom r, Expr e, const std::string &name) {
     Internal::FindFreeVars v(r, name);
     e = v.mutate(common_subexpression_elimination(e));
 
-    Func f(name);
-
     user_assert(v.rdom.defined()) << "Expression passed to argmax must reference a reduction domain";
 
-    Tuple initial_tup(vector<Expr>(v.rdom.dimensions()+1));
-    Tuple update_tup(vector<Expr>(v.rdom.dimensions()+1));
-    for (int i = 0; i < v.rdom.dimensions(); i++) {
-        initial_tup[i] = 0;
-        update_tup[i] = v.rdom[i];
-    }
-    int value_index = (int)initial_tup.size()-1;
-    initial_tup[value_index] = e.type().min();
-    update_tup[value_index] = e;
-
-    f(v.free_vars) = initial_tup;
-    Expr better = e > f(v.free_vars)[value_index];
-    Tuple update = tuple_select(better, update_tup, f(v.free_vars));
-    f(v.free_vars) = update;
+    Func f = argmaxmin_func(e, v, true);
     return f(v.call_args);
 }
 
@@ -196,28 +204,101 @@ Tuple argmin(Expr e, const std::string &name) {
     return argmin(RDom(), e, name);
 }
 
+
 Tuple argmin(RDom r, Expr e, const std::string &name) {
     Internal::FindFreeVars v(r, name);
     e = v.mutate(common_subexpression_elimination(e));
 
-    Func f(name);
-
     user_assert(v.rdom.defined()) << "Expression passed to argmin must reference a reduction domain";
 
-    Tuple initial_tup(vector<Expr>(v.rdom.dimensions()+1));
-    Tuple update_tup(vector<Expr>(v.rdom.dimensions()+1));
-    for (int i = 0; i < v.rdom.dimensions(); i++) {
-        initial_tup[i] = 0;
-        update_tup[i] = v.rdom[i];
-    }
-    int value_index = (int)initial_tup.size()-1;
-    initial_tup[value_index] = e.type().max();
-    update_tup[value_index] = e;
-
-    f(v.free_vars) = initial_tup;
-    Expr better = e < f(v.free_vars)[value_index];
-    f(v.free_vars) = tuple_select(better, update_tup, f(v.free_vars));
+    Func f = argmaxmin_func(e, v, false);
     return f(v.call_args);
 }
 
+void argmaxmin_tree_split(Func f,  int radix, const Internal::FindFreeVars &v, bool is_argmax) {
+    // Tree-like split-rfactor-unroll
+    // split each RVar by a factor of radix, and create a tree structure
+    // of imtermediate functions to calculate argmax/argmin
+    // schedule the computation of funtions in BFS order
+
+    // get the string after the last '.'
+    auto get_var_name = [](const string &full_name) {
+        size_t pos = full_name.find_last_of('.');
+        if (pos != string::npos) {
+            internal_assert(pos + 1 < full_name.size());
+            return full_name.substr(pos + 1);
+        } else {
+            return full_name;
+        }};
+
+    vector<ReductionVariable> &rvars = f.function().update_schedule(0).rvars();
+    while (true) {
+        internal_assert(!rvars.empty());
+        RDom rdom(rvars);
+        vector<std::pair<RVar, Var>> preserved;
+
+        // try to factor the first RVar
+        if (rvars.size() == 1 && is_one(simplify(rvars[0].extent <= radix))) {
+            // stop if the extent of the only RVar is not greater than radix
+            break;
+        } else if (is_one(simplify(rvars[0].extent > radix))) {
+            // split RVar if the extent is larger than radix
+            RVar r(get_var_name(rvars[0].var));
+            RVar ri, ro;
+            Var u;
+            f.update(0).split(r, ro, ri, radix);
+            preserved.push_back({ro, u});
+        }
+
+        // preserve other RVar
+        for (size_t i = 1; i < rvars.size(); i++) {
+            RVar r(get_var_name(rvars[i].var));
+            Var u;
+            preserved.push_back({r, u});
+        }
+
+        Func intm = f.update(0).argmaxmin_rfactor(preserved, is_argmax);
+        // schedules on the intermediate function
+        if (v.free_vars.empty()) {
+            intm.compute_root();
+        } else {
+            intm.compute_at(f, v.free_vars.back());
+        }
+    }
 }
+
+Tuple argmax_tree(Expr e, int radix, const std::string &name) {
+    return argmax_tree(RDom(), e, radix, name);
+}
+
+Tuple argmin_tree(Expr e, int radix, const std::string &name) {
+    return argmin_tree(RDom(), e, radix, name);
+}
+
+Tuple argmax_tree(RDom r, Expr e, int radix, const std::string &name) {
+    Internal::FindFreeVars v(r, name);
+    e = v.mutate(common_subexpression_elimination(e));
+
+    user_assert(v.rdom.defined()) << "Expression passed to argmax must reference a reduction domain";
+    user_assert(radix > 1) << "The radix of the tree reduction should be larger than";
+
+    Func f = argmaxmin_func(e, v, true);
+    argmaxmin_tree_split(f, radix, v, true);
+
+    return f(v.call_args);
+}
+
+Tuple argmin_tree(RDom r, Expr e, int radix, const std::string &name) {
+    Internal::FindFreeVars v(r, name);
+    e = v.mutate(common_subexpression_elimination(e));
+
+    user_assert(v.rdom.defined()) << "Expression passed to argmin must reference a reduction domain";
+    user_assert(radix > 1) << "The radix of the tree reduction should be larger than";
+
+    Func f = argmaxmin_func(e, v, false);
+    argmaxmin_tree_split(f, radix, v, false);
+
+    return f(v.call_args);
+}
+}
+

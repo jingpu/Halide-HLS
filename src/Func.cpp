@@ -466,6 +466,281 @@ void apply_split_directive(const Split &s, vector<ReductionVariable> &rvars) {
 
 } // anonymous namespace
 
+Func Stage::argmaxmin_rfactor(RVar r, Var v, bool is_argmax) {
+    return argmaxmin_rfactor({{r, v}}, is_argmax);
+}
+
+Func Stage::argmaxmin_rfactor(vector<pair<RVar, Var>> preserved, bool is_argmax) {
+    user_assert(!definition.is_init()) << "rfactor() must be called on an update definition\n";
+
+    string func_name;
+    {
+        vector<std::string> tmp = split_string(stage_name, ".update(");
+        internal_assert(!tmp.empty() && !tmp[0].empty());
+        func_name = tmp[0];
+    }
+
+    vector<Expr> &args = definition.args();
+    vector<Expr> &values = definition.values();
+    vector<Split> &splits = definition.schedule().splits();
+    vector<ReductionVariable> &rvars = definition.schedule().rvars();
+    vector<Dim> &dims = definition.schedule().dims();
+    Scope<string> scope; // Contains list of RVars lifted to the intermediate Func
+    vector<string> rvars_removed;
+
+    for (const pair<RVar, Var> &i : preserved) {
+        const RVar &rv = i.first;
+        const Var &v = i.second;
+        {
+            // Check that the RVar are in the dims list
+            const auto iter = std::find_if(dims.begin(), dims.end(),
+                [&rv](const Dim& dim) { return var_name_match(dim.var, rv.name()); });
+            user_assert((iter != dims.end()) && (*iter).is_rvar())
+                << "In schedule for " << stage_name
+                << ", can't perform rfactor() on " << rv.name()
+                << " since it is not in the reduction domain\n"
+                << dump_argument_list();
+        }
+        {
+            // Check that the new pure Vars we used to rename the RVar aren't already in the dims list
+            const auto &iter = std::find_if(dims.begin(), dims.end(),
+                [&v](const Dim& dim) { return var_name_match(dim.var, v.name()); });
+            user_assert(iter == dims.end())
+                << "In schedule for " << stage_name
+                << ", can't rename the rvars " << rv.name() << " into " << v.name()
+                << ", since it is already used in this Func's schedule elsewhere.\n"
+                << dump_argument_list();
+        }
+    }
+
+    vector<ReductionVariable> intm_rvars;
+    for (const auto &rv : rvars) {
+        const auto &iter = std::find_if(preserved.begin(), preserved.end(),
+            [&rv](const pair<RVar, Var>& pair) { return var_name_match(rv.var, pair.first.name()); });
+        if (iter == preserved.end()) {
+            intm_rvars.push_back(rv);
+            scope.push(rv.var, rv.var);
+        }
+    }
+    RDom intm_rdom(intm_rvars);
+    debug(4) << "\nintm rdom: " << intm_rdom << "\n";
+
+    for (const Split &s : splits) {
+        apply_split_directive(s, rvars);
+    }
+
+    // Sort the Rvars kept and their Vars replacement based on the RVars of
+    // the reduction domain AFTER applying the split directives, so that we
+    // can have a consistent args order for the update definition of the
+    // intermediate and new Func
+    std::sort(preserved.begin(), preserved.end(),
+        [&](const pair<RVar, Var> &lhs, const pair<RVar, Var> &rhs){
+            const auto iter_lhs = std::find_if(rvars.begin(), rvars.end(),
+                [&lhs](const ReductionVariable& rv) { return var_name_match(rv.var, lhs.first.name()); });
+            const auto iter_rhs = std::find_if(rvars.begin(), rvars.end(),
+                [&rhs](const ReductionVariable& rv) { return var_name_match(rv.var, rhs.first.name()); });
+            return iter_lhs < iter_rhs;
+        }
+    );
+    // The list of RVars to keep in the new update definition
+    vector<RVar> rvars_kept(preserved.size());
+    // List of pure Vars to replace the RVars in the intermediate's update definition
+    vector<Var> vars_rename(preserved.size());
+    for (size_t i = 0; i < preserved.size(); ++i) {
+        const auto &val = preserved[i];
+        rvars_kept[i] = val.first;
+        vars_rename[i] = val.second;
+    }
+
+    // List of RVars for the new reduction domain. Any RVars not in 'rvars_kept'
+    // are removed from the RDom
+    {
+        vector<ReductionVariable> temp;
+        for (const auto &rv : rvars) {
+            const auto &iter = std::find_if(rvars_kept.begin(), rvars_kept.end(),
+                [&rv](const RVar &rvar) { return var_name_match(rv.var, rvar.name()); });
+            if (iter != rvars_kept.end()) {
+                temp.push_back(rv);
+            } else {
+                rvars_removed.push_back(rv.var);
+            }
+        }
+        rvars.swap(temp);
+    }
+    RDom f_rdom(rvars);
+    debug(4) << "\nnew update rdom: " << intm_rdom << "\n";
+
+    // Init definition of the intermediate Func
+    // For example, if we have the following Func f:
+    //   f(z) = argmin(h(r.x, r.y))
+    // i.e.
+    //   f(z) = Tuple({0, 0, max})
+    //   f(z) = tuple_select(h(r.x, r.y) < f(z),
+    //                       Tuple({r.x, r.y, h(r.x, r.y)}),
+    //                       f(z))
+    // Calling f.update(0).rfactor({{r.y, u}}) will generate the following
+    // intermediate Func:
+    //   f_intm(z, u) = Tuple({0, 0, max})
+    //   f_intm(z, u) = tuple_select(h(r.x, u) < f_intm(z, u),
+    //                       Tuple({r.x, u, h(r.x, u)}),
+    //                       f_intm(z, u))
+    //
+    // and new update definition:
+    //   f(z) = tuple_select(f_intm(z, r.y)[2] < f(z)[2],
+    //                       f_intm(z, r.y),
+    //                       f(z))
+
+    vector<Var> init_args;
+    init_args.insert(init_args.end(), dim_vars.begin(), dim_vars.end());
+    init_args.insert(init_args.end(), vars_rename.begin(), vars_rename.end());
+
+    vector<Expr> init_vals(values.size());
+    for (size_t i = 0; i < init_vals.size() - 1; ++i) {
+        init_vals[i] = 0;
+    }
+    init_vals.back() = is_argmax ? values.back().type().min() :
+        values.back().type().max();
+
+    Func intm(func_name + "_intm");
+    intm(init_args) = Tuple(init_vals);
+
+    // Args of the update definition of the intermediate Func
+    vector<Var> update_args(init_args);  // same as init_args
+
+    debug(4) << "\nintm update args: {";
+    for (auto e : update_args) {
+        debug(4) << e << ", ";
+    }
+    debug(4) << "}\n";
+
+    // We need to substitute the reference to the old RDom's RVars with
+    // the new RDom's RVars. Also, substitute the reference to RVars which
+    // are in 'rvars_kept' with their corresponding new pure Vars
+    map<string, Expr> substitution_map;
+    for (size_t i = 0; i < intm_rvars.size(); ++i) {
+        substitution_map[intm_rvars[i].var] = intm_rdom[i];
+    }
+    for (size_t i = 0; i < vars_rename.size(); i++) {
+        RVar rvar_kept = rvars_kept[i];
+        const auto iter = std::find_if(rvars.begin(), rvars.end(),
+               [&rvar_kept](const ReductionVariable &rv) { return var_name_match(rv.var, rvar_kept.name()); });
+        string full_name = iter->var;
+        substitution_map[full_name] = vars_rename[i];
+    }
+
+    // The update values the intermediate Func should compute
+    vector<Expr> update_vals(values.size());
+    for (size_t i = 0; i < update_vals.size(); i++) {
+        Expr val = substitute(substitution_map, values[i]);
+        // Need to update the self-reference in the update definition to point
+        // to the new intermediate Func
+        val = substitute_self_reference(val, func_name, intm.function(), vars_rename);
+        update_vals[i] = val;
+    }
+    intm(update_args) = Tuple(update_vals);
+
+    debug(4) << "intm update values: {\n";
+    for (size_t i = 0; i < intm.update_values(0).size(); i++) {
+        debug(4) << "  " << intm.update_values(0)[i] << ",\n";
+    }
+    debug(4) << "\n";
+
+    // Determine the dims and schedule of the update definition of the
+    // intermediate Func. We copy over the schedule from the original
+    // update definition (e.g. split, parallelize, vectorize, etc.)
+    intm.function().update(0).schedule().dims() = dims;
+    intm.function().update(0).schedule().splits() = splits;
+
+    // Copy over the storage order of the original pure dims
+    vector<StorageDim> &intm_storage_dims = intm.function().schedule().storage_dims();
+    internal_assert(intm_storage_dims.size() == storage_dims.size() + vars_rename.size());
+    for (size_t i = 0; i < storage_dims.size(); ++i) {
+        intm_storage_dims[i] = storage_dims[i];
+    }
+
+    for (size_t i = 0; i < rvars_kept.size(); ++i) {
+        // Apply the purify directive that replaces the RVar in rvars_kept
+        // with a pure Var
+        intm.update(0).purify(rvars_kept[i], vars_rename[i]);
+    }
+
+    debug(4) << "intm rvars: {";
+    for (auto e : intm.update(0).definition.schedule().rvars()) {
+        debug(4) << e.var << ", ";
+    }
+    debug(4) << "}\n";
+
+    // Determine the dims of the new update definition
+
+    // Add pure Vars from the original init definition to the dims list
+    // if they are not already in the list
+    for (const Var &v : dim_vars) {
+        const auto iter = std::find_if(dims.begin(), dims.end(),
+            [&v](const Dim& dim) { return var_name_match(dim.var, v.name()); });
+        if (iter == dims.end()) {
+            Dim d = {v.name(), ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
+            dims.insert(dims.end()-1, d);
+        }
+    }
+    // Then, we need to remove lifted RVars from the dims list
+    for (const string &rv : rvars_removed) {
+        remove(rv);
+    }
+
+    // Define the new update definition which refers to the intermediate Func.
+    // Using the same example as above, the new update definition is:
+    //   f(z) = tuple_select(f_intm(z, r.y)[2] < f(z)[2],
+    //                       f_intm(z, r.y),
+    //                       f(z))
+
+    // Args for store in the new update definition
+    vector<Expr> f_store_args(dim_vars.size());
+    for (size_t i = 0; i < f_store_args.size(); ++i) {
+        f_store_args[i] = dim_vars[i];
+    }
+
+    // Call's args to the intermediate Func in the new update definition
+    vector<Expr> f_load_args;
+    f_load_args.insert(f_load_args.end(), dim_vars.begin(), dim_vars.end());
+    for (int i = 0; i < f_rdom.dimensions(); ++i) {
+        f_load_args.push_back(f_rdom[i]);
+    }
+    internal_assert(f_load_args.size() == init_args.size());
+
+    // Update value of the new update definition. It loads values from
+    // the intermediate Func.
+    vector<Expr> f_values(values.size());
+    int value_index = values.size() - 1;  // last value
+    Expr prev_val = Call::make(intm.output_types().back(), func_name,
+                               f_store_args, Call::CallType::Halide,
+                               nullptr, value_index);
+    Expr cond = is_argmax ? intm(f_load_args)[value_index] > prev_val :
+        intm(f_load_args)[value_index] < prev_val;
+    for (size_t i = 0; i < f_values.size(); i++) {
+        Expr f_val = Call::make(values[i].type(), func_name,
+                                   f_store_args, Call::CallType::Halide,
+                                   nullptr, i);
+        f_values[i] = select(cond, intm(f_load_args)[i], f_val);
+    }
+
+    debug(4) << "new update rvars: {";
+    for (auto e : rvars) {
+        debug(4) << e.var << ", ";
+    }
+    debug(4) << "}\n";
+    debug(4) << "new update values: {\n";
+    for (size_t i = 0; i < f_values.size(); i++) {
+        debug(4) << "  " << f_values[i] << ",\n";
+    }
+    debug(4) << "\n";
+
+    // Update the definition
+    args.swap(f_store_args);
+    values.swap(f_values);
+
+    return intm;
+}
+
 Func Stage::rfactor(RVar r, Var v) {
     return rfactor({{r, v}});
 }
