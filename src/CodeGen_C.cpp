@@ -590,6 +590,30 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         // And also the metadata.
         stream << "// Result is never null and points to constant static data\n";
         stream << "const struct halide_filter_metadata_t *" << simple_name << "_metadata() HALIDE_FUNCTION_ATTRS;\n";
+    } else {
+        stream << "\n"
+               << "int " << simple_name << "_argv(void **args) HALIDE_FUNCTION_ATTRS ";
+        open_scope();
+        for (size_t i = 0; i < args.size(); i++) {
+            do_indent();
+            if (args[i].is_buffer()) {
+                stream << "buffer_t* " << print_name(args[i].name) 
+                       << " = *((buffer_t**) args[" << i << "]);\n";
+            } else {
+                stream << print_type(args[i].type, AppendSpace) << print_name(args[i].name)
+                       << " = *((" << print_type(args[i].type) << "*) args[" << i << "]);\n";
+            }
+        }
+        do_indent();
+        stream <<  "return " << simple_name << "(";
+        for (size_t i = 0; i < args.size(); i++) {
+            stream << print_name(args[i].name);
+            if (i != args.size() - 1) {
+                stream << ", ";
+            }
+        }
+        stream << ");\n";
+        close_scope("argv function");
     }
 
     // Close namespaces here as metadata must be outside them
@@ -1655,6 +1679,14 @@ void CodeGen_C::test() {
         " } // alloc _tmp_heap\n"
         " return 0;\n"
         "}\n"
+        "\n"
+        "int test1_argv(void **args) HALIDE_FUNCTION_ATTRS {\n"
+        " buffer_t* _buf = *((buffer_t**) args[0]);\n"
+        " float _alpha = *((float*) args[1]);\n"
+        " int32_t _beta = *((int32_t*) args[2]);\n"
+        " void const *__user_context = *((void const **) args[3]);\n"
+        " return test1(_buf, _alpha, _beta, __user_context);\n"
+        "} // argv function\n"
         "\n"
         "#ifdef __cplusplus\n"
         "}  // extern \"C\"\n"

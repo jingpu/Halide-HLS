@@ -42,7 +42,15 @@ int main(int argc, char **argv) {
 
     printf("finish running native code\n");
 
-    pipeline_hls(in, weight, 0, out_hls);
+    // pipeline_hls(in, weight, 0, out_hls);
+    void** arg_values = new void*[4];
+    uint16_t bias = 0;
+    arg_values[0] = (void*) &in;
+    arg_values[1] = (void*) &weight;
+    arg_values[2] = (void*) &bias;
+    arg_values[3] = (void*) &out_hls;
+    pipeline_hls_argv(arg_values);
+    delete [] arg_values;
 
     printf("finish running HLS code\n");
 
