@@ -20,5 +20,5 @@ Build Status
 |------------------------------|
 | [![linux build status][1]][2]|
 
-[1]: https://travis-ci.org/jingpu/Halide-HLS.svg?branch=master
+[1]: https://travis-ci.org/jingpu/Halide-HLS.svg?branch=HLS
 [2]: https://travis-ci.org/jingpu/Halide-HLS
