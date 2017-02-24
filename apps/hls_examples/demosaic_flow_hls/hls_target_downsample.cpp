@@ -21,6 +21,27 @@ hls::stream<AxiPackedStencil<uint8_t, 2, 1> > &arg_2)
  hls::stream<PackedStencil<uint8_t, 2, 2> > _padded1_2_stencil_update_stream;
  hls::stream<PackedStencil<uint8_t, 2, 2> > _padded2_2_stencil_update_stream;
 
+
+ // buffer the input stream in order to fix HLS compiler issue,
+ // where the loop nest for packing 2x2 stencils cannot be
+ // pipelined.
+ hls::stream<PackedStencil<uint8_t, 2, 1> > in1_buffer_stream;
+ for (int y = 0; y < 0 + 487*2; y++) {
+     for (int x = 0; x < 0 + 727; x++) {
+         PackedStencil<uint8_t, 2, 1> s = in1_stream.read();
+         in1_buffer_stream.write(s);
+     }
+ }
+
+ hls::stream<PackedStencil<uint8_t, 2, 1> > in2_buffer_stream;
+ for (int y = 0; y < 0 + 970; y++) {
+     for (int x = 0; x < 0 + 725; x++) {
+         PackedStencil<uint8_t, 2, 1> s = in2_stream.read();
+         in2_buffer_stream.write(s);
+     }
+ }
+
+
  uint8_t buffer1[1454];
 
  for (int y = 0; y < 0 + 487*2; y++) {
@@ -28,7 +49,7 @@ hls::stream<AxiPackedStencil<uint8_t, 2, 1> > &arg_2)
 #pragma HLS DEPENDENCE array inter false
 #pragma HLS LOOP_FLATTEN off
 #pragma HLS PIPELINE II=1
-         Stencil<uint8_t, 2, 1> in1_stencil = in1_stream.read();
+         Stencil<uint8_t, 2, 1> in1_stencil = in1_buffer_stream.read();
 
          if (y % 2 == 0) {
              for (int i = 0; i < 2; i++) {
@@ -52,7 +73,7 @@ hls::stream<AxiPackedStencil<uint8_t, 2, 1> > &arg_2)
 #pragma HLS DEPENDENCE array inter false
 #pragma HLS LOOP_FLATTEN off
 #pragma HLS PIPELINE II=1
-         Stencil<uint8_t, 2, 1> in2_stencil = in2_stream.read();
+         Stencil<uint8_t, 2, 1> in2_stencil = in2_buffer_stream.read();
 
          if (y % 2 == 0) {
              for (int i = 0; i < 2; i++) {
