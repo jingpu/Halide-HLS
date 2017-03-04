@@ -20,44 +20,6 @@ using std::vector;
 using std::pair;
 using std::map;
 
-class HLS_Closure : public Closure {
-public:
-    HLS_Closure(Stmt s)  {
-        s.accept(this);
-    }
-
-    vector<HLS_Argument> arguments(const Scope<CodeGen_HLS_Base::Stencil_Type> &scope);
-
-protected:
-    using Closure::visit;
-
-};
-
-
-vector<HLS_Argument> HLS_Closure::arguments(const Scope<CodeGen_HLS_Base::Stencil_Type> &streams_scope) {
-    vector<HLS_Argument> res;
-    for (const pair<string, Closure::BufferRef> &i : buffers) {
-        debug(3) << "buffer: " << i.first << " " << i.second.size;
-        if (i.second.read) debug(3) << " (read)";
-        if (i.second.write) debug(3) << " (write)";
-        debug(3) << "\n";
-    }
-    internal_assert(buffers.empty()) << "we expect no references to buffers in a hw pipeline.\n";
-    for (const pair<string, Type> &i : vars) {
-        debug(3) << "var: " << i.first << "\n";
-        if(ends_with(i.first, ".stream") ||
-           ends_with(i.first, ".stencil") ) {
-            CodeGen_HLS_Base::Stencil_Type stype = streams_scope.get(i.first);
-            res.push_back({i.first, true, Type(), stype});
-        } else if (ends_with(i.first, ".stencil_update")) {
-            internal_error << "we don't expect to see a stencil_update type in HLS_Closure.\n";
-        } else {
-            // it is a scalar variable
-            res.push_back({i.first, false, i.second, CodeGen_HLS_Base::Stencil_Type()});
-        }
-    }
-    return res;
-}
 
 namespace {
 const string hls_headers =

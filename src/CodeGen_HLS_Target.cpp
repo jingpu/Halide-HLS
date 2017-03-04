@@ -22,6 +22,8 @@ using std::string;
 using std::vector;
 using std::ostringstream;
 using std::ofstream;
+using std::pair;
+
 
 namespace {
 
@@ -46,6 +48,34 @@ bool contain_for_loop(Stmt s) {
 
 }
 
+HLS_Closure::HLS_Closure(Stmt s) {
+        s.accept(this);
+}
+
+vector<HLS_Argument> HLS_Closure::arguments(const Scope<CodeGen_HLS_Base::Stencil_Type> &streams_scope) {
+    vector<HLS_Argument> res;
+    for (const pair<string, Closure::BufferRef> &i : buffers) {
+        debug(0) << "buffer: " << i.first << " " << i.second.size;
+        if (i.second.read) debug(3) << " (read)";
+        if (i.second.write) debug(3) << " (write)";
+        debug(0) << "\n";
+    }
+    internal_assert(buffers.empty()) << "we expect no references to buffers in a hw pipeline.\n";
+    for (const pair<string, Type> &i : vars) {
+        debug(3) << "var: " << i.first << "\n";
+        if(ends_with(i.first, ".stream") ||
+           ends_with(i.first, ".stencil") ) {
+            CodeGen_HLS_Base::Stencil_Type stype = streams_scope.get(i.first);
+            res.push_back({i.first, true, Type(), stype});
+        } else if (ends_with(i.first, ".stencil_update")) {
+            internal_error << "we don't expect to see a stencil_update type in HLS_Closure.\n";
+        } else {
+            // it is a scalar variable
+            res.push_back({i.first, false, i.second, CodeGen_HLS_Base::Stencil_Type()});
+        }
+    }
+    return res;
+}
 CodeGen_HLS_Target::CodeGen_HLS_Target(const string &name)
     : target_name(name),
       hdrc(hdr_stream, CodeGen_HLS_C::CPlusPlusHeader),
@@ -105,6 +135,12 @@ void CodeGen_HLS_Target::add_kernel(Stmt s,
 
     hdrc.add_kernel(s, name, args);
     srcc.add_kernel(s, name, args);
+
+    // emit subroutines
+    for (const auto &t : srcc.subroutines) {
+      hdrc.add_kernel(std::get<0>(t), std::get<1>(t), std::get<2>(t));
+      srcc.add_kernel(std::get<0>(t), std::get<1>(t), std::get<2>(t));
+    }
 }
 
 void CodeGen_HLS_Target::dump() {
@@ -141,10 +177,10 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::add_kernel(Stmt stmt,
         string arg_name = "arg_" + std::to_string(i);
         if (args[i].is_stencil) {
             CodeGen_HLS_Base::Stencil_Type stype = args[i].stencil_type;
-            internal_assert(args[i].stencil_type.type == Stencil_Type::StencilContainerType::AxiStream ||
-                            args[i].stencil_type.type == Stencil_Type::StencilContainerType::Stencil);
+            //internal_assert(args[i].stencil_type.type == Stencil_Type::StencilContainerType::AxiStream ||
+            //              args[i].stencil_type.type == Stencil_Type::StencilContainerType::Stencil);
             stream << print_stencil_type(args[i].stencil_type) << " ";
-            if (args[i].stencil_type.type == Stencil_Type::StencilContainerType::AxiStream) {
+            if (args[i].stencil_type.type != Stencil_Type::StencilContainerType::Stencil) {
                 stream << "&";  // hls_stream needs to be passed by reference
             }
             stream << arg_name;
@@ -223,6 +259,67 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::add_kernel(Stmt stmt,
         }
     }
 }
+
+class FindStreamNameMangle : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Call *op) {
+        if (op->name == "read_stream" && op->args.size() == 3) {
+            const Variable *stream_name_var = op->args[0].as<Variable>();
+            internal_assert(stream_name_var);
+            string stream_name = stream_name_var->name;
+            // stream name is maggled with the consumer name
+            const StringImm *consumer_imm = op->args[2].as<StringImm>();
+            internal_assert(consumer_imm);
+            string mangled_name = stream_name + ".to." + consumer_imm->value;
+            rename_table[stream_name] = mangled_name;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+public:
+    std::map<string, string> rename_table;
+};
+
+void CodeGen_HLS_Target::CodeGen_HLS_C::visit(const ProducerConsumer *op) {
+    if (ends_with(op->name, ".stream")) {
+        Stmt kernel_body = op->produce;
+
+        debug(3) << "compute the closure for " << op->name << '\n';
+        HLS_Closure c(kernel_body);
+        vector<HLS_Argument> args = c.arguments(stencils);
+
+        // mangled the stream name in the args
+        FindStreamNameMangle mangle;
+        kernel_body->accept(&mangle);
+        for (size_t i = 0; i < args.size(); i++) {
+          if (mangle.rename_table.count(args[i].name) > 0) {
+            args[i].name = mangle.rename_table[args[i].name];
+          }
+        }
+
+        // generate HLS target code using the child code generator
+        string kernel_name = "stage" + print_name(unique_name(op->name));
+        subroutines.push_back(std::make_tuple(kernel_body, kernel_name, args));
+
+        // emits the target function call
+        stream << "\n";
+        do_indent();
+        stream << kernel_name << "("; // avoid starting with '_'
+        for(size_t i = 0; i < args.size(); i++) {
+            stream << print_name(args[i].name);
+            if(i != args.size() - 1)
+                stream << ", ";
+        }
+        stream <<");\n";
+
+        print_stmt(op->consume);
+    } else {
+        CodeGen_HLS_Base::visit(op);
+    }
+}
+
 
 // almost that same as CodeGen_C::visit(const For *)
 // we just add a 'HLS PIPELINE' pragma after the 'for' statement

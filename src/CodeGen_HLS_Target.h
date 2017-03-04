@@ -7,8 +7,10 @@
  */
 
 #include "CodeGen_HLS_Base.h"
+#include "CodeGen_Internal.h"
 #include "Module.h"
 #include "Scope.h"
+#include <tuple>
 
 namespace Halide {
 
@@ -22,6 +24,18 @@ struct HLS_Argument {
     Type scalar_type;
 
     CodeGen_HLS_Base::Stencil_Type stencil_type;
+};
+
+
+class HLS_Closure : public Closure {
+public:
+    HLS_Closure(Stmt s);
+
+    std::vector<HLS_Argument> arguments(const Scope<CodeGen_HLS_Base::Stencil_Type> &scope);
+
+protected:
+    using Closure::visit;
+
 };
 
 /** This class emits Xilinx Vivado HLS compatible C++ code.
@@ -49,12 +63,14 @@ protected:
         void add_kernel(Stmt stmt,
                         const std::string &name,
                         const std::vector<HLS_Argument> &args);
+        std::vector<std::tuple<Stmt, std::string, std::vector<HLS_Argument>>> subroutines;
 
     protected:
         std::string print_stencil_pragma(const std::string &name);
 
         using CodeGen_HLS_Base::visit;
 
+        void visit(const ProducerConsumer *op);
         void visit(const For *op);
         void visit(const Allocate *op);
     };

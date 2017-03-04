@@ -1178,7 +1178,7 @@ test_apps: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_D
 	cd apps/HelloMatlab; HALIDE_PATH=$(CURDIR) HALIDE_CXX=$(CXX) ./run_blur.sh
 
 
-ALL_HLS_APPS = bilateral_grid_hls camera_pipe_hls camera_unsharp_hls conv_hls demosaic_flow_hls demosaic_harris_hls demosaic_hls fanout_hls gaussian_hls harris_hls stereo_hls unsharp_hls
+ALL_HLS_APPS = bilateral_grid_hls conv_hls demosaic_flow_hls demosaic_harris_hls demosaic_hls fanout_hls gaussian_hls harris_hls stereo_hls unsharp_hls
 .PHONY: test_hls_apps
 test_hls_apps: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(INCLUDE_DIR)/HalideRuntime.h
 	mkdir -p apps/hls_examples
