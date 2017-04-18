@@ -2,10 +2,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "halide_image.h"
 #include "pipeline_native.h"
 #include "pipeline_hls.h"
 
+#include "HalideBuffer.h"
+#include "halide_image_io.h"
+
+using namespace Halide;
 using namespace Halide::Tools;
 
 const unsigned char gaussian2d[5][5] = {

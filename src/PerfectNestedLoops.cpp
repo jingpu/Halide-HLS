@@ -18,15 +18,7 @@ class FlattenProducerConsumerNodes : public IRMutator {
     using IRMutator::visit;
 
     void visit(const ProducerConsumer *op) {
-        Stmt produce = mutate(op->produce);
-        Stmt blocks = produce;
-        if (op->update.defined()) {
-            Stmt update = mutate(op->update);
-            blocks = Block::make(blocks, update);
-        }
-        Stmt consume = mutate(op->consume);
-        blocks = Block::make(blocks, consume);
-        stmt = blocks;
+        stmt = mutate(op->body);
     }
 };
 
@@ -190,17 +182,14 @@ class PerfectNestedLoopsForPipeline : public IRMutator {
 
     // traverse each hw kernel
     void visit(const ProducerConsumer *op) {
-        if (ends_with(op->name, ".stream")) {
+        if (op->is_producer && ends_with(op->name, ".stream")) {
             debug(3) << "find a HW kernel " << op->name <<"\n";
-            Stmt produce = FlattenProducerConsumerNodes().mutate(op->produce);
-            produce = PerfectNestedLoopsSingleKernel().mutate(produce);
-            internal_assert(!op->update.defined());
-            Stmt consume = mutate(op->consume);
-            if (produce.same_as(op->produce) &&
-                consume.same_as(op->consume)) {
+            Stmt body = FlattenProducerConsumerNodes().mutate(op->body);
+            body = PerfectNestedLoopsSingleKernel().mutate(body);
+            if (body.same_as(op->body)) {
                 stmt = op;
             } else {
-                stmt = ProducerConsumer::make(op->name, produce, Stmt(), consume);
+                stmt = ProducerConsumer::make(op->name, op->is_producer, body);
             }
         } else {
             IRMutator::visit(op);
@@ -212,16 +201,13 @@ class PerfectNestedLoops : public IRMutator {
     using IRMutator::visit;
 
     void visit(const ProducerConsumer *op) {
-        if (starts_with(op->name, "_hls_target.")) {
+        if (op->is_producer && starts_with(op->name, "_hls_target.")) {
             debug(3) << "find a HW pipeline " << op->name <<"\n";
-            Stmt produce = PerfectNestedLoopsForPipeline().mutate(op->produce);
-            internal_assert(!op->update.defined());
-            Stmt consume = mutate(op->consume);
-            if (produce.same_as(op->produce) &&
-                consume.same_as(op->consume)) {
+            Stmt body = PerfectNestedLoopsForPipeline().mutate(op->body);
+            if (body.same_as(op->body)) {
                 stmt = op;
             } else {
-                stmt = ProducerConsumer::make(op->name, produce, Stmt(), consume);
+                stmt = ProducerConsumer::make(op->name, op->is_producer, body);
             }
         } else {
             IRMutator::visit(op);

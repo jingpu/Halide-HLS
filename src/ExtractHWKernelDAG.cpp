@@ -1,6 +1,7 @@
 #include "ExtractHWKernelDAG.h"
 
 #include <iostream>
+#include "Func.h"
 #include "IRVisitor.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -415,8 +416,9 @@ class BuildDAGForFunction : public IRVisitor {
 
     void visit(const ProducerConsumer *op) {
         // match store level at PC node in case the looplevel is outermost
-        if (store_level.func == op->name &&
-            store_level.var == Var::outermost().name()) {
+        if (op->is_producer &&
+            op->name == func.name() &&
+            store_level.match(LoopLevel(func, Var::outermost()))) {
             is_scan_loops = true;
         }
         IRVisitor::visit(op);
@@ -701,7 +703,7 @@ Stmt extract_hw_kernel_dag(Stmt s, const map<string, Function> &env,
         if(!func.schedule().is_accelerated())
             continue;
         debug(3) << "Found accelerate function " << func.name() << "\n";
-        debug(3) << func.schedule().store_level().func << " " << func.schedule().store_level().var << "\n";
+        debug(3) << func.schedule().store_level().to_string() << "\n";
         BuildDAGForFunction builder(func, env, inlined_stages);
         dags.push_back(builder.build(s));
     }

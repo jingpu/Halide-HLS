@@ -307,7 +307,8 @@ public:
 
         //processed.print_loop_nest();
         processed.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
-        processed.compile_to_file("pipeline_native", args);
+        processed.compile_to_header("pipeline_native.h", args, "pipeline_native");
+        processed.compile_to_object("pipeline_native.o", args, "pipeline_native");
     }
 
     void compile_gpu() {

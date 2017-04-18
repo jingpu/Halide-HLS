@@ -2,10 +2,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "halide_image.h"
 #include "pipeline_native.h"
 #include "pipeline_hls.h"
 
+#include "HalideBuffer.h"
+#include "halide_image_io.h"
+
+using namespace Halide;
 using namespace Halide::Tools;
 
 const unsigned char gaussian2d[5][5] = {
@@ -42,7 +45,9 @@ int main(int argc, char **argv) {
 
     printf("finish running native code\n");
 
-    // pipeline_hls(in, weight, 0, out_hls);
+    pipeline_hls(in, weight, 0, out_hls);
+    /*
+      FIXME: the following calling convention causes Seg fault.
     void** arg_values = new void*[4];
     uint16_t bias = 0;
     arg_values[0] = (void*) &in;
@@ -51,6 +56,7 @@ int main(int argc, char **argv) {
     arg_values[3] = (void*) &out_hls;
     pipeline_hls_argv(arg_values);
     delete [] arg_values;
+    */
 
     printf("finish running HLS code\n");
 

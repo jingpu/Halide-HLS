@@ -310,7 +310,8 @@ Stmt add_input_stencil(Stmt s, const HWKernel &kernel, const HWKernel &input) {
         args.push_back(kernel.name);
     }
     Stmt read_call = Evaluate::make(Call::make(Handle(), "read_stream", args, Call::Intrinsic));
-    Stmt pc = ProducerConsumer::make(stencil_name, read_call, Stmt(), s);
+    Stmt pc = Block::make(ProducerConsumer::make(stencil_name, true, read_call),
+                          ProducerConsumer::make(stencil_name, false, s));
 
     // create a realizeation of the stencil image
     Region bounds;
@@ -398,9 +399,15 @@ Stmt add_linebuffer(Stmt s, const HWKernel &kernel) {
 
 Stmt transform_kernel(Stmt s, const HWKernelDAG &dag, const Scope<Expr> &scope) {
     Stmt ret;
-    const ProducerConsumer *op = s.as<ProducerConsumer>();
+    const Block *op = s.as<Block>();
     if (op) {
-        const HWKernel &kernel = dag.kernels.find(op->name)->second;
+        // It should be a block of a Producer-Comsumer pair
+        const ProducerConsumer *produce = op->first.as<ProducerConsumer>();
+        const ProducerConsumer *consume = op->rest.as<ProducerConsumer>();
+        internal_assert(produce && consume &&
+                        produce->name == consume->name);
+
+        const HWKernel &kernel = dag.kernels.find(produce->name)->second;
         internal_assert(!kernel.is_output);
         if (kernel.is_inlined) {
             // if it is a function inlined into the output function,
@@ -441,8 +448,7 @@ Stmt transform_kernel(Stmt s, const HWKernelDAG &dag, const Scope<Expr> &scope) 
         Expr stream_var = Variable::make(Handle(), stream_name);
 
         // replacing the references to the original realization with refences to stencils
-        Stmt produce = ReplaceReferencesWithStencil(kernel, dag, &scope).mutate(op->produce);
-        Stmt update = ReplaceReferencesWithStencil(kernel, dag, &scope).mutate(op->update);
+        Stmt new_produce = ReplaceReferencesWithStencil(kernel, dag, &scope).mutate(produce->body);
 
         // syntax for write_stream()
         // write_stream(des_stream, src_stencil)
@@ -450,7 +456,8 @@ Stmt transform_kernel(Stmt s, const HWKernelDAG &dag, const Scope<Expr> &scope) 
         Stmt write_call = Evaluate::make(Call::make(Handle(), "write_stream", write_args, Call::Intrinsic));
 
         // realize and PC node for func.stencil
-        Stmt stencil_pc = ProducerConsumer::make(stencil_name, produce, update, write_call);
+        Stmt stencil_pc = Block::make(ProducerConsumer::make(stencil_name, true, new_produce),
+                                      ProducerConsumer::make(stencil_name, false, write_call));
 
         // create a realization of the stencil of the step-size
         Region step_bounds;
@@ -498,13 +505,14 @@ Stmt transform_kernel(Stmt s, const HWKernelDAG &dag, const Scope<Expr> &scope) 
         }
 
         // Recurse
-        Stmt stream_consume = transform_kernel(op->consume, dag, scope);
+        Stmt stream_consume = transform_kernel(consume->body, dag, scope);
 
         // Add line buffer and dispatcher
         Stmt stream_realize = add_linebuffer(stream_consume, kernel);
 
         // create the PC node for update stream
-        Stmt stream_pc = ProducerConsumer::make(stream_name, scan_loops, Stmt(), stream_realize);
+        Stmt stream_pc = Block::make(ProducerConsumer::make(stream_name, true, scan_loops),
+                                     ProducerConsumer::make(stream_name, false, stream_realize));
 
         // create a realizeation of the stencil stream
         ret = Realize::make(stream_name, kernel.func.output_types(), step_bounds, const_true(), stream_pc);
@@ -545,7 +553,9 @@ Stmt transform_kernel(Stmt s, const HWKernelDAG &dag, const Scope<Expr> &scope) 
         }
         Stmt write_call = Evaluate::make(Call::make(Handle(), "write_stream", write_args, Call::Intrinsic));
 
-        Stmt stencil_pc = ProducerConsumer::make(stencil_name, produce, Stmt(), write_call);
+        Stmt stencil_pc = Block::make(ProducerConsumer::make(stencil_name, true, produce),
+                                      ProducerConsumer::make(stencil_name, false, write_call));
+
         // create a realization of the stencil image
         Region bounds;
         for (StencilDimSpecs dim: kernel.dims) {
@@ -591,7 +601,8 @@ Stmt transform_kernel(Stmt s, const HWKernelDAG &dag, const Scope<Expr> &scope) 
             scan_loops = For::make(loop_var_name, 0, loop_extent, ForType::Serial, DeviceAPI::Host, scan_loops);
         }
 
-        ret = ProducerConsumer::make(stream_name, scan_loops, Stmt(), Evaluate::make(0));
+        ret = Block::make(ProducerConsumer::make(stream_name, true, scan_loops),
+                          ProducerConsumer::make(stream_name, false, Evaluate::make(0)));
     }
     return ret;
 }
@@ -689,7 +700,9 @@ class StreamOpt : public IRMutator {
             Stmt new_body = mutate(body);
 
             //stmt = For::make(dag.name + ".accelerator", 0, 1, ForType::Serial, DeviceAPI::Host, body);
-            new_body = ProducerConsumer::make("_hls_target." + dag.name, new_body, Stmt(), Evaluate::make(0));
+            const string target_name = "_hls_target." + dag.name;
+            new_body = Block::make(ProducerConsumer::make(target_name, true, new_body),
+                                   ProducerConsumer::make(target_name, false, Evaluate::make(0)));
 
             // add declarations of inputs and output (external) streams outside the hardware pipeline IR
             vector<string> external_streams;

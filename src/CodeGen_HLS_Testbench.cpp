@@ -78,10 +78,11 @@ CodeGen_HLS_Testbench::~CodeGen_HLS_Testbench() {
 }
 
 void CodeGen_HLS_Testbench::visit(const ProducerConsumer *op) {
-    if (starts_with(op->name, "_hls_target.")) {
-        Stmt hw_body = op->produce;
+    if (op->is_producer && starts_with(op->name, "_hls_target.")) {
+        Stmt hw_body = op->body;
 
-        debug(1) << "compute the closure for " << op->name << '\n';
+        debug(1) << "compute the closure for hardware pipeline "
+                 << op->name << '\n';
         HLS_Closure c(hw_body);
         vector<HLS_Argument> args = c.arguments(stencils);
 
@@ -98,8 +99,6 @@ void CodeGen_HLS_Testbench::visit(const ProducerConsumer *op) {
                 stream << ", ";
         }
         stream <<");\n";
-
-        print_stmt(op->consume);
     } else {
         CodeGen_HLS_Base::visit(op);
     }

@@ -64,7 +64,7 @@ void CodeGen_Zynq_C::visit(const Realize *op) {
 }
 
 void CodeGen_Zynq_C::visit(const ProducerConsumer *op) {
-    if (starts_with(op->name, "_hls_target.")) {
+    if (op->is_producer && starts_with(op->name, "_hls_target.")) {
         // reachs the HW boundary
         /* C code:
            cma_buffer_t kbufs[3];

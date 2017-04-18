@@ -2256,8 +2256,8 @@ Func &Func::accelerate(vector<Func> inputs,
     // schedule the compute and store levels of the hw_out,
     // which later becomes the constraints of the accelerator pipeline.
     func.schedule().is_accelerated() = true;
-    func.schedule().accelerate_compute_level() = LoopLevel(name(), compute_var.name());
-    func.schedule().accelerate_store_level() = LoopLevel(name(), store_var.name());
+    func.schedule().accelerate_compute_level() = LoopLevel(func, compute_var);
+    func.schedule().accelerate_store_level() = LoopLevel(func, store_var);
 
     // hw_out is stored in kernel buffer slice, this function store in kernel buffer
     func.schedule().is_kernel_buffer_slice() = true;
@@ -2270,8 +2270,8 @@ Func &Func::accelerate(vector<Func> inputs,
     mark_hw_kernels(func, func.schedule().accelerate_inputs(), tap_names);
 
     debug(3) << "check function " << func.name() << " " << func.schedule().is_accelerated() <<  "\n";
-    debug(3) << func.schedule().store_level().func << " " << func.schedule().store_level().var << "\n";
-    debug(3) << func.schedule().compute_level().func << " " << func.schedule().compute_level().var << "\n";
+    debug(3) << func.schedule().store_level().to_string() << "\n";
+    debug(3) << func.schedule().compute_level().to_string() << "\n";
 
     return *this;
 }

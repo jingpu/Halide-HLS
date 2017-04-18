@@ -8,9 +8,10 @@
 #include "pipeline_hls.h"
 #include "pipeline_native.h"
 
-#include "halide_image.h"
+#include "HalideBuffer.h"
 #include "halide_image_io.h"
 
+using namespace Halide;
 using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
