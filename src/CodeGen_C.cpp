@@ -257,10 +257,7 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
                 }
                 if (modifier & halide_handle_cplusplus_type::Pointer) {
                     oss << " *";
-                } else {
-                    break;
                 }
-
             }
         }
     } else {
@@ -636,7 +633,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
     }
 }
 
-void CodeGen_C::compile(const Buffer &buffer) {
+void CodeGen_C::compile(const BufferPtr &buffer) {
     // Don't define buffers in headers.
     if (is_header()) {
         return;
@@ -1241,6 +1238,8 @@ void CodeGen_C::visit(const Call *op) {
         user_error << "Signed integer overflow occurred during constant-folding. Signed"
             " integer overflow for int32 and int64 is undefined behavior in"
             " Halide.\n";
+    } else if (op->is_intrinsic(Call::indeterminate_expression)) {
+        user_error << "Indeterminate expression occurred during constant-folding.\n";
     } else if (op->call_type == Call::Intrinsic ||
                op->call_type == Call::PureIntrinsic) {
         // TODO: other intrinsics
@@ -1368,20 +1367,13 @@ void CodeGen_C::visit(const AssertStmt *op) {
 }
 
 void CodeGen_C::visit(const ProducerConsumer *op) {
-
     do_indent();
-    stream << "// produce " << op->name << '\n';
-    print_stmt(op->produce);
-
-    if (op->update.defined()) {
-        do_indent();
-        stream << "// update " << op->name << '\n';
-        print_stmt(op->update);
+    if (op->is_producer) {
+        stream << "// produce " << op->name << '\n';
+    } else {
+        stream << "// consume " << op->name << '\n';
     }
-
-    do_indent();
-    stream << "// consume " << op->name << '\n';
-    print_stmt(op->consume);
+    print_stmt(op->body);
 }
 
 void CodeGen_C::visit(const For *op) {

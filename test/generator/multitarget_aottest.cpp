@@ -3,9 +3,9 @@
 #include <tuple>
 #include "HalideRuntime.h"
 #include "multitarget.h"
-#include "halide_image.h"
+#include "HalideBuffer.h"
 
-using namespace Halide::Tools;
+using namespace Halide;
 
 void my_error_handler(void *user_context, const char *message) {
     printf("Saw Error: (%s)\n", message);
@@ -59,8 +59,7 @@ int main(int argc, char **argv) {
     halide_set_error_handler(my_error_handler);
     halide_set_custom_can_use_target_features(my_can_use_target_features);
 
-    buffer_t *o_buf = output;
-    if (HalideTest::multitarget(o_buf) != 0) {
+    if (HalideTest::multitarget(output) != 0) {
         printf("Error at multitarget\n");
     }
 
@@ -79,7 +78,7 @@ int main(int argc, char **argv) {
     // halide_can_use_target_features() should be called exactly once, with the
     // result cached; call this a few more times to verify.
     for (int i = 0; i < 10; ++i) {
-        if (HalideTest::multitarget(o_buf) != 0) {
+        if (HalideTest::multitarget(output) != 0) {
             printf("Error at multitarget\n");
         }
     }

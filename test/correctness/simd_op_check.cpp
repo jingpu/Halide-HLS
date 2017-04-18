@@ -162,12 +162,13 @@ void check(string op, int vector_width, Expr e) {
     }
 
     // Also compile the error checking Func (to be sure it compiles without error)
-    error.compile_to_file("test_" + name, arg_types, target);
+    std::string fn_name = "test_" + name;
+    error.compile_to_file(fn_name, arg_types, fn_name, target);
 
     bool can_run_the_code = can_run_code();
     if (can_run_the_code) {
-        Realization r = error.realize(0, target.without_feature(Target::NoRuntime));
-        double e = Image<double>(r[0])(0);
+        Realization r = error.realize(target.without_feature(Target::NoRuntime));
+        double e = Image<double>(r[0])();
         // Use a very loose tolerance for floating point tests. The
         // kinds of bugs we're looking for are codegen bugs that
         // return the wrong value entirely, not floating point
@@ -1010,6 +1011,12 @@ void check_neon_all() {
         check(arm32 ? "vqneg.s32" : "sqneg", 2*w, -max(i32_1, -max_i32));
 
         // VQRDMULH I       -       Saturating Rounding Doubling Multiply Returning High Half
+        // Note: division in Halide always rounds down (not towards
+        // zero). Otherwise these patterns would be more complicated.
+        check(arm32 ? "vqrdmulh.s16" : "sqrdmulh", 4*w, i16_sat((i32(i16_1) * i32(i16_2) + (1<<14)) / (1 << 15)));
+        check(arm32 ? "vqrdmulh.s32" : "sqrdmulh", 2*w, i32_sat((i64(i32_1) * i64(i32_2) + (1<<30)) /
+                                                                (Expr(int64_t(1)) << 31)));
+
         // VQRSHL   I       -       Saturating Rounding Shift Left
         // VQRSHRN  I       -       Saturating Rounding Shift Right Narrow
         // VQRSHRUN I       -       Saturating Rounding Shift Right Unsigned Narrow
@@ -1868,7 +1875,7 @@ int main(int argc, char **argv) {
     if (can_run_code()) {
         for (ImageParam p : image_params) {
             // Make a buffer filled with noise to use as a sample input.
-            Buffer b(p.type(), {W*4+H, H});
+            Image<> b(p.type(), {W*4+H, H});
             Expr r;
             if (p.type().is_float()) {
                 r = cast(p.type(), random_float() * 1024 - 512);

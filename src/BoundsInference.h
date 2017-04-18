@@ -10,6 +10,8 @@
 #include "IR.h"
 #include "Bounds.h"
 #include "ExtractHWKernelDAG.h"
+#include "Target.h"
+
 
 namespace Halide {
 namespace Internal {
@@ -23,7 +25,8 @@ Stmt bounds_inference(Stmt,
                       const std::vector<std::string> &realization_order,
                       const std::map<std::string, Function> &environment,
                       const std::map<std::pair<std::string, int>, Interval> &func_bounds,
-                      std::vector<BoundsInference_Stage> &inlined_stages);
+                      std::vector<BoundsInference_Stage> &inlined_stages,
+                      const Target &target);
 
 }
 }

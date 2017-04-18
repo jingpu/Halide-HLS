@@ -20,6 +20,7 @@
 #include "FindCalls.h"
 #include "Function.h"
 #include "FuseGPUThreadLoops.h"
+#include "FuzzFloatStores.h"
 #include "HexagonOffload.h"
 #include "InjectHostDevBufferCopies.h"
 #include "InjectImageIntrinsics.h"
@@ -33,6 +34,7 @@
 #include "Memoization.h"
 #include "PartitionLoops.h"
 #include "PerfectNestedLoops.h"
+#include "Prefetch.h"
 #include "Profiling.h"
 #include "Qualify.h"
 #include "RealizationOrder.h"
@@ -103,6 +105,10 @@ Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &
         debug(1) << "Skipping injecting memoization...\n";
     }
 
+    debug(1) << "Injecting prefetches...\n";
+    s = inject_prefetch(s, env);
+    debug(2) << "Lowering after injecting prefetches:\n" << s << "\n\n";
+
     debug(1) << "Injecting tracing...\n";
     s = inject_tracing(s, pipeline_name, env, outputs);
     debug(2) << "Lowering after injecting tracing:\n" << s << '\n';
@@ -127,7 +133,7 @@ Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &
     // can still simplify Exprs).
     vector<BoundsInference_Stage> inlined_stages;
     debug(1) << "Performing computation bounds inference...\n";
-    s = bounds_inference(s, outputs, order, env, func_bounds, inlined_stages);
+    s = bounds_inference(s, outputs, order, env, func_bounds, inlined_stages, t);
     debug(2) << "Lowering after computation bounds inference:\n" << s << '\n';
 
     debug(1) << "Performing sliding window optimization...\n";
@@ -266,7 +272,13 @@ Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &
     if (t.has_feature(Target::Profile)) {
         debug(1) << "Injecting profiling...\n";
         s = inject_profiling(s, pipeline_name);
-        debug(2) << "Lowering after injecting profiling:\n" << s << '\n';
+        debug(2) << "Lowering after injecting profiling:\n" << s << "\n\n";
+    }
+
+    if (t.has_feature(Target::FuzzFloatStores)) {
+        debug(1) << "Fuzzing floating point stores...\n";
+        s = fuzz_float_stores(s);
+        debug(2) << "Lowering after fuzzing floating point stores:\n" << s << "\n\n";
     }
 
     debug(1) << "Simplifying...\n";

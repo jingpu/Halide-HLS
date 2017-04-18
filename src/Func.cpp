@@ -16,7 +16,6 @@
 #include "Function.h"
 #include "Argument.h"
 #include "Lower.h"
-#include "Image.h"
 #include "Param.h"
 #include "PrintLoopNest.h"
 #include "Debug.h"
@@ -896,7 +895,11 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     }
     for (size_t i = 0; i < vars_rename.size(); i++) {
         update_args[i + args.size()] = vars_rename[i];
-        substitution_map[rvars_kept[i].name()] = vars_rename[i];
+        RVar rvar_kept = rvars_kept[i];
+        // Find the full name of rvar_kept in rvars
+        const auto iter = std::find_if(rvars.begin(), rvars.end(),
+            [&rvar_kept](const ReductionVariable &rv) { return var_name_match(rv.var, rvar_kept.name()); });
+        substitution_map[iter->var] = vars_rename[i];
     }
     for (size_t i = 0; i < args.size(); i++) {
         Expr arg = substitute(substitution_map, args[i]);
@@ -1714,6 +1717,13 @@ Stage &Stage::hexagon(VarOrRVar x) {
     return *this;
 }
 
+Stage &Stage::prefetch(VarOrRVar var, Expr offset) {
+    Prefetch prefetch = {var.name(), offset};
+    definition.schedule().prefetches().push_back(prefetch);
+
+    return *this;
+}
+
 void Func::invalidate_cache() {
     if (pipeline_.defined()) {
         pipeline_.invalidate_cache();
@@ -2105,6 +2115,12 @@ Func &Func::hexagon(VarOrRVar x) {
     return *this;
 }
 
+Func &Func::prefetch(VarOrRVar var, Expr offset) {
+    invalidate_cache();
+    Stage(func.definition(), name(), args(), func.schedule().storage_dims()).prefetch(var, offset);
+    return *this;
+}
+
 Func &Func::reorder_storage(Var x, Var y) {
     invalidate_cache();
 
@@ -2175,13 +2191,8 @@ Func &Func::fold_storage(Var dim, Expr factor, bool fold_forward) {
     return *this;
 }
 
-Func &Func::compute_at(Func f, RVar var) {
-    return compute_at(f, Var(var.name()));
-}
-
-Func &Func::compute_at(Func f, Var var) {
+Func &Func::compute_at(LoopLevel loop_level) {
     invalidate_cache();
-    LoopLevel loop_level(f.name(), var.name());
     func.schedule().compute_level() = loop_level;
     if (func.schedule().store_level().is_inline()) {
         func.schedule().store_level() = loop_level;
@@ -2189,29 +2200,34 @@ Func &Func::compute_at(Func f, Var var) {
     return *this;
 }
 
+Func &Func::compute_at(Func f, RVar var) {
+    return compute_at(LoopLevel(f, var));
+}
+
+Func &Func::compute_at(Func f, Var var) {
+    return compute_at(LoopLevel(f, var));
+}
+
 Func &Func::compute_root() {
+    return compute_at(LoopLevel::root());
+}
+
+Func &Func::store_at(LoopLevel loop_level) {
     invalidate_cache();
-    func.schedule().compute_level() = LoopLevel::root();
-    if (func.schedule().store_level().is_inline()) {
-        func.schedule().store_level() = LoopLevel::root();
-    }
+    func.schedule().store_level() = loop_level;
     return *this;
 }
 
 Func &Func::store_at(Func f, RVar var) {
-    return store_at(f, Var(var.name()));
+    return store_at(LoopLevel(f, var));
 }
 
 Func &Func::store_at(Func f, Var var) {
-    invalidate_cache();
-    func.schedule().store_level() = LoopLevel(f.name(), var.name());
-    return *this;
+    return store_at(LoopLevel(f, var));
 }
 
 Func &Func::store_root() {
-    invalidate_cache();
-    func.schedule().store_level() = LoopLevel::root();
-    return *this;
+    return store_at(LoopLevel::root());
 }
 
 Func &Func::accelerate(vector<Func> inputs,
@@ -2278,10 +2294,7 @@ Func &Func::fifo_depth(Func consumer, int depth) {
 }
 
 Func &Func::compute_inline() {
-    invalidate_cache();
-    func.schedule().compute_level() = LoopLevel();
-    func.schedule().store_level() = LoopLevel();
-    return *this;
+    return compute_at(LoopLevel());
 }
 
 Func &Func::trace_loads() {
@@ -2604,7 +2617,7 @@ FuncRef::operator Expr() const {
     return Call::make(func, args);
 }
 
-Expr FuncRef::operator[](int i) const {
+FuncTupleElementRef FuncRef::operator[](int i) const {
     user_assert(func.has_pure_definition() || func.has_extern_definition())
         << "Can't call Func \"" << func.name() << "\" because it has not yet been defined.\n";
 
@@ -2615,52 +2628,102 @@ Expr FuncRef::operator[](int i) const {
     user_assert(i >= 0 && i < func.outputs())
         << "Tuple index out of range in reference to Func \"" << func.name() << "\".\n";
 
-    return Call::make(func, args, i);
+    return FuncTupleElementRef(*this, args, i);
 }
 
 size_t FuncRef::size() const {
     return func.outputs();
 }
 
+FuncTupleElementRef::FuncTupleElementRef(
+        const FuncRef &ref, const std::vector<Expr>& args, int idx)
+        : func_ref(ref), args(args), idx(idx) {
+    internal_assert(func_ref.size() > 1)
+        << "Func " << ref.function().name() << " does not return a Tuple\n";
+    internal_assert(idx >= 0 && idx < (int)func_ref.size());
+}
+
+Tuple FuncTupleElementRef::values_with_undefs(Expr e) const {
+    vector<Expr> values(func_ref.size());
+    for (int i = 0; i < (int)values.size(); ++i) {
+        if (i == idx) {
+            values[i] = e;
+        } else {
+            Type t = func_ref.function().values()[i].type();
+            values[i] = undef(t);
+        }
+    }
+    return Tuple(values);
+}
+
+Stage FuncTupleElementRef::operator=(Expr e) {
+    return func_ref = values_with_undefs(e);
+}
+
+Stage FuncTupleElementRef::operator+=(Expr e) {
+    return func_ref += values_with_undefs(e);
+}
+
+Stage FuncTupleElementRef::operator*=(Expr e) {
+    return func_ref *= values_with_undefs(e);
+}
+
+Stage FuncTupleElementRef::operator-=(Expr e) {
+    return func_ref -= values_with_undefs(e);
+}
+
+Stage FuncTupleElementRef::operator/=(Expr e) {
+    return func_ref /= values_with_undefs(e);
+}
+
+Stage FuncTupleElementRef::operator=(const FuncRef &e) {
+    return func_ref = values_with_undefs(e);
+}
+
+FuncTupleElementRef::operator Expr() const {
+    return Internal::Call::make(func_ref.function(), args, idx);
+}
+
 Realization Func::realize(std::vector<int32_t> sizes, const Target &target) {
     user_assert(defined()) << "Can't realize undefined Func.\n";
-    vector<Buffer> outputs(func.outputs());
-    for (size_t i = 0; i < outputs.size(); i++) {
-        outputs[i] = Buffer(func.output_types()[i], sizes);
-    }
-    Realization r(outputs);
-    realize(r, target);
-    return r;
+    return pipeline().realize(sizes, target);
 }
 
 Realization Func::realize(int x_size, int y_size, int z_size, int w_size, const Target &target) {
-    user_assert(defined()) << "Can't realize undefined Func.\n";
-    vector<Buffer> outputs(func.outputs());
-    for (size_t i = 0; i < outputs.size(); i++) {
-        outputs[i] = Buffer(func.output_types()[i], x_size, y_size, z_size, w_size);
-    }
-    Realization r(outputs);
-    realize(r, target);
-    return r;
+    return realize({x_size, y_size, z_size, w_size}, target);
 }
 
 Realization Func::realize(int x_size, int y_size, int z_size, const Target &target) {
-    return realize(x_size, y_size, z_size, 0, target);
+    return realize({x_size, y_size, z_size}, target);
 }
 
 Realization Func::realize(int x_size, int y_size, const Target &target) {
-    return realize(x_size, y_size, 0, 0, target);
+    return realize({x_size, y_size}, target);
 }
 
 Realization Func::realize(int x_size, const Target &target) {
-    return realize(x_size, 0, 0, 0, target);
+    return realize(std::vector<int>{x_size}, target);
+}
+
+Realization Func::realize(const Target &target) {
+    return realize(std::vector<int>{}, target);
 }
 
 void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Func.\n";
-    vector<Buffer> outputs(func.outputs());
+    vector<Image<>> outputs(func.outputs());
+    int sizes[] = {x_size, y_size, z_size, w_size};
     for (size_t i = 0; i < outputs.size(); i++) {
-        outputs[i] = Buffer(func.output_types()[i], x_size, y_size, z_size, w_size, (uint8_t *)1);
+        // We're not actually going to read from these outputs, so
+        // make the allocation tiny, then expand them with unsafe
+        // cropping.
+        Image<> im = Image<>::make_scalar(func.output_types()[i]);
+        for (int s : sizes) {
+            if (!s) break;
+            im.add_dimension();
+            im.crop(im.dimensions()-1, 0, s);
+        }
+        outputs[i] = std::move(im);
     }
     Realization r(outputs);
     infer_input_bounds(r);
@@ -2773,14 +2836,16 @@ void Func::print_loop_nest() {
 
 void Func::compile_to_file(const string &filename_prefix,
                            const vector<Argument> &args,
+                           const std::string &fn_name,
                            const Target &target) {
-    pipeline().compile_to_file(filename_prefix, args, target);
+    pipeline().compile_to_file(filename_prefix, args, fn_name, target);
 }
 
 void Func::compile_to_static_library(const string &filename_prefix,
                                      const vector<Argument> &args,
+                                     const std::string &fn_name,
                                      const Target &target) {
-    pipeline().compile_to_static_library(filename_prefix, args, target);
+    pipeline().compile_to_static_library(filename_prefix, args, fn_name, target);
 }
 
 void Func::compile_to_multitarget_static_library(const std::string &filename_prefix,
@@ -2841,16 +2906,8 @@ const Internal::JITHandlers &Func::jit_handlers() {
     return pipeline().jit_handlers();
 }
 
-void Func::realize(Buffer b, const Target &target) {
-    pipeline().realize(b, target);
-}
-
 void Func::realize(Realization dst, const Target &target) {
     pipeline().realize(dst, target);
-}
-
-void Func::infer_input_bounds(Buffer dst) {
-    pipeline().infer_input_bounds(dst);
 }
 
 void Func::infer_input_bounds(Realization dst) {

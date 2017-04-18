@@ -12,7 +12,6 @@ env:
   #
   # Test a mix of llvm versions, a mix of build systems, and a mix of shared vs static library
   # Don't build as a static library with cmake. It risks exceeding the travis memory limit.
-  - LLVM_VERSION=3.6.2 BUILD_SYSTEM=MAKE CXX_=g++-4.8 CC_=gcc-4.8
   - LLVM_VERSION=3.7.1 BUILD_SYSTEM=MAKE CXX_=g++-4.8 CC_=gcc-4.8
   - LLVM_VERSION=3.8.1 BUILD_SYSTEM=MAKE CXX_=g++-4.8 CC_=gcc-4.8
   #- LLVM_VERSION=3.7.1 BUILD_SYSTEM=MAKE CXX_=g++-4.8 CC_=gcc-4.8 HALIDE_SHARED_LIBRARY=1
