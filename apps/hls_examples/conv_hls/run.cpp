@@ -41,24 +41,20 @@ int main(int argc, char **argv) {
 
     printf("start.\n");
 
+
     pipeline_native(in, weight, 0, out_native);
 
     printf("finish running native code\n");
 
     pipeline_hls(in, weight, 0, out_hls);
-    /*
-      FIXME: the following calling convention causes Seg fault.
-    void** arg_values = new void*[4];
-    uint16_t bias = 0;
-    arg_values[0] = (void*) &in;
-    arg_values[1] = (void*) &weight;
-    arg_values[2] = (void*) &bias;
-    arg_values[3] = (void*) &out_hls;
-    pipeline_hls_argv(arg_values);
-    delete [] arg_values;
-    */
-
     printf("finish running HLS code\n");
+
+    uint16_t bias = 0;
+    void* arg_values[4] = { (buffer_t*)in, (buffer_t*)weight, &bias, (buffer_t*)out_hls };
+    pipeline_hls_argv(arg_values);
+    printf("finish running HLS code with argv\n");
+
+
 
     bool success = true;
     for (int y = 0; y < out_native.height(); y++) {

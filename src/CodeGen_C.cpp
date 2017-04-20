@@ -595,7 +595,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
             do_indent();
             if (args[i].is_buffer()) {
                 stream << "buffer_t* " << print_name(args[i].name) 
-                       << " = *((buffer_t**) args[" << i << "]);\n";
+                       << " = ((buffer_t*) args[" << i << "]);\n";
             } else {
                 stream << print_type(args[i].type, AppendSpace) << print_name(args[i].name)
                        << " = *((" << print_type(args[i].type) << "*) args[" << i << "]);\n";
@@ -1673,7 +1673,7 @@ void CodeGen_C::test() {
         "}\n"
         "\n"
         "int test1_argv(void **args) HALIDE_FUNCTION_ATTRS {\n"
-        " buffer_t* _buf = *((buffer_t**) args[0]);\n"
+        " buffer_t* _buf = ((buffer_t*) args[0]);\n"
         " float _alpha = *((float*) args[1]);\n"
         " int32_t _beta = *((int32_t*) args[2]);\n"
         " void const *__user_context = *((void const **) args[3]);\n"
