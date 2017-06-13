@@ -116,6 +116,14 @@ void CodeGen_Zynq_LLVM::visit(const Call *op) {
         vector<Value *> args({buffer_ptr, slice_ptr, address_of_subimage_origin, width, height});
         internal_assert(fn);
         value = builder->CreateCall(fn, args);
+    } else if (op->name == "address_of") {
+        internal_assert(op->args.size() == 1) << "address_of takes one argument\n";
+        internal_assert(op->type.is_handle()) << "address_of must return a Handle type\n";
+        const Load *load = op->args[0].as<Load>();
+        internal_assert(load) << "The sole argument to address_of must be a Load node\n";
+        internal_assert(load->index.type().is_scalar()) << "Can't take the address of a vector load\n";
+
+        value = codegen_buffer_pointer(load->name, load->type, load->index);
     } else {
         CodeGen_ARM::visit(op);
     }

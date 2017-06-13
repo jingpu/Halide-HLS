@@ -21,7 +21,9 @@ class CodeGen_Zynq_C : public CodeGen_C {
 public:
     /** Initialize a C code generator pointing at a particular output
      * stream (e.g. a file, or std::cout) */
-    CodeGen_Zynq_C(std::ostream &dest);
+    CodeGen_Zynq_C(std::ostream &dest,
+                   Target target,
+                   OutputKind output_kind);
 
 protected:
     std::vector<std::string> buffer_slices;

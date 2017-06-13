@@ -19,7 +19,7 @@ pipeline_hls.cpp pipeline_native.o: pipeline
 	HL_DEBUG_CODEGEN=0 ./pipeline
 
 run: run.cpp pipeline_hls.cpp hls_target.cpp pipeline_native.o
-	$(CXX) $(CXXFLAGS) -O1 -DNDEBUG $(HLS_CXXFLAGS) -g -Wall -Werror $^ -lpthread -ldl -o $@
+	$(CXX) $(CXXFLAGS) -O1 -DNDEBUG $(HLS_CXXFLAGS) -g -Wall -Werror $^ -o $@ $(LDFLAGS)
 
 
 $(HLS_LOG): ../hls_support/run_hls.tcl pipeline_hls.cpp run.cpp

@@ -9,7 +9,7 @@ using std::string;
 using std::vector;
 using std::map;
 
-
+/*
 class InjectCmaIntrinsics : public IRMutator {
     const map<string, Function> &env;
 
@@ -76,11 +76,13 @@ public:
     InjectCmaIntrinsics(const map<string, Function> &e)
         : env(e) {}
 };
-
+*/
 
 Stmt inject_zynq_intrinsics(Stmt s,
                             const map<string, Function> &env) {
-    return InjectCmaIntrinsics(env).mutate(s);
+    // TODO(jingpu) check it we still need this after implementing device_interface
+    //return InjectCmaIntrinsics(env).mutate(s);
+    return s;
 }
 
 }

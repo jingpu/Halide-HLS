@@ -46,10 +46,14 @@ bool contain_for_loop(Stmt s) {
 
 }
 
-CodeGen_HLS_Target::CodeGen_HLS_Target(const string &name)
+CodeGen_HLS_Target::CodeGen_HLS_Target(const string &name, Target target)
     : target_name(name),
-      hdrc(hdr_stream, CodeGen_HLS_C::CPlusPlusHeader),
-      srcc(src_stream, CodeGen_HLS_C::CPlusPlusImplementation) { }
+      hdrc(hdr_stream,
+           target.with_feature(Target::CPlusPlusMangling),
+           CodeGen_HLS_C::CPlusPlusHeader),
+      srcc(src_stream,
+           target.with_feature(Target::CPlusPlusMangling),
+           CodeGen_HLS_C::CPlusPlusImplementation) { }
 
 
 CodeGen_HLS_Target::~CodeGen_HLS_Target() {
@@ -265,7 +269,7 @@ class RenameAllocation : public IRMutator {
     void visit(const Load *op) {
         if (op->name == orig_name ) {
             Expr index = mutate(op->index);
-            expr = Load::make(op->type, new_name, index, op->image, op->param);
+            expr = Load::make(op->type, new_name, index, op->image, op->param, op->predicate);
         } else {
             IRMutator::visit(op);
         }
@@ -275,7 +279,7 @@ class RenameAllocation : public IRMutator {
         if (op->name == orig_name ) {
             Expr value = mutate(op->value);
             Expr index = mutate(op->index);
-            stmt = Store::make(new_name, value, index, op->param);
+            stmt = Store::make(new_name, value, index, op->param, op->predicate);
         } else {
             IRMutator::visit(op);
         }

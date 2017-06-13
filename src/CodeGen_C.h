@@ -32,7 +32,9 @@ public:
 
     /** Initialize a C code generator pointing at a particular output
      * stream (e.g. a file, or std::cout) */
-    CodeGen_C(std::ostream &dest, OutputKind output_kind = CImplementation,
+    CodeGen_C(std::ostream &dest,
+              Target target,
+              OutputKind output_kind = CImplementation,
               const std::string &include_guard = "");
     ~CodeGen_C();
 
@@ -42,14 +44,18 @@ public:
     EXPORT static void test();
 
 protected:
+
     /** Emit a declaration. */
     // @{
     virtual void compile(const LoweredFunc &func);
-    virtual void compile(const BufferPtr &buffer);
+    virtual void compile(const Buffer<> &buffer);
     // @}
 
     /** An ID for the most recently generated ssa variable */
     std::string id;
+
+    /** The target being generated for. */
+    Target target;
 
     /** Controls whether this instance is generating declarations or
      * definitions and whether the interface us extern "C" or C++. */
@@ -107,12 +113,6 @@ protected:
     /** Close a C scope (i.e. throw in an end brace, decrease the indent) */
     void close_scope(const std::string &comment);
 
-    /** Unpack a buffer into its constituent parts and push it on the allocations stack. */
-    void push_buffer(Type t, const std::string &buffer_name);
-
-    /** Pop a buffer from the stack. */
-    void pop_buffer(const std::string &buffer_name);
-
     struct Allocation {
         Type type;
         std::string free_function;
@@ -127,17 +127,13 @@ protected:
     /** True if there is a void * __user_context parameter in the arguments. */
     bool have_user_context;
 
-    /** An enum to make calling convention changes clearer. */
-    enum class COrCPlusPlus {
-        Default,   ///< Whatever compiler is being used
-        C,         ///< extern "C" is forced if C++
-        CPlusPlus, ///< Operationally same as "default" but shows in code which things are expected to be mangled.
-    };
-
     /** Track current calling convention scope. */
     bool extern_c_open;
 
-    void switch_to_c_or_c_plus_plus(COrCPlusPlus mode);
+    /** Track which handle types have been forward-declared already. */
+    std::set<const halide_handle_cplusplus_type *> forward_declared;
+
+    void set_name_mangling_mode(NameMangling mode);
 
     using IRPrinter::visit;
 
@@ -178,6 +174,8 @@ protected:
     void visit(const Realize *);
     void visit(const IfThenElse *);
     void visit(const Evaluate *);
+    void visit(const Shuffle *);
+    void visit(const Prefetch *);
 
     void visit_binop(Type t, Expr a, Expr b, const char *op);
 };

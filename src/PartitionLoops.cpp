@@ -19,7 +19,6 @@ namespace Internal {
 using std::string;
 using std::vector;
 using std::pair;
-using std::make_pair;
 using std::map;
 
 namespace {
@@ -66,10 +65,11 @@ class MarkClampedRampsAsLikely : public IRMutator {
         Expr index = mutate(op->index);
         in_index = old_in_index;
         Expr value = mutate(op->value);
-        if (index.same_as(op->index) && value.same_as(op->value)) {
+        Expr predicate = mutate(op->predicate);
+        if (predicate.same_as(op->predicate) && index.same_as(op->index) && value.same_as(op->value)) {
             stmt = op;
         } else {
-            stmt = Store::make(op->name, value, index, op->param);
+            stmt = Store::make(op->name, value, index, op->param, predicate);
         }
     }
 
@@ -491,7 +491,7 @@ class PartitionLoops : public IRMutator {
             in_gpu_loop = old_in_gpu_loop;
             return;
         }
-        
+
         // Find simplifications in this loop body
         FindSimplifications finder(op->name);
         body.accept(&finder);
@@ -764,8 +764,8 @@ class RenormalizeGPULoops : public IRMutator {
             stmt = op;
             return;
         }
-        
-        if (ends_with(op->name, Var::gpu_threads().name())) {
+
+        if (ends_with(op->name, "__thread_id_x")) {
             in_thread_loop = true;
             IRMutator::visit(op);
             in_thread_loop = false;
@@ -807,7 +807,7 @@ class RenormalizeGPULoops : public IRMutator {
             // we'd better give it a new name.
             string new_name = unique_name('t');
             Expr new_var = Variable::make(op->value.type(), new_name);
-            lifted_lets.push_back(make_pair(new_name, op->value));
+            lifted_lets.push_back({ new_name, op->value });
             stmt = mutate(substitute(op->name, new_var, op->body));
             return;
         }

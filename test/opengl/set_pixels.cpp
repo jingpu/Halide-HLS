@@ -1,6 +1,7 @@
 #include "Halide.h"
 #include <stdio.h>
-#include <stdlib.h>
+
+#include "testing.h"
 
 using namespace Halide;
 
@@ -13,21 +14,13 @@ int main() {
 
     f(x, y, c) = cast<uint8_t>(42);
 
-    Image<uint8_t> out(10, 10, 3);
+    Buffer<uint8_t> out(10, 10, 3);
     f.bound(c, 0, 3).glsl(x, y, c);
     f.realize(out, target);
 
     out.copy_to_host();
-    for (int y=0; y<out.height(); y++) {
-        for (int x=0; x<out.width(); x++) {
-            for (int z=0; x<out.channels(); x++) {
-                if (!(out(x, y, z) == 42)) {
-                    fprintf(stderr, "Incorrect pixel (%d) at x=%d y=%d z=%d.\n",
-                            out(x, y, z), x, y, z);
-                    return 1;
-                }
-            }
-        }
+    if (!Testing::check_result<uint8_t>(out, [](int x, int y, int c) { return 42; })) {
+        return 1;
     }
 
     printf("Success!\n");

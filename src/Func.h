@@ -41,6 +41,8 @@ struct VarOrRVar {
     bool is_rvar;
 };
 
+class ImageParam;
+
 namespace Internal {
 struct Split;
 struct StorageDim;
@@ -94,12 +96,14 @@ public:
 
     /** Calling rfactor() on an associative update definition a Func will split
      * the update into an intermediate which computes the partial results and
-     * replace the current update definition with a new definition which merges
+     * replaces the current update definition with a new definition which merges
      * the partial results. If called on a init/pure definition, this will
      * throw an error. rfactor() will automatically infer the associative reduction
      * operator and identity of the operator. If it can't prove the operation
      * is associative or if it cannot find an identity for that operator, this
-     * will throw an error.
+     * will throw an error. In addition, commutativity of the operator is required
+     * if rfactor() is called on the inner dimension but excluding the outer
+     * dimensions.
      *
      * rfactor() takes as input 'preserved', which is a list of <RVar, Var> pairs.
      * The rvars not listed in 'preserved' are removed from the original Func and
@@ -107,8 +111,8 @@ public:
      * 'preserved') are made pure in the intermediate Func. The intermediate Func's
      * update definition inherits all scheduling directives (e.g. split,fuse, etc.)
      * applied to the original Func's update definition. The loop order of the
-     * intermediate Func's update definition is the same as the original, albeit
-     * the lifted RVars are replaced by the new pure Vars. The loop order of the
+     * intermediate Func's update definition is the same as the original, although
+     * the RVars in 'preserved' are replaced by the new pure Vars. The loop order of the
      * intermediate Func's init definition from innermost to outermost is the args'
      * order of the original Func's init definition followed by the new pure Vars.
      *
@@ -162,8 +166,8 @@ public:
     // @{
     EXPORT Func rfactor(std::vector<std::pair<RVar, Var>> preserved);
     EXPORT Func rfactor(RVar r, Var v);
-    EXPORT Func argmaxmin_rfactor(std::vector<std::pair<RVar, Var>> preserved, bool is_argmax = true);
-    EXPORT Func argmaxmin_rfactor(RVar r, Var v, bool is_argmax = true);
+    //EXPORT Func argmaxmin_rfactor(std::vector<std::pair<RVar, Var>> preserved, bool is_argmax = true);
+    //EXPORT Func argmaxmin_rfactor(RVar r, Var v, bool is_argmax = true);
     // @}
 
     /** Scheduling calls that control how the domain of this stage is
@@ -177,8 +181,8 @@ public:
     EXPORT Stage &vectorize(VarOrRVar var);
     EXPORT Stage &unroll(VarOrRVar var);
     EXPORT Stage &parallel(VarOrRVar var, Expr task_size, TailStrategy tail = TailStrategy::Auto);
-    EXPORT Stage &vectorize(VarOrRVar var, int factor, TailStrategy tail = TailStrategy::Auto);
-    EXPORT Stage &unroll(VarOrRVar var, int factor, TailStrategy tail = TailStrategy::Auto);
+    EXPORT Stage &vectorize(VarOrRVar var, Expr factor, TailStrategy tail = TailStrategy::Auto);
+    EXPORT Stage &unroll(VarOrRVar var, Expr factor, TailStrategy tail = TailStrategy::Auto);
     EXPORT Stage &tile(VarOrRVar x, VarOrRVar y,
                        VarOrRVar xo, VarOrRVar yo,
                        VarOrRVar xi, VarOrRVar yi, Expr
@@ -199,6 +203,7 @@ public:
 
     EXPORT Stage &rename(VarOrRVar old_name, VarOrRVar new_name);
     EXPORT Stage specialize(Expr condition);
+    EXPORT void specialize_fail(const std::string &message);
 
     EXPORT Stage &gpu_threads(VarOrRVar thread_x, DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Stage &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, DeviceAPI device_api = DeviceAPI::Default_GPU);
@@ -216,13 +221,64 @@ public:
     EXPORT Stage &gpu(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
                       VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z,
                       DeviceAPI device_api = DeviceAPI::Default_GPU);
+
+    // TODO(psuriana): For now we need to expand "tx" into Var and RVar versions
+    // due to conflict with the deprecated interfaces since Var can be implicitly
+    // converted into either VarOrRVar or Expr. Merge this later once we remove
+    // the deprecated interfaces.
+    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar bx, Var tx, Expr x_size,
+                           TailStrategy tail = TailStrategy::Auto,
+                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar bx, RVar tx, Expr x_size,
+                           TailStrategy tail = TailStrategy::Auto,
+                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+
+    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar tx, Expr x_size,
+                           TailStrategy tail = TailStrategy::Auto,
+                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y,
+                           VarOrRVar bx, VarOrRVar by,
+                           VarOrRVar tx, VarOrRVar ty,
+                           Expr x_size, Expr y_size,
+                           TailStrategy tail = TailStrategy::Auto,
+                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+
+    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y,
+                           VarOrRVar tx, Var ty,
+                           Expr x_size, Expr y_size,
+                           TailStrategy tail = TailStrategy::Auto,
+                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y,
+                           VarOrRVar tx, RVar ty,
+                           Expr x_size, Expr y_size,
+                           TailStrategy tail = TailStrategy::Auto,
+                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+
+    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                           VarOrRVar bx, VarOrRVar by, VarOrRVar bz,
+                           VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
+                           Expr x_size, Expr y_size, Expr z_size,
+                           TailStrategy tail = TailStrategy::Auto,
+                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                           VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
+                           Expr x_size, Expr y_size, Expr z_size,
+                           TailStrategy tail = TailStrategy::Auto,
+                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+
+    // If we mark these as deprecated, some build environments will complain
+    // about the internal-only calls. Since these are rarely used outside
+    // Func itself, we'll just comment them as deprecated for now.
+    // HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.")
     EXPORT Stage &gpu_tile(VarOrRVar x, Expr x_size,
                            TailStrategy tail = TailStrategy::Auto,
                            DeviceAPI device_api = DeviceAPI::Default_GPU);
+    // HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.")
     EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y,
                            Expr x_size, Expr y_size,
                            TailStrategy tail = TailStrategy::Auto,
                            DeviceAPI device_api = DeviceAPI::Default_GPU);
+    // HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.")
     EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                            Expr x_size, Expr y_size, Expr z_size,
                            TailStrategy tail = TailStrategy::Auto,
@@ -231,7 +287,15 @@ public:
     EXPORT Stage &allow_race_conditions();
 
     EXPORT Stage &hexagon(VarOrRVar x = Var::outermost());
-    EXPORT Stage &prefetch(VarOrRVar var, Expr offset = 1);
+    EXPORT Stage &prefetch(const Func &f, VarOrRVar var, Expr offset = 1,
+                           PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
+    EXPORT Stage &prefetch(const Internal::Parameter &param, VarOrRVar var, Expr offset = 1,
+                           PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
+    template<typename T>
+    Stage &prefetch(const T &image, VarOrRVar var, Expr offset = 1,
+                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
+        return prefetch(image.parameter(), var, offset, strategy);
+    }
     // @}
 };
 
@@ -471,9 +535,9 @@ public:
      * Function object. */
     EXPORT explicit Func(Internal::Function f);
 
-    /** Construct a new Func to wrap an Image. */
-    template<typename T, int D>
-    NO_INLINE explicit Func(const Image<T, D> &im) : Func() {
+    /** Construct a new Func to wrap a Buffer. */
+    template<typename T>
+    NO_INLINE explicit Func(Buffer<T> &im) : Func() {
         (*this)(_) = im(_);
     }
 
@@ -483,11 +547,11 @@ public:
      * been called. If the final stage of the pipeline is on the GPU,
      * data is copied back to the host before being returned. The
      * returned Realization should probably be instantly converted to
-     * an Image class of the appropriate type. That is, do this:
+     * a Buffer class of the appropriate type. That is, do this:
      *
      \code
      f(x) = sin(x);
-     Image<float> im = f.realize(...);
+     Buffer<float> im = f.realize(...);
      \endcode
      *
      * If your Func has multiple values, because you defined it using
@@ -498,8 +562,8 @@ public:
      \code
      f(x) = Tuple(x, sin(x));
      Realization r = f.realize(...);
-     Image<int> im0 = r[0];
-     Image<float> im1 = r[1];
+     Buffer<int> im0 = r[0];
+     Buffer<float> im1 = r[1];
      \endcode
      *
      */
@@ -522,16 +586,7 @@ public:
      * necessarily safe to run in-place. If you pass multiple buffers,
      * they must have matching sizes. This form of realize does *not*
      * automatically copy data back from the GPU. */
-    // @{
     EXPORT void realize(Realization dst, const Target &target = Target());
-
-    template<typename T, int D>
-    NO_INLINE void realize(Image<T, D> &dst, const Target &target = Target()) {
-        Realization r(dst);
-        realize(r, target);
-        dst = r[0];
-    }
-    // @}
 
     /** For a given size of output, or a given output buffer,
      * determine the bounds required of all unbound ImageParams
@@ -541,17 +596,6 @@ public:
     // @{
     EXPORT void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0);
     EXPORT void infer_input_bounds(Realization dst);
-
-    template<typename T, int D>
-    NO_INLINE void infer_input_bounds(Image<T, D> &im) {
-        // It's possible for bounds inference to also manipulate
-        // output buffers if their host pointer is null, so we must
-        // take Images by reference and communicate the bounds query
-        // result by modifying the argument.
-        Realization r(im);
-        infer_input_bounds(r);
-        im = r[0];
-    }
     // @}
 
     /** Statically compile this function to llvm bitcode, with the
@@ -785,7 +829,7 @@ public:
      * If you are statically compiling, you can also just define your
      * own versions of the tracing functions (see HalideRuntime.h),
      * and they will clobber Halide's versions. */
-    EXPORT void set_custom_trace(int (*trace_fn)(void *, const halide_trace_event *));
+    EXPORT void set_custom_trace(int (*trace_fn)(void *, const halide_trace_event_t *));
 
     /** Set the function called to print messages from the runtime.
      * If you are compiling statically, you can also just define your
@@ -911,14 +955,40 @@ public:
                               const std::vector<ExternFuncArgument> &params,
                               Type t,
                               int dimensionality,
-                              bool is_c_plus_plus = false) {
-        define_extern(function_name, params, std::vector<Type>{t}, dimensionality, is_c_plus_plus);
+                              NameMangling mangling,
+                              bool uses_old_buffer_t) {
+        define_extern(function_name, params, std::vector<Type>{t},
+                      dimensionality, mangling, DeviceAPI::Host, uses_old_buffer_t);
+    }
+
+    EXPORT void define_extern(const std::string &function_name,
+                              const std::vector<ExternFuncArgument> &params,
+                              Type t,
+                              int dimensionality,
+                              NameMangling mangling = NameMangling::Default,
+                              DeviceAPI device_api = DeviceAPI::Host,
+                              bool uses_old_buffer_t = false) {
+        define_extern(function_name, params, std::vector<Type>{t},
+                      dimensionality, mangling, device_api, uses_old_buffer_t);
     }
 
     EXPORT void define_extern(const std::string &function_name,
                               const std::vector<ExternFuncArgument> &params,
                               const std::vector<Type> &types,
-                              int dimensionality, bool is_c_plus_plus = false);
+                              int dimensionality,
+                              NameMangling mangling,
+                              bool uses_old_buffer_t) {
+      define_extern(function_name, params, types,
+                    dimensionality, mangling, DeviceAPI::Host, uses_old_buffer_t);
+    }
+
+    EXPORT void define_extern(const std::string &function_name,
+                              const std::vector<ExternFuncArgument> &params,
+                              const std::vector<Type> &types,
+                              int dimensionality,
+                              NameMangling mangling = NameMangling::Default,
+                              DeviceAPI device_api = DeviceAPI::Host,
+                              bool uses_old_buffer_t = false);
     // @}
 
     /** Get the types of the outputs of this Func. */
@@ -1068,7 +1138,7 @@ public:
      * this Func by any other Func. If a global wrapper already
      * exists, returns it. The global wrapper is only used by callers
      * for which no custom wrapper has been specified.
-    */
+     */
     EXPORT Func in();
 
     /** Split a dimension into inner and outer subdimensions with the
@@ -1117,14 +1187,14 @@ public:
      * inner dimension. This is how you vectorize a loop of unknown
      * size. The variable to be vectorized should be the innermost
      * one. After this call, var refers to the outer dimension of the
-     * split. */
-    EXPORT Func &vectorize(VarOrRVar var, int factor, TailStrategy tail = TailStrategy::Auto);
+     * split. 'factor' must be an integer. */
+    EXPORT Func &vectorize(VarOrRVar var, Expr factor, TailStrategy tail = TailStrategy::Auto);
 
     /** Split a dimension by the given factor, then unroll the inner
      * dimension. This is how you unroll a loop of unknown size by
      * some constant factor. After this call, var refers to the outer
-     * dimension of the split. */
-    EXPORT Func &unroll(VarOrRVar var, int factor, TailStrategy tail = TailStrategy::Auto);
+     * dimension of the split. 'factor' must be an integer. */
+    EXPORT Func &unroll(VarOrRVar var, Expr factor, TailStrategy tail = TailStrategy::Auto);
 
     /** Statically declare that the range over which a function should
      * be evaluated is given by the second and third arguments. This
@@ -1359,6 +1429,48 @@ public:
      */
     EXPORT Stage specialize(Expr condition);
 
+    /** Add a specialization to a Func that always terminates execution
+     * with a call to halide_error(). By itself, this is of limited use,
+     * but can be useful to terminate chains of specialize() calls where
+     * no "default" case is expected (thus avoiding unnecessary code generation).
+     *
+     * For instance, say we want to optimize a pipeline to process images
+     * in planar and interleaved format; we might typically do something like:
+     \code
+     ImageParam im(UInt(8), 3);
+     Func f = do_something_with(im);
+     f.specialize(im.dim(0).stride() == 1).vectorize(x, 8);  // planar
+     f.specialize(im.dim(2).stride() == 1).reorder(c, x, y).vectorize(c);  // interleaved
+     \endcode
+     * This code will vectorize along rows for the planar case, and across pixel
+     * components for the interleaved case... but there is an implicit "else"
+     * for the unhandled cases, which generates unoptimized code. If we never
+     * anticipate passing any other sort of images to this, we code streamline
+     * our code by adding specialize_fail():
+     \code
+     ImageParam im(UInt(8), 3);
+     Func f = do_something(im);
+     f.specialize(im.dim(0).stride() == 1).vectorize(x, 8);  // planar
+     f.specialize(im.dim(2).stride() == 1).reorder(c, x, y).vectorize(c);  // interleaved
+     f.specialize_fail("Unhandled image format");
+     \endcode
+     * Conceptually, this produces codes like:
+     \code
+     if (im.dim(0).stride() == 1) {
+        do_something_planar();
+     } else if (im.dim(2).stride() == 1) {
+        do_something_interleaved();
+     } else {
+        halide_error("Unhandled image format");
+     }
+     \endcode
+     *
+     * Note that calling specialize_fail() terminates the specialization chain
+     * for a given Func; you cannot create new specializations for the Func
+     * afterwards (though you can retrieve handles to previous specializations).
+     */
+    EXPORT void specialize_fail(const std::string &message);
+
     /** Tell Halide that the following dimensions correspond to GPU
      * thread indices. This is useful if you compute a producer
      * function within the block indices of a consumer function, and
@@ -1377,19 +1489,6 @@ public:
      * touch a very small part of your Func. */
     EXPORT Func &gpu_single_thread(DeviceAPI device_api = DeviceAPI::Default_GPU);
 
-    /** \deprecated Old name for #gpu_threads. */
-    // @{
-    EXPORT Func &cuda_threads(VarOrRVar thread_x) {
-        return gpu_threads(thread_x);
-    }
-    EXPORT Func &cuda_threads(VarOrRVar thread_x, VarOrRVar thread_y) {
-        return gpu_threads(thread_x, thread_y);
-    }
-    EXPORT Func &cuda_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z) {
-        return gpu_threads(thread_x, thread_y, thread_z);
-    }
-    // @}
-
     /** Tell Halide that the following dimensions correspond to GPU
      * block indices. This is useful for scheduling stages that will
      * run serially within each GPU block. If the selected target is
@@ -1398,19 +1497,6 @@ public:
     EXPORT Func &gpu_blocks(VarOrRVar block_x, DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Func &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Func &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z, DeviceAPI device_api = DeviceAPI::Default_GPU);
-    // @}
-
-    /** \deprecated Old name for #gpu_blocks. */
-    // @{
-    EXPORT Func &cuda_blocks(VarOrRVar block_x) {
-        return gpu_blocks(block_x);
-    }
-    EXPORT Func &cuda_blocks(VarOrRVar block_x, VarOrRVar block_y) {
-        return gpu_blocks(block_x, block_y);
-    }
-    EXPORT Func &cuda_blocks(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z) {
-        return gpu_blocks(block_x, block_y, block_z);
-    }
     // @}
 
     /** Tell Halide that the following dimensions correspond to GPU
@@ -1426,40 +1512,68 @@ public:
                      VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, DeviceAPI device_api = DeviceAPI::Default_GPU);
     // @}
 
-    /** \deprecated Old name for #gpu. */
-    // @{
-    EXPORT Func &cuda(VarOrRVar block_x, VarOrRVar thread_x) {
-        return gpu(block_x, thread_x);
-    }
-    EXPORT Func &cuda(VarOrRVar block_x, VarOrRVar block_y,
-                      VarOrRVar thread_x, VarOrRVar thread_y) {
-        return gpu(block_x, thread_x, block_y, thread_y);
-    }
-    EXPORT Func &cuda(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
-                      VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z) {
-        return gpu(block_x, thread_x, block_y, thread_y, block_z, thread_z);
-    }
-    // @}
-
     /** Short-hand for tiling a domain and mapping the tile indices
      * to GPU block indices and the coordinates within each tile to
      * GPU thread indices. Consumes the variables given, so do all
      * other scheduling first. */
     // @{
-    EXPORT Func &gpu_tile(VarOrRVar x, int x_size,
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar bx, Var tx, Expr x_size,
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
-    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size,
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar bx, RVar tx, Expr x_size,
+                          TailStrategy tail = TailStrategy::Auto,
+                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar tx, Expr x_size,
+                          TailStrategy tail = TailStrategy::Auto,
+                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y,
+                          VarOrRVar bx, VarOrRVar by,
+                          VarOrRVar tx, VarOrRVar ty,
+                          Expr x_size, Expr y_size,
+                          TailStrategy tail = TailStrategy::Auto,
+                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y,
+                          VarOrRVar tx, Var ty,
+                          Expr x_size, Expr y_size,
+                          TailStrategy tail = TailStrategy::Auto,
+                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y,
+                          VarOrRVar tx, RVar ty,
+                          Expr x_size, Expr y_size,
+                          TailStrategy tail = TailStrategy::Auto,
+                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                          VarOrRVar bx, VarOrRVar by, VarOrRVar bz,
+                          VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
+                          Expr x_size, Expr y_size, Expr z_size,
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                          int x_size, int y_size, int z_size,
+                          VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
+                          Expr x_size, Expr y_size, Expr z_size,
+                          TailStrategy tail = TailStrategy::Auto,
+                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+
+    HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.")
+    EXPORT Func &gpu_tile(VarOrRVar x, Expr x_size,
+                          TailStrategy tail = TailStrategy::Auto,
+                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+    HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.")
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, Expr x_size, Expr y_size,
+                          TailStrategy tail = TailStrategy::Auto,
+                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+    HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.")
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                          Expr x_size, Expr y_size, Expr z_size,
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
     // @}
 
     /** Schedule for execution using coordinate-based hardware api.
-     * GLSL and Renderscript are examples of those. Conceptually, this is
+     * GLSL is an example of this. Conceptually, this is
      * similar to parallelization over 'x' and 'y' (since GLSL shaders compute
      * individual output pixels in parallel) and vectorization over 'c'
      * (since GLSL/RS implicitly vectorizes the color channel). */
@@ -1472,11 +1586,47 @@ public:
      * Hexagon, that loop is executed on a Hexagon DSP. */
     EXPORT Func &hexagon(VarOrRVar x = Var::outermost());
 
-    /** Prefetch data read by a subsequent loop iteration, at an
-     * optionally specified iteration offset. This is currently only
-     * implemented on Hexagon, prefetch directives are ignored on
-     * other targets. */
-    EXPORT Func &prefetch(VarOrRVar var, Expr offset = 1);
+    /** Prefetch data written to or read from a Func or an ImageParam by a
+     * subsequent loop iteration, at an optionally specified iteration offset.
+     * 'var' specifies at which loop level the prefetch calls should be inserted.
+     * The final argument specifies how prefetch of region outside bounds
+     * should be handled.
+     *
+     * For example, consider this pipeline:
+     \code
+     Func f, g;
+     Var x, y;
+     f(x, y) = x + y;
+     g(x, y) = 2 * f(x, y);
+     \endcode
+     *
+     * The following schedule:
+     \code
+     f.compute_root();
+     g.prefetch(f, x, 2, PrefetchBoundStrategy::NonFaulting);
+     \endcode
+     *
+     * will inject prefetch call at the innermost loop of 'g' and generate
+     * the following loop nest:
+     * for y = ...
+     *   for x = ...
+     *     f(x, y) = x + y
+     * for y = ..
+     *   for x = ...
+     *     prefetch(&f[x + 2, y], 1, 16);
+     *     g(x, y) = 2 * f(x, y)
+     */
+    // @{
+    EXPORT Func &prefetch(const Func &f, VarOrRVar var, Expr offset = 1,
+                          PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
+    EXPORT Func &prefetch(const Internal::Parameter &param, VarOrRVar var, Expr offset = 1,
+                          PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
+    template<typename T>
+    Func &prefetch(const T &image, VarOrRVar var, Expr offset = 1,
+                   PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
+        return prefetch(image.parameter(), var, offset, strategy);
+    }
+    // @}
 
     /** Specify how the storage for the function is laid out. These
      * calls let you specify the nesting order of the dimensions. For
@@ -1853,7 +2003,7 @@ public:
 
     /** You can cast a Func to its pure stage for the purposes of
      * scheduling it. */
-    operator Stage() const;
+    EXPORT operator Stage() const;
 
     /** Get a handle on the output buffer for this Func. Only relevant
      * if this is the output Func in a pipeline. Useful for making
@@ -1899,7 +2049,7 @@ inline void check_types(const Tuple &t, int idx) {
 template <typename Last>
 inline void assign_results(Realization &r, int idx, Last last) {
     using T = typename std::remove_pointer<typename std::remove_reference<Last>::type>::type;
-    *last = Image<T>(r[idx])();
+    *last = Buffer<T>(r[idx])();
 }
 
 template <typename First, typename Second, typename... Rest>
@@ -1921,7 +2071,7 @@ NO_INLINE T evaluate(Expr e) {
         << " as a scalar of type " << type_of<T>() << "\n";
     Func f;
     f() = e;
-    Image<T> im = f.realize();
+    Buffer<T> im = f.realize();
     return im();
 }
 
@@ -1935,6 +2085,7 @@ NO_INLINE void evaluate(Tuple t, First first, Rest&&... rest) {
     Realization r = f.realize();
     Internal::assign_results(r, 0, first, rest...);
 }
+
 
 namespace Internal {
 
@@ -1964,7 +2115,7 @@ NO_INLINE T evaluate_may_gpu(Expr e) {
     Func f;
     f() = e;
     Internal::schedule_scalar(f);
-    Image<T> im = f.realize();
+    Buffer<T> im = f.realize();
     return im();
 }
 

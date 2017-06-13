@@ -20,9 +20,11 @@ class CodeGen_HLS_Base : public CodeGen_C {
 public:
     /** Initialize a C code generator pointing at a particular output
      * stream (e.g. a file, or std::cout) */
-    CodeGen_HLS_Base(std::ostream &dest, OutputKind output_kind = CPlusPlusImplementation,
+    CodeGen_HLS_Base(std::ostream &dest,
+                     Target target,
+                     OutputKind output_kind,
                      const std::string &include_guard = "")
-        : CodeGen_C(dest, output_kind, include_guard) {}
+        : CodeGen_C(dest, target, output_kind, include_guard) {}
 
     struct Stencil_Type {
         typedef enum {Stencil, Stream, AxiStream} StencilContainerType;

@@ -59,7 +59,6 @@ bool should_extract(Expr e) {
     }
 
     return true;
-
 }
 
 // A global-value-numbering of expressions. Returns canonical form of
@@ -165,6 +164,34 @@ public:
         expr = body;
     }
 
+    void visit(const Load *op) {
+        Expr predicate = op->predicate;
+        // If the predicate is trivially true, there is no point to lift it out
+        if (!is_one(predicate)) {
+            predicate = mutate(op->predicate);
+        }
+        Expr index = mutate(op->index);
+        if (predicate.same_as(op->predicate) && index.same_as(op->index)) {
+            expr = op;
+        } else {
+            expr = Load::make(op->type, op->name, index, op->image, op->param, predicate);
+        }
+    }
+
+    void visit(const Store *op) {
+        Expr predicate = op->predicate;
+        // If the predicate is trivially true, there is no point to lift it out
+        if (!is_one(predicate)) {
+            predicate = mutate(op->predicate);
+        }
+        Expr value = mutate(op->value);
+        Expr index = mutate(op->index);
+        if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
+            stmt = op;
+        } else {
+            stmt = Store::make(op->name, value, index, op->param, predicate);
+        }
+    }
 };
 
 /** Fill in the use counts in a global value numbering. */
@@ -174,11 +201,13 @@ public:
     ComputeUseCounts(GVN &g) : gvn(g) {}
 
     using IRGraphVisitor::include;
+    using IRGraphVisitor::visit;
 
     void include(const Expr &e) {
         // If it's not the sort of thing we want to extract as a let,
         // just use the generic visitor to increment use counts for
         // the children.
+        debug(4) << "Include: " << e << "; should extract: " << should_extract(e) << "\n";
         if (!should_extract(e)) {
             e.accept(this);
             return;
@@ -224,10 +253,18 @@ public:
     }
 };
 
+class CSEEveryExprInStmt : public IRMutator {
+public:
+    using IRMutator::mutate;
+
+    Expr mutate(Expr e) {
+        return common_subexpression_elimination(e);
+    }
+};
+
 } // namespace
 
 Expr common_subexpression_elimination(Expr e) {
-
     // Early-out for trivial cases.
     if (is_const(e) || e.as<Variable>()) return e;
 
@@ -250,7 +287,7 @@ Expr common_subexpression_elimination(Expr e) {
         Expr old = e.expr;
         if (e.use_count > 1) {
             string name = unique_name('t');
-            lets.push_back(make_pair(name, e.expr));
+            lets.push_back({ name, e.expr });
             // Point references to this expr to the variable instead.
             replacements[e.expr] = Variable::make(e.expr.type(), name);
         }
@@ -277,19 +314,6 @@ Expr common_subexpression_elimination(Expr e) {
 
     return e;
 }
-
-namespace {
-
-class CSEEveryExprInStmt : public IRMutator {
-public:
-    using IRMutator::mutate;
-
-    Expr mutate(Expr e) {
-        return common_subexpression_elimination(e);
-    }
-};
-
-} // namespace
 
 Stmt common_subexpression_elimination(Stmt s) {
     return CSEEveryExprInStmt().mutate(s);
@@ -355,6 +379,8 @@ Expr ssa_block(vector<Expr> exprs) {
 
 void cse_test() {
     Expr x = Variable::make(Int(32), "x");
+    Expr y = Variable::make(Int(32), "y");
+
     Expr t[32], tf[32];
     for (int i = 0; i < 32; i++) {
         t[i] = Variable::make(Int(32), "t" + std::to_string(i));
@@ -417,6 +443,57 @@ void cse_test() {
         e = e*e - e * i;
     }
     Expr result = common_subexpression_elimination(e);
+
+    {
+        Expr pred = x*x + y*y > 0;
+        Expr index = select(x*x + y*y > 0, x*x + y*y + 2, x*x + y*y + 10);
+        Expr load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), const_true());
+        Expr pred_load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), pred);
+        e = select(x*y > 10, x*y + 2, x*y + 3 + load) + pred_load;
+
+        Expr t2 = Variable::make(Bool(), "t2");
+        Expr cse_load = Load::make(Int(32), "buf", t[3], Buffer<>(), Parameter(), const_true());
+        Expr cse_pred_load = Load::make(Int(32), "buf", t[3], Buffer<>(), Parameter(), t2);
+        correct = ssa_block({x*y,
+                             x*x + y*y,
+                             t[1] > 0,
+                             select(t2, t[1] + 2, t[1] + 10),
+                             select(t[0] > 10, t[0] + 2, t[0] + 3 + cse_load) + cse_pred_load});
+
+        check(e, correct);
+    }
+
+    {
+        Expr pred = x*x + y*y > 0;
+        Expr index = select(x*x + y*y > 0, x*x + y*y + 2, x*x + y*y + 10);
+        Expr load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), const_true());
+        Expr pred_load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), pred);
+        e = select(x*y > 10, x*y + 2, x*y + 3 + pred_load) + pred_load;
+
+        Expr t2 = Variable::make(Bool(), "t2");
+        Expr cse_load = Load::make(Int(32), "buf", select(t2, t[1] + 2, t[1] + 10), Buffer<>(), Parameter(), const_true());
+        Expr cse_pred_load = Load::make(Int(32), "buf", select(t2, t[1] + 2, t[1] + 10), Buffer<>(), Parameter(), t2);
+        correct = ssa_block({x*y,
+                             x*x + y*y,
+                             t[1] > 0,
+                             cse_pred_load,
+                             select(t[0] > 10, t[0] + 2, t[0] + 3 + t[3]) + t[3]});
+
+        check(e, correct);
+    }
+
+    {
+        Expr handle_a = reinterpret(type_of<int *>(), make_zero(UInt(64)));
+        Expr handle_b = reinterpret(type_of<float *>(), make_zero(UInt(64)));
+        Expr handle_c = reinterpret(type_of<float *>(), make_zero(UInt(64)));
+        e = Call::make(Int(32), "dummy", {handle_a, handle_b, handle_c}, Call::Extern);
+
+        Expr t0 = Variable::make(handle_b.type(), "t0");
+        correct = Let::make("t0", handle_b,
+                            Call::make(Int(32), "dummy", {handle_a, t0, t0}, Call::Extern));
+        check(e, correct);
+
+    }
 
     debug(0) << "common_subexpression_elimination test passed\n";
 }

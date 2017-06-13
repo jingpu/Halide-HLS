@@ -48,8 +48,8 @@ extern void halide_zynq_free(void *user_context, void *ptr);
  * to zero after the cma_buffer_t is freed.
  */
 // @{
-extern int halide_zynq_cma_alloc(struct buffer_t *buf);
-extern int halide_zynq_cma_free(struct buffer_t *buf);
+extern int halide_zynq_cma_alloc(struct halide_buffer_t *buf);
+extern int halide_zynq_cma_free(struct halide_buffer_t *buf);
 // @}
 
 /** Create a new cma_buffer_t representing a sub-image tile of IMAGE
@@ -58,7 +58,7 @@ extern int halide_zynq_cma_free(struct buffer_t *buf);
  * The function only calcuates the meta-data and re-use the memory
  * buffer, so no copying happens.
  */
-extern int halide_zynq_subimage(const struct buffer_t* image, struct cma_buffer_t* subimage, void *address_of_subimage_origin, int width, int height);
+extern int halide_zynq_subimage(const struct halide_buffer_t* image, struct cma_buffer_t* subimage, void *address_of_subimage_origin, int width, int height);
 
 /** Launch a hardware accelerator run. BUFS stores the inputs and
  * output (sub-)image tiles used by DMAs.

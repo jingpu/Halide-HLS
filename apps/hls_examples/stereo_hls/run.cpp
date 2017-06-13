@@ -6,12 +6,10 @@
 #include "pipeline_hls.h"
 #include "pipeline_native.h"
 
-#include "benchmark.h"
-
 #include "HalideBuffer.h"
 #include "halide_image_io.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
@@ -20,14 +18,14 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    Image<uint8_t> left = load_image(argv[1]);
-    Image<uint8_t> left_remap = load_image(argv[2]);
-    Image<uint8_t> right = load_image(argv[3]);
-    Image<uint8_t> right_remap = load_image(argv[4]);
+    Buffer<uint8_t> left = load_image(argv[1]);
+    Buffer<uint8_t> left_remap = load_image(argv[2]);
+    Buffer<uint8_t> right = load_image(argv[3]);
+    Buffer<uint8_t> right_remap = load_image(argv[4]);
 
-    Image<uint8_t> out_native(left.width(), left.height());
-    Image<uint8_t> out_hls(600, 400);
-    //Image<uint8_t> out_hls(left.width(), left.height());
+    Buffer<uint8_t> out_native(left.width(), left.height());
+    Buffer<uint8_t> out_hls(600, 400);
+    //Buffer<uint8_t> out_hls(left.width(), left.height());
 
 
     printf("start.\n");

@@ -3,6 +3,7 @@
 namespace Halide {
 namespace Internal {
 
+using std::pair;
 using std::vector;
 
 Expr IRMutator::mutate(Expr e) {
@@ -38,6 +39,27 @@ void mutate_binary_operator(IRMutator *mutator, const T *op, Expr *expr, Stmt *s
     }
     *stmt = nullptr;
 }
+
+pair<Region, bool> mutate_region(IRMutator *mutator, const Region &bounds) {
+    Region new_bounds(bounds.size());
+    bool bounds_changed = false;
+
+    for (size_t i = 0; i < bounds.size(); i++) {
+        Expr old_min = bounds[i].min;
+        Expr old_extent = bounds[i].extent;
+        Expr new_min = mutator->mutate(old_min);
+        Expr new_extent = mutator->mutate(old_extent);
+        if (!new_min.same_as(old_min)) {
+            bounds_changed = true;
+        }
+        if (!new_extent.same_as(old_extent)) {
+            bounds_changed = true;
+        }
+        new_bounds[i] = Range(new_min, new_extent);
+    }
+    return {new_bounds, bounds_changed};
+}
+
 }
 
 void IRMutator::visit(const IntImm *op)   {expr = op;}
@@ -91,11 +113,12 @@ void IRMutator::visit(const Select *op)  {
 }
 
 void IRMutator::visit(const Load *op) {
+    Expr predicate = mutate(op->predicate);
     Expr index = mutate(op->index);
-    if (index.same_as(op->index)) {
+    if (predicate.same_as(op->predicate) && index.same_as(op->index)) {
         expr = op;
     } else {
-        expr = Load::make(op->type, op->name, index, op->image, op->param);
+        expr = Load::make(op->type, op->name, index, op->image, op->param, predicate);
     }
 }
 
@@ -117,7 +140,7 @@ void IRMutator::visit(const Broadcast *op) {
 }
 
 void IRMutator::visit(const Call *op) {
-    vector<Expr > new_args(op->args.size());
+    vector<Expr> new_args(op->args.size());
     bool changed = false;
 
     // Mutate the args
@@ -192,12 +215,13 @@ void IRMutator::visit(const For *op) {
 }
 
 void IRMutator::visit(const Store *op) {
+    Expr predicate = mutate(op->predicate);
     Expr value = mutate(op->value);
     Expr index = mutate(op->index);
-    if (value.same_as(op->value) && index.same_as(op->index)) {
+    if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
         stmt = op;
     } else {
-        stmt = Store::make(op->name, value, index, op->param);
+        stmt = Store::make(op->name, value, index, op->param, predicate);
     }
 }
 
@@ -256,19 +280,11 @@ void IRMutator::visit(const Free *op) {
 }
 
 void IRMutator::visit(const Realize *op) {
-    Region new_bounds(op->bounds.size());
-    bool bounds_changed = false;
+    Region new_bounds;
+    bool bounds_changed;
 
     // Mutate the bounds
-    for (size_t i = 0; i < op->bounds.size(); i++) {
-        Expr old_min    = op->bounds[i].min;
-        Expr old_extent = op->bounds[i].extent;
-        Expr new_min    = mutate(old_min);
-        Expr new_extent = mutate(old_extent);
-        if (!new_min.same_as(old_min))       bounds_changed = true;
-        if (!new_extent.same_as(old_extent)) bounds_changed = true;
-        new_bounds[i] = Range(new_min, new_extent);
-    }
+    std::tie(new_bounds, bounds_changed) = mutate_region(this, op->bounds);
 
     Stmt body = mutate(op->body);
     Expr condition = mutate(op->condition);
@@ -279,6 +295,20 @@ void IRMutator::visit(const Realize *op) {
     } else {
         stmt = Realize::make(op->name, op->types, new_bounds,
                              condition, body);
+    }
+}
+
+void IRMutator::visit(const Prefetch *op) {
+    Region new_bounds;
+    bool bounds_changed;
+
+    // Mutate the bounds
+    std::tie(new_bounds, bounds_changed) = mutate_region(this, op->bounds);
+
+    if (!bounds_changed) {
+        stmt = op;
+    } else {
+        stmt = Prefetch::make(op->name, op->types, new_bounds, op->param);
     }
 }
 
@@ -312,6 +342,24 @@ void IRMutator::visit(const Evaluate *op) {
         stmt = op;
     } else {
         stmt = Evaluate::make(v);
+    }
+}
+
+void IRMutator::visit(const Shuffle *op) {
+    vector<Expr > new_vectors(op->vectors.size());
+    bool changed = false;
+
+    for (size_t i = 0; i < op->vectors.size(); i++) {
+        Expr old_vector = op->vectors[i];
+        Expr new_vector = mutate(old_vector);
+        if (!new_vector.same_as(old_vector)) changed = true;
+        new_vectors[i] = new_vector;
+    }
+
+    if (!changed) {
+        expr = op;
+    } else {
+        expr = Shuffle::make(new_vectors, op->indices);
     }
 }
 

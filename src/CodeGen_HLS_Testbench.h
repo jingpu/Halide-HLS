@@ -20,7 +20,9 @@ namespace Internal {
  */
 class CodeGen_HLS_Testbench : public CodeGen_HLS_Base {
 public:
-    CodeGen_HLS_Testbench(std::ostream &tb_stream);
+    CodeGen_HLS_Testbench(std::ostream &tb_stream,
+                          Target target,
+                          OutputKind output_kind);
     ~CodeGen_HLS_Testbench();
 
 protected:

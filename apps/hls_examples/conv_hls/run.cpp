@@ -8,7 +8,7 @@
 #include "HalideBuffer.h"
 #include "halide_image_io.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 using namespace Halide::Tools;
 
 const unsigned char gaussian2d[5][5] = {
@@ -21,11 +21,11 @@ const unsigned char gaussian2d[5][5] = {
 
 
 int main(int argc, char **argv) {
-    Image<uint8_t> in(800, 800, 3);
-    Image<uint8_t> weight(5, 5);
+    Buffer<uint8_t> in(800, 800, 3);
+    Buffer<uint8_t> weight(5, 5);
 
-    Image<uint8_t> out_native(in.width(), in.height(), in.channels());
-    Image<uint8_t> out_hls(in.width(), in.height(), in.channels());
+    Buffer<uint8_t> out_native(in.width(), in.height(), in.channels());
+    Buffer<uint8_t> out_hls(in.width(), in.height(), in.channels());
 
     for (int y = 0; y < in.height(); y++) {
         for (int x = 0; x < in.width(); x++) {

@@ -1,6 +1,8 @@
 #include "Halide.h"
 #include <stdio.h>
 
+#include "testing.h"
+
 using namespace Halide;
 
 int main() {
@@ -9,14 +11,10 @@ int main() {
 
     // Define the input.
     const int width = 10, height = 10, channels = 3;
-    Image<float> input(width, height, channels);
-    for (int c = 0; c < input.channels(); c++) {
-        for (int y = 0; y < input.height(); y++) {
-            for (int x = 0; x < input.width(); x++) {
-                input(x, y, c) = x + y;
-            }
-        }
-    }
+    Buffer<float> input(width, height, channels);
+    input.fill([](int x, int y, int c) {
+        return x + y;
+    });
 
     // Define the algorithm.
     Var x, y, c;
@@ -29,21 +27,12 @@ int main() {
     g.bound(c, 0, 3).glsl(x, y, c);
 
     // Generate the result.
-    Image<float> result = g.realize(10, 10, 3, target);
+    Buffer<float> result = g.realize(10, 10, 3, target);
     result.copy_to_host();
 
     // Check the result.
-    for (int c = 0; c < result.channels(); c++) {
-        for (int y = 0; y < result.height(); y++) {
-            for (int x = 0; x < result.width(); x++) {
-                float correct = 3.0f * (x + y);
-                if (fabs(result(x, y, c) - correct) > 1e-6) {
-                    fprintf(stderr, "result(%d, %d, %d) = %f instead of %f\n",
-                            x, y, c, result(x, y, c), correct);
-                    return 1;
-                }
-            }
-        }
+    if (!Testing::check_result<float>(result, 1e-6, [](int x, int y, int c) { return 3.0f * (x + y); })) {
+        return 1;
     }
 
     printf("Success!\n");

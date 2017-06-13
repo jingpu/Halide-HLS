@@ -1,4 +1,4 @@
-# Halide to CPU/FPGA
+Halide to CPU/FPGA
 ============
 
 The current compiler is based on Halide release 2016/10/25 (https://github.com/halide/Halide/releases).
@@ -22,3 +22,9 @@ Build Status
 
 [1]: https://travis-ci.org/jingpu/Halide-HLS.svg?branch=HLS
 [2]: https://travis-ci.org/jingpu/Halide-HLS
+
+
+Updates
+------------
+
+- 2017/06/13 merge Halide release 2017/05/03

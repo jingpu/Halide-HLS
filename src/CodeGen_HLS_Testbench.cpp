@@ -36,7 +36,7 @@ protected:
 
 vector<HLS_Argument> HLS_Closure::arguments(const Scope<CodeGen_HLS_Base::Stencil_Type> &streams_scope) {
     vector<HLS_Argument> res;
-    for (const pair<string, Closure::BufferRef> &i : buffers) {
+    for (const pair<string, Buffer> &i : buffers) {
         debug(3) << "buffer: " << i.first << " " << i.second.size;
         if (i.second.read) debug(3) << " (read)";
         if (i.second.write) debug(3) << " (write)";
@@ -66,9 +66,11 @@ const string hls_headers =
     "#include \"hls_target.h\"\n";
 }
 
-CodeGen_HLS_Testbench::CodeGen_HLS_Testbench(ostream &tb_stream)
-    : CodeGen_HLS_Base(tb_stream, CPlusPlusImplementation, ""),
-      cg_target("hls_target") {
+CodeGen_HLS_Testbench::CodeGen_HLS_Testbench(ostream &tb_stream,
+                                             Target target,
+                                             OutputKind output_kind)
+    : CodeGen_HLS_Base(tb_stream, target, output_kind, ""),
+      cg_target("hls_target", target) {
     cg_target.init_module();
 
     stream << hls_headers;
@@ -141,6 +143,18 @@ void CodeGen_HLS_Testbench::visit(const Call *op) {
         do_indent();
         stream << "buffer_to_stencil(" << a0 << ", " << a1 << ");\n";
         id = "0"; // skip evaluation
+    } else if (op->name == "address_of") {
+        std::ostringstream rhs;
+        const Load *l = op->args[0].as<Load>();
+        internal_assert(op->args.size() == 1 && l);
+        rhs << "(("
+            << print_type(l->type.element_of()) // index is in elements, not vectors.
+            << " *)"
+            << print_name(l->name)
+            << " + "
+            << print_expr(l->index)
+            << ")";
+        print_assignment(op->type, rhs.str());
     } else {
         CodeGen_HLS_Base::visit(op);
     }

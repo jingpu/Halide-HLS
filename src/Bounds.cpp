@@ -17,7 +17,6 @@
 namespace Halide {
 namespace Internal {
 
-using std::make_pair;
 using std::map;
 using std::vector;
 using std::string;
@@ -94,7 +93,7 @@ private:
         // if we can't get a good bound from the function, fall back to the bounds of the type.
         bounds_of_type(t);
 
-        pair<string, int> key = make_pair(name, value_index);
+        pair<string, int> key = { name, value_index };
 
         FuncValueBounds::const_iterator iter = func_bounds.find(key);
 
@@ -164,6 +163,11 @@ private:
             // can only really prove that this is the case if they're
             // constants, so try to make the constants first.
 
+            // First constant-fold
+            a.min = simplify(a.min);
+            a.max = simplify(a.max);
+
+            // Then try to strip off junk mins and maxes.
             Expr lower_bound = find_constant_bound(a.min, Direction::Lower);
             Expr upper_bound = find_constant_bound(a.max, Direction::Upper);
 
@@ -546,7 +550,8 @@ private:
         if (interval.is_single_point()) {
             // If the index is const we can return the load of that index
             Expr load_min =
-                Load::make(op->type.element_of(), op->name, interval.min, op->image, op->param);
+                Load::make(op->type.element_of(), op->name, interval.min,
+                           op->image, op->param, op->predicate);
             interval = Interval::single_point(load_min);
         } else {
             // Otherwise use the bounds of the type
@@ -652,8 +657,8 @@ private:
                 Call::make(t, op->name, {interval.max}, op->call_type,
                            op->func, op->value_index, op->image, op->param));
 
-        } else if (op->is_intrinsic(Call::extract_buffer_min) ||
-                   op->is_intrinsic(Call::extract_buffer_max)) {
+        } else if (op->name == Call::buffer_get_min ||
+                   op->name == Call::buffer_get_max) {
             // Bounds query results should have perfect nesting. Their
             // max over a loop is just the same bounds query call at
             // an outer loop level. This requires that the query is
@@ -662,16 +667,11 @@ private:
             //
             // TODO: There should be an assert injected in the inner
             // loop to check perfect nesting.
-            interval = Interval(
-                Call::make(Int(32), Call::extract_buffer_min, op->args, Call::PureIntrinsic),
-                Call::make(Int(32), Call::extract_buffer_max, op->args, Call::PureIntrinsic));
+            interval = Interval(Call::make(Int(32), Call::buffer_get_min, op->args, Call::Extern),
+                                Call::make(Int(32), Call::buffer_get_max, op->args, Call::Extern));
         } else if (op->is_intrinsic(Call::memoize_expr)) {
             internal_assert(op->args.size() >= 1);
             op->args[0].accept(this);
-        } else if (op->is_intrinsic(Call::trace_expr)) {
-            // trace_expr returns argument 4
-            internal_assert(op->args.size() >= 5);
-            op->args[4].accept(this);
         } else if (op->call_type == Call::Halide) {
             bounds_of_func(op->name, op->value_index, op->type);
         } else {
@@ -732,6 +732,15 @@ private:
                 interval.max = Let::make(max_name, val.max, interval.max);
             }
         }
+    }
+
+    void visit(const Shuffle *op) {
+        Interval result = Interval::nothing();
+        for (Expr i : op->vectors) {
+            i.accept(this);
+            result.include(interval);
+        }
+        interval = result;
     }
 
     void visit(const LetStmt *) {
@@ -988,27 +997,6 @@ private:
 
     void visit(const Call *op) {
         if (!consider_calls) return;
-
-        // Calls inside of an address_of aren't touched, because no
-        // actual memory access takes place.
-        if (op->is_intrinsic(Call::address_of)) {
-            // Visit the args of the inner call
-            internal_assert(op->args.size() == 1);
-            const Call *c = op->args[0].as<Call>();
-
-            if (c) {
-                for (size_t i = 0; i < c->args.size(); i++) {
-                    c->args[i].accept(this);
-                }
-            } else {
-                const Load *l = op->args[0].as<Load>();
-
-                internal_assert(l);
-                l->index.accept(this);
-            }
-
-            return;
-        }
 
         if (op->is_intrinsic(Call::if_then_else)) {
             assert(op->args.size() == 3);
@@ -1435,7 +1423,7 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
         Function f = env.find(order[i])->second;
         const vector<string> f_args = f.args();
         for (int j = 0; j < f.outputs(); j++) {
-            pair<string, int> key = make_pair(f.name(), j);
+            pair<string, int> key = { f.name(), j };
 
             Interval result;
 
@@ -1503,9 +1491,12 @@ void bounds_test() {
     check(scope, x*y, select(y < 0, y*10, 0), select(y < 0, 0, y*10));
     check(scope, x/(x+y), Interval::neg_inf, Interval::pos_inf);
     check(scope, 11/(x+1), 1, 11);
-    check(scope, Load::make(Int(8), "buf", x, BufferPtr(), Parameter()), make_const(Int(8), -128), make_const(Int(8), 127));
+    check(scope, Load::make(Int(8), "buf", x, Buffer<>(), Parameter(), const_true()),
+                 make_const(Int(8), -128), make_const(Int(8), 127));
     check(scope, y + (Let::make("y", x+3, y - x + 10)), y + 3, y + 23); // Once again, we don't know that y is correlated with x
     check(scope, clamp(1/(x-2), x-10, x+10), -10, 20);
+    check(scope, cast<uint16_t>(x / 2), make_const(UInt(16), 0), make_const(UInt(16), 5));
+    check(scope, cast<uint16_t>((x + 10) / 2), make_const(UInt(16), 5), make_const(UInt(16), 10));
 
     check(scope, print(x, y), 0, 10);
     check(scope, print_when(x > y, x, y), 0, 10);
@@ -1544,8 +1535,8 @@ void bounds_test() {
           cast<uint8_t>(clamp(cast<uint16_t>(x/y), cast<uint16_t>(0), cast<uint16_t>(128))),
           make_const(UInt(8), 0), make_const(UInt(8), 128));
 
-    Expr u8_1 = cast<uint8_t>(Load::make(Int(8), "buf", x, BufferPtr(), Parameter()));
-    Expr u8_2 = cast<uint8_t>(Load::make(Int(8), "buf", x + 17, BufferPtr(), Parameter()));
+    Expr u8_1 = cast<uint8_t>(Load::make(Int(8), "buf", x, Buffer<>(), Parameter(), const_true()));
+    Expr u8_2 = cast<uint8_t>(Load::make(Int(8), "buf", x + 17, Buffer<>(), Parameter(), const_true()));
     check(scope, cast<uint16_t>(u8_1) + cast<uint16_t>(u8_2),
           make_const(UInt(16), 0), make_const(UInt(16), 255*2));
 
@@ -1553,13 +1544,13 @@ void bounds_test() {
     vector<Expr> input_site_2 = {2*x+1};
     vector<Expr> output_site = {x+1};
 
-    Image<int32_t, 1> in(10);
-    BufferPtr in_buf(in, "input");
+    Buffer<int32_t> in(10);
+    in.set_name("input");
 
     Stmt loop = For::make("x", 3, 10, ForType::Serial, DeviceAPI::Host,
                           Provide::make("output",
-                                        {Add::make(Call::make(in_buf, input_site_1),
-                                                   Call::make(in_buf, input_site_2))},
+                                        {Add::make(Call::make(in, input_site_1),
+                                                   Call::make(in, input_site_2))},
                                         output_site));
 
     map<string, Box> r;

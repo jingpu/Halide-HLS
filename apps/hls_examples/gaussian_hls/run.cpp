@@ -9,7 +9,7 @@
 #include "HalideBuffer.h"
 #include "halide_image_io.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 using namespace Halide::Tools;
 
 
@@ -49,9 +49,9 @@ void my_save_image(ImageType &im, const std::string &filename) {
 
 
 int main(int argc, char **argv) {
-    Image<uint8_t> input = load_image(argv[1]);
-    Image<uint8_t> out_native(input.width()-8, input.height()-8);
-    Image<uint8_t> out_hls(480, 640);
+    Buffer<uint8_t> input = load_image(argv[1]);
+    Buffer<uint8_t> out_native(input.width()-8, input.height()-8);
+    Buffer<uint8_t> out_hls(480, 640);
 
     printf("start.\n");
 

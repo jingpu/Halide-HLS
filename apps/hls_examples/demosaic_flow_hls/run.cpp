@@ -9,14 +9,14 @@
 #include "HalideBuffer.h"
 #include "halide_image_io.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
-    Image<uint8_t> input1 = load_image(argv[1]);
-    Image<uint8_t> input2 = load_image(argv[2]);
-    Image<uint8_t> out_native(720, 480, 3);
-    Image<uint8_t> out_hls(720, 480, 3);
+    Buffer<uint8_t> input1 = load_image(argv[1]);
+    Buffer<uint8_t> input2 = load_image(argv[2]);
+    Buffer<uint8_t> out_native(720, 480, 3);
+    Buffer<uint8_t> out_hls(720, 480, 3);
 
 
     printf("start.\n");

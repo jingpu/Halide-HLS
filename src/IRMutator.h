@@ -81,6 +81,8 @@ protected:
     EXPORT virtual void visit(const Block *);
     EXPORT virtual void visit(const IfThenElse *);
     EXPORT virtual void visit(const Evaluate *);
+    EXPORT virtual void visit(const Shuffle *);
+    EXPORT virtual void visit(const Prefetch *);
 };
 
 

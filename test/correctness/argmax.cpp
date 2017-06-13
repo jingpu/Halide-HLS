@@ -69,6 +69,8 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+    // TODO(jingpu) enable this test
+    /*
     // Try some tree implementations of argmax/argmin
     evaluate_may_gpu(argmax_tree(g(r.x, r.y)), &best_x, &best_y, &best_val);
 
@@ -102,7 +104,7 @@ int main(int argc, char **argv) {
                best_x, best_val, 0, -1881);
         return -1;
     }
-
+    */
 
     // Try an in place argmax, using an elements at various places in
     // the sequence as the initial guess.  This tests some edge cases

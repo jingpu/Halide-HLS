@@ -18,10 +18,10 @@ pipeline_hls.cpp pipeline_native.o pipeline_cuda.o: pipeline
 	HL_DEBUG_CODEGEN=0 ./pipeline
 
 #run: run.cpp pipeline_hls.cpp hls_target.cpp pipeline_native.o
-#	$(CXX) $(CXXFLAGS) -O1 -DNDEBUG $(HLS_CXXFLAGS) -g -Wall -Werror $^ -lpthread -ldl $(PNGFLAGS) -o $@
+#	$(CXX) $(CXXFLAGS) -O1 -DNDEBUG $(HLS_CXXFLAGS) -g -Wall -Werror $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
 run: run.cpp pipeline_native.o pipeline_corners.o  
-	$(CXX) $(CXXFLAGS) -O1 -DNDEBUG $(HLS_CXXFLAGS) -g -Wall -Werror $^ -lpthread -ldl $(PNGFLAGS) -o $@ $(PNGFLAGS) `pkg-config --libs opencv`
+	$(CXX) $(CXXFLAGS) -O1 -DNDEBUG $(HLS_CXXFLAGS) -g -Wall -Werror $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS) $(PNGFLAGS) `pkg-config --libs opencv`
 
 
 run_cuda: pipeline_native.o pipeline_cuda.o run_cuda.cpp pipeline_corners.o

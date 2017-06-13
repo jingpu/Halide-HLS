@@ -10,6 +10,7 @@
 #include <atomic>
 
 #include "IR.h"
+#include "Util.h"
 
 namespace Halide {
 
@@ -17,36 +18,36 @@ namespace Internal {
 /** Is the expression either an IntImm, a FloatImm, a StringImm, or a
  * Cast of the same, or a Ramp or Broadcast of the same. Doesn't do
  * any constant folding. */
-EXPORT bool is_const(Expr e);
+EXPORT bool is_const(const Expr &e);
 
 /** Is the expression an IntImm, FloatImm of a particular value, or a
  * Cast, or Broadcast of the same. */
-EXPORT bool is_const(Expr e, int64_t v);
+EXPORT bool is_const(const Expr &e, int64_t v);
 
 /** If an expression is an IntImm or a Broadcast of an IntImm, return
  * a pointer to its value. Otherwise returns nullptr. */
-EXPORT const int64_t *as_const_int(Expr e);
+EXPORT const int64_t *as_const_int(const Expr &e);
 
 /** If an expression is a UIntImm or a Broadcast of a UIntImm, return
  * a pointer to its value. Otherwise returns nullptr. */
-EXPORT const uint64_t *as_const_uint(Expr e);
+EXPORT const uint64_t *as_const_uint(const Expr &e);
 
 /** If an expression is a FloatImm or a Broadcast of a FloatImm,
  * return a pointer to its value. Otherwise returns nullptr. */
-EXPORT const double *as_const_float(Expr e);
+EXPORT const double *as_const_float(const Expr &e);
 
 /** Is the expression a constant integer power of two. Also returns
  * log base two of the expression if it is. Only returns true for
  * integer types. */
-EXPORT bool is_const_power_of_two_integer(Expr e, int *bits);
+EXPORT bool is_const_power_of_two_integer(const Expr &e, int *bits);
 
 /** Is the expression a const (as defined by is_const), and also
  * strictly greater than zero (in all lanes, if a vector expression) */
-EXPORT bool is_positive_const(Expr e);
+EXPORT bool is_positive_const(const Expr &e);
 
 /** Is the expression a const (as defined by is_const), and also
  * strictly less than zero (in all lanes, if a vector expression) */
-EXPORT bool is_negative_const(Expr e);
+EXPORT bool is_negative_const(const Expr &e);
 
 /** Is the expression a const (as defined by is_const), and also
  * strictly less than zero (in all lanes, if a vector expression) and
@@ -54,26 +55,26 @@ EXPORT bool is_negative_const(Expr e);
  * negative value of the Expr's type from inclusion. Intended to be
  * used when the value will be negated as part of simplification.)
  */
-EXPORT bool is_negative_negatable_const(Expr e);
+EXPORT bool is_negative_negatable_const(const Expr &e);
 
 /** Is the expression an undef */
-EXPORT bool is_undef(Expr e);
+EXPORT bool is_undef(const Expr &e);
 
 /** Is the expression a const (as defined by is_const), and also equal
  * to zero (in all lanes, if a vector expression) */
-EXPORT bool is_zero(Expr e);
+EXPORT bool is_zero(const Expr &e);
 
 /** Is the expression a const (as defined by is_const), and also equal
  * to one (in all lanes, if a vector expression) */
-EXPORT bool is_one(Expr e);
+EXPORT bool is_one(const Expr &e);
 
 /** Is the expression a const (as defined by is_const), and also equal
  * to two (in all lanes, if a vector expression) */
-EXPORT bool is_two(Expr e);
+EXPORT bool is_two(const Expr &e);
 
 /** Is the statement a no-op (which we represent as either an
  * undefined Stmt, or as an Evaluate node of a constant) */
-EXPORT bool is_no_op(Stmt s);
+EXPORT bool is_no_op(const Stmt &s);
 
 /** Construct an immediate of the given type from any numeric C++ type. */
 // @{
@@ -124,7 +125,7 @@ EXPORT Expr const_false(int lanes = 1);
 /** Attempt to cast an expression to a smaller type while provably not
  * losing information. If it can't be done, return an undefined
  * Expr. */
-EXPORT Expr lossless_cast(Type t, Expr e);
+EXPORT Expr lossless_cast(Type t, const Expr &e);
 
 /** Coerce the two expressions to have the same type, using C-style
  * casting rules. For the purposes of casting, a boolean type is
@@ -154,29 +155,49 @@ EXPORT void match_types(Expr &a, Expr &b);
 
 /** Halide's vectorizable transcendentals. */
 // @{
-EXPORT Expr halide_log(Expr a);
-EXPORT Expr halide_exp(Expr a);
-EXPORT Expr halide_erf(Expr a);
+EXPORT Expr halide_log(const Expr &a);
+EXPORT Expr halide_exp(const Expr &a);
+EXPORT Expr halide_erf(const Expr &a);
 // @}
 
 /** Raise an expression to an integer power by repeatedly multiplying
  * it by itself. */
-EXPORT Expr raise_to_integer_power(Expr a, int64_t b);
+EXPORT Expr raise_to_integer_power(const Expr &a, int64_t b);
 
 /** Split a boolean condition into vector of ANDs. If 'cond' is undefined,
  * return an empty vector. */
-EXPORT void split_into_ands(Expr cond, std::vector<Expr> &result);
+EXPORT void split_into_ands(const Expr &cond, std::vector<Expr> &result);
 
-}
+/** A builder to help create Exprs representing halide_buffer_t
+ * structs (e.g. foo.buffer) via calls to halide_buffer_init. Fill out
+ * the fields and then call build. The resulting Expr will be a call
+ * to halide_buffer_init with the struct members as arguments. If the
+ * buffer_memory field is undefined, it uses a call to alloca to make
+ * some stack memory for the buffer. If the shape_memory field is
+ * undefined, it similarly uses stack memory for the shape. If the
+ * shape_memory field is null, it uses the dim field already in the
+ * buffer. Other unitialized fields will take on a value of zero in
+ * the constructed buffer. */
+struct BufferBuilder {
+    Expr buffer_memory, shape_memory;
+    Expr host, device, device_interface;
+    Type type;
+    int dimensions = 0;
+    std::vector<Expr> mins, extents, strides;
+    Expr host_dirty, device_dirty;
+    EXPORT Expr build() const;
+};
+
+} // namespace Internal
 
 /** Cast an expression to the halide type corresponding to the C++ type T. */
 template<typename T>
-inline Expr cast(Expr a) {
+inline Expr cast(const Expr &a) {
     return cast(type_of<T>(), a);
 }
 
 /** Cast an expression to a new type. */
-inline Expr cast(Type t, Expr a) {
+inline Expr cast(Type t, const Expr &a) {
     user_assert(a.defined()) << "cast of undefined Expr\n";
     if (a.type() == t) return a;
 
@@ -224,7 +245,7 @@ inline Expr operator+(Expr a, Expr b) {
  * integer to match the type of the expression. Errors if the integer
  * cannot be represented in the type of the expression. */
 // @{
-inline Expr operator+(Expr a, int b) {
+inline Expr operator+(const Expr &a, int b) {
     user_assert(a.defined()) << "operator+ of undefined Expr\n";
     Internal::check_representable(a.type(), b);
     return Internal::Add::make(a, Internal::make_const(a.type(), b));
@@ -233,7 +254,7 @@ inline Expr operator+(Expr a, int b) {
 /** Add a constant integer and an expression. Coerces the type of the
  * integer to match the type of the expression. Errors if the integer
  * cannot be represented in the type of the expression. */
-inline Expr operator+(int a, Expr b) {
+inline Expr operator+(int a, const Expr &b) {
     user_assert(b.defined()) << "operator+ of undefined Expr\n";
     Internal::check_representable(b.type(), a);
     return Internal::Add::make(Internal::make_const(b.type(), a), b);
@@ -242,7 +263,7 @@ inline Expr operator+(int a, Expr b) {
 /** Modify the first expression to be the sum of two expressions,
  * without changing its type. This casts the second argument to match
  * the type of the first. */
-inline Expr &operator+=(Expr &a, Expr b) {
+inline Expr &operator+=(Expr &a, const Expr &b) {
     user_assert(a.defined() && b.defined()) << "operator+= of undefined Expr\n";
     a = Internal::Add::make(a, cast(a.type(), b));
     return a;
@@ -259,7 +280,7 @@ inline Expr operator-(Expr a, Expr b) {
 /** Subtracts a constant integer from an expression. Coerces the type of the
  * integer to match the type of the expression. Errors if the integer
  * cannot be represented in the type of the expression. */
-inline Expr operator-(Expr a, int b) {
+inline Expr operator-(const Expr &a, int b) {
     user_assert(a.defined()) << "operator- of undefined Expr\n";
     Internal::check_representable(a.type(), b);
     return Internal::Sub::make(a, Internal::make_const(a.type(), b));
@@ -268,7 +289,7 @@ inline Expr operator-(Expr a, int b) {
 /** Subtracts an expression from a constant integer. Coerces the type
  * of the integer to match the type of the expression. Errors if the
  * integer cannot be represented in the type of the expression. */
-inline Expr operator-(int a, Expr b) {
+inline Expr operator-(int a, const Expr &b) {
     user_assert(b.defined()) << "operator- of undefined Expr\n";
     Internal::check_representable(b.type(), a);
     return Internal::Sub::make(Internal::make_const(b.type(), a), b);
@@ -279,7 +300,7 @@ inline Expr operator-(int a, Expr b) {
  * yields zero of the same type. For unsigned integers the negative is
  * still an unsigned integer. E.g. in UInt(8), the negative of 56 is
  * 200, because 56 + 200 == 0 */
-inline Expr operator-(Expr a) {
+inline Expr operator-(const Expr &a) {
     user_assert(a.defined()) << "operator- of undefined Expr\n";
     return Internal::Sub::make(Internal::make_zero(a.type()), a);
 }
@@ -287,7 +308,7 @@ inline Expr operator-(Expr a) {
 /** Modify the first expression to be the difference of two expressions,
  * without changing its type. This casts the second argument to match
  * the type of the first. */
-inline Expr &operator-=(Expr &a, Expr b) {
+inline Expr &operator-=(Expr &a, const Expr &b) {
     user_assert(a.defined() && b.defined()) << "operator-= of undefined Expr\n";
     a = Internal::Sub::make(a, cast(a.type(), b));
     return a;
@@ -304,7 +325,7 @@ inline Expr operator*(Expr a, Expr b) {
 /** Multiply an expression and a constant integer. Coerces the type of the
  * integer to match the type of the expression. Errors if the integer
  * cannot be represented in the type of the expression. */
-inline Expr operator*(Expr a, int b) {
+inline Expr operator*(const Expr &a, int b) {
     user_assert(a.defined()) << "operator* of undefined Expr\n";
     Internal::check_representable(a.type(), b);
     return Internal::Mul::make(a, Internal::make_const(a.type(), b));
@@ -313,7 +334,7 @@ inline Expr operator*(Expr a, int b) {
 /** Multiply a constant integer and an expression. Coerces the type of
  * the integer to match the type of the expression. Errors if the
  * integer cannot be represented in the type of the expression. */
-inline Expr operator*(int a, Expr b) {
+inline Expr operator*(int a, const Expr &b) {
     user_assert(b.defined()) << "operator* of undefined Expr\n";
     Internal::check_representable(b.type(), a);
     return Internal::Mul::make(Internal::make_const(b.type(), a), b);
@@ -322,7 +343,7 @@ inline Expr operator*(int a, Expr b) {
 /** Modify the first expression to be the product of two expressions,
  * without changing its type. This casts the second argument to match
  * the type of the first. */
-inline Expr &operator*=(Expr &a, Expr b) {
+inline Expr &operator*=(Expr &a, const Expr &b) {
     user_assert(a.defined() && b.defined()) << "operator*= of undefined Expr\n";
     a = Internal::Mul::make(a, cast(a.type(), b));
     return a;
@@ -343,7 +364,7 @@ inline Expr operator/(Expr a, Expr b) {
  * the type of the first. Note that signed integer division in Halide
  * rounds towards minus infinity, unlike C, which rounds towards
  * zero. */
-inline Expr &operator/=(Expr &a, Expr b) {
+inline Expr &operator/=(Expr &a, const Expr &b) {
     user_assert(a.defined() && b.defined()) << "operator/= of undefined Expr\n";
     a = Internal::Div::make(a, cast(a.type(), b));
     return a;
@@ -354,7 +375,7 @@ inline Expr &operator/=(Expr &a, Expr b) {
 /** Divides an expression by a constant integer. Coerces the type
  * of the integer to match the type of the expression. Errors if the
  * integer cannot be represented in the type of the expression. */
-inline Expr operator/(Expr a, int b) {
+inline Expr operator/(const Expr &a, int b) {
     user_assert(a.defined()) << "operator/ of undefined Expr\n";
     Internal::check_representable(a.type(), b);
     return Internal::Div::make(a, Internal::make_const(a.type(), b));
@@ -363,7 +384,7 @@ inline Expr operator/(Expr a, int b) {
 /** Divides a constant integer by an expression. Coerces the type
  * of the integer to match the type of the expression. Errors if the
  * integer cannot be represented in the type of the expression. */
-inline Expr operator/(int a, Expr b) {
+inline Expr operator/(int a, const Expr &b) {
     user_assert(b.defined()) << "operator- of undefined Expr\n";
     Internal::check_representable(b.type(), a);
     return Internal::Div::make(Internal::make_const(b.type(), a), b);
@@ -385,7 +406,7 @@ inline Expr operator%(Expr a, Expr b) {
 /** Mods an expression by a constant integer. Coerces the type
  * of the integer to match the type of the expression. Errors if the
  * integer cannot be represented in the type of the expression. */
-inline Expr operator%(Expr a, int b) {
+inline Expr operator%(const Expr &a, int b) {
     user_assert(a.defined()) << "operator% of undefined Expr\n";
     user_assert(b != 0) << "operator% with constant 0 modulus\n";
     Internal::check_representable(a.type(), b);
@@ -394,7 +415,7 @@ inline Expr operator%(Expr a, int b) {
 /** Mods a constant integer by an expression. Coerces the type
  * of the integer to match the type of the expression. Errors if the
  * integer cannot be represented in the type of the expression. */
-inline Expr operator%(int a, Expr b) {
+inline Expr operator%(int a, const Expr &b) {
     user_assert(b.defined()) << "operator% of undefined Expr\n";
     user_assert(!Internal::is_zero(b)) << "operator% with constant 0 modulus\n";
     Internal::check_representable(b.type(), a);
@@ -414,7 +435,7 @@ inline Expr operator>(Expr a, Expr b) {
  * greater than a constant integer. Coerces the integer to the type of
  * the expression. Errors if the integer is not representable in that
  * type. */
-inline Expr operator>(Expr a, int b) {
+inline Expr operator>(const Expr &a, int b) {
     user_assert(a.defined()) << "operator> of undefined Expr\n";
     Internal::check_representable(a.type(), b);
     return Internal::GT::make(a, Internal::make_const(a.type(), b));
@@ -424,7 +445,7 @@ inline Expr operator>(Expr a, int b) {
  * greater than an expression. Coerces the integer to the type of
  * the expression. Errors if the integer is not representable in that
  * type. */
-inline Expr operator>(int a, Expr b) {
+inline Expr operator>(int a, const Expr &b) {
     user_assert(b.defined()) << "operator> of undefined Expr\n";
     Internal::check_representable(b.type(), a);
     return Internal::GT::make(Internal::make_const(b.type(), a), b);
@@ -443,7 +464,7 @@ inline Expr operator<(Expr a, Expr b) {
  * less than a constant integer. Coerces the integer to the type of
  * the expression. Errors if the integer is not representable in that
  * type. */
-inline Expr operator<(Expr a, int b) {
+inline Expr operator<(const Expr &a, int b) {
     user_assert(a.defined()) << "operator< of undefined Expr\n";
     Internal::check_representable(a.type(), b);
     return Internal::LT::make(a, Internal::make_const(a.type(), b));
@@ -453,7 +474,7 @@ inline Expr operator<(Expr a, int b) {
  * less than an expression. Coerces the integer to the type of
  * the expression. Errors if the integer is not representable in that
  * type. */
-inline Expr operator<(int a, Expr b) {
+inline Expr operator<(int a, const Expr &b) {
     user_assert(b.defined()) << "operator< of undefined Expr\n";
     Internal::check_representable(b.type(), a);
     return Internal::LT::make(Internal::make_const(b.type(), a), b);
@@ -472,7 +493,7 @@ inline Expr operator<=(Expr a, Expr b) {
  * less than or equal to a constant integer. Coerces the integer to
  * the type of the expression. Errors if the integer is not
  * representable in that type. */
-inline Expr operator<=(Expr a, int b) {
+inline Expr operator<=(const Expr &a, int b) {
     user_assert(a.defined()) << "operator<= of undefined Expr\n";
     Internal::check_representable(a.type(), b);
     return Internal::LE::make(a, Internal::make_const(a.type(), b));
@@ -482,7 +503,7 @@ inline Expr operator<=(Expr a, int b) {
  * is less than or equal to an expression. Coerces the integer to the
  * type of the expression. Errors if the integer is not representable
  * in that type. */
-inline Expr operator<=(int a, Expr b) {
+inline Expr operator<=(int a, const Expr &b) {
     user_assert(b.defined()) << "operator<= of undefined Expr\n";
     Internal::check_representable(b.type(), a);
     return Internal::LE::make(Internal::make_const(b.type(), a), b);
@@ -501,7 +522,7 @@ inline Expr operator>=(Expr a, Expr b) {
  * greater than or equal to a constant integer. Coerces the integer to
  * the type of the expression. Errors if the integer is not
  * representable in that type. */
-inline Expr operator>=(Expr a, int b) {
+inline Expr operator>=(const Expr &a, int b) {
     user_assert(a.defined()) << "operator>= of undefined Expr\n";
     Internal::check_representable(a.type(), b);
     return Internal::GE::make(a, Internal::make_const(a.type(), b));
@@ -511,7 +532,7 @@ inline Expr operator>=(Expr a, int b) {
  * is greater than or equal to an expression. Coerces the integer to the
  * type of the expression. Errors if the integer is not representable
  * in that type. */
-inline Expr operator>=(int a, Expr b) {
+inline Expr operator>=(int a, const Expr &b) {
     user_assert(b.defined()) << "operator>= of undefined Expr\n";
     Internal::check_representable(b.type(), a);
     return Internal::GE::make(Internal::make_const(b.type(), a), b);
@@ -530,7 +551,7 @@ inline Expr operator==(Expr a, Expr b) {
  * equal to a constant integer. Coerces the integer to the type of the
  * expression. Errors if the integer is not representable in that
  * type. */
-inline Expr operator==(Expr a, int b) {
+inline Expr operator==(const Expr &a, int b) {
     user_assert(a.defined()) << "operator== of undefined Expr\n";
     Internal::check_representable(a.type(), b);
     return Internal::EQ::make(a, Internal::make_const(a.type(), b));
@@ -540,7 +561,7 @@ inline Expr operator==(Expr a, int b) {
  * is equal to an expression. Coerces the integer to the type of the
  * expression. Errors if the integer is not representable in that
  * type. */
-inline Expr operator==(int a, Expr b) {
+inline Expr operator==(int a, const Expr &b) {
     user_assert(b.defined()) << "operator== of undefined Expr\n";
     Internal::check_representable(b.type(), a);
     return Internal::EQ::make(Internal::make_const(b.type(), a), b);
@@ -559,7 +580,7 @@ inline Expr operator!=(Expr a, Expr b) {
  * not equal to a constant integer. Coerces the integer to the type of
  * the expression. Errors if the integer is not representable in that
  * type. */
-inline Expr operator!=(Expr a, int b) {
+inline Expr operator!=(const Expr &a, int b) {
     user_assert(a.defined()) << "operator!= of undefined Expr\n";
     Internal::check_representable(a.type(), b);
     return Internal::NE::make(a, Internal::make_const(a.type(), b));
@@ -569,7 +590,7 @@ inline Expr operator!=(Expr a, int b) {
  * is not equal to an expression. Coerces the integer to the type of
  * the expression. Errors if the integer is not representable in that
  * type. */
-inline Expr operator!=(int a, Expr b) {
+inline Expr operator!=(int a, const Expr &b) {
     user_assert(b.defined()) << "operator!= of undefined Expr\n";
     Internal::check_representable(b.type(), a);
     return Internal::NE::make(Internal::make_const(b.type(), a), b);
@@ -584,7 +605,7 @@ inline Expr operator&&(Expr a, Expr b) {
 /** Logical and of an Expr and a bool. Either returns the Expr or an
  * Expr representing false, depending on the bool. */
 // @{
-inline Expr operator&&(Expr a, bool b) {
+inline Expr operator&&(const Expr &a, bool b) {
     internal_assert(a.defined()) << "operator&& of undefined Expr\n";
     internal_assert(a.type().is_bool()) << "operator&& of Expr of type " << a.type() << "\n";
     if (b) {
@@ -593,7 +614,7 @@ inline Expr operator&&(Expr a, bool b) {
         return Internal::make_zero(a.type());
     }
 }
-inline Expr operator&&(bool a, Expr b) {
+inline Expr operator&&(bool a, const Expr &b) {
     return b && a;
 }
 // @}
@@ -607,7 +628,7 @@ inline Expr operator||(Expr a, Expr b) {
 /** Logical or of an Expr and a bool. Either returns the Expr or an
  * Expr representing true, depending on the bool. */
 // @{
-inline Expr operator||(Expr a, bool b) {
+inline Expr operator||(const Expr &a, bool b) {
     internal_assert(a.defined()) << "operator|| of undefined Expr\n";
     internal_assert(a.type().is_bool()) << "operator|| of Expr of type " << a.type() << "\n";
     if (b) {
@@ -616,14 +637,14 @@ inline Expr operator||(Expr a, bool b) {
         return a;
     }
 }
-inline Expr operator||(bool a, Expr b) {
+inline Expr operator||(bool a, const Expr &b) {
     return b || a;
 }
 // @}
 
 
 /** Returns the logical not the argument */
-inline Expr operator!(Expr a) {
+inline Expr operator!(const Expr &a) {
     return Internal::Not::make(a);
 }
 
@@ -643,7 +664,7 @@ inline Expr max(Expr a, Expr b) {
  * expression. Errors if the integer is not representable as that
  * type. Vectorizes cleanly on most platforms (with the exception of
  * integer types on x86 without SSE4). */
-inline Expr max(Expr a, int b) {
+inline Expr max(const Expr &a, int b) {
     user_assert(a.defined()) << "max of undefined Expr\n";
     Internal::check_representable(a.type(), b);
     return Internal::Max::make(a, Internal::make_const(a.type(), b));
@@ -655,16 +676,27 @@ inline Expr max(Expr a, int b) {
  * the expression. Errors if the integer is not representable as that
  * type. Vectorizes cleanly on most platforms (with the exception of
  * integer types on x86 without SSE4). */
-inline Expr max(int a, Expr b) {
+inline Expr max(int a, const Expr &b) {
     user_assert(b.defined()) << "max of undefined Expr\n";
     Internal::check_representable(b.type(), a);
     return Internal::Max::make(Internal::make_const(b.type(), a), b);
 }
 
-/** Returns an expression representing the lesser of the two
- * arguments, after doing any necessary type coercion using
+inline Expr max(float a, const Expr &b) {return max(Expr(a), b);}
+inline Expr max(const Expr &a, float b) {return max(a, Expr(b));}
+
+/** Returns an expression representing the greater of an expressions
+ * vector, after doing any necessary type coersion using
  * \ref Internal::match_types. Vectorizes cleanly on most platforms
- * (with the exception of integer types on x86 without SSE4). */
+ * (with the exception of integer types on x86 without SSE4).
+ * The expressions are folded from right ie. max(.., max(.., ..)). 
+ * The arguments can be any mix of types but must all be convertible to Expr. */
+template<typename A, typename B, typename C, typename... Rest,
+         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Rest...>::value>::type* = nullptr>
+inline Expr max(const A &a, const B &b, const C &c, Rest&&... rest) {
+    return max(a, max(b, c, std::forward<Rest>(rest)...));
+}
+
 inline Expr min(Expr a, Expr b) {
     user_assert(a.defined() && b.defined())
         << "min of undefined Expr\n";
@@ -677,7 +709,7 @@ inline Expr min(Expr a, Expr b) {
  * expression. Errors if the integer is not representable as that
  * type. Vectorizes cleanly on most platforms (with the exception of
  * integer types on x86 without SSE4). */
-inline Expr min(Expr a, int b) {
+inline Expr min(const Expr &a, int b) {
     user_assert(a.defined()) << "max of undefined Expr\n";
     Internal::check_representable(a.type(), b);
     return Internal::Min::make(a, Internal::make_const(a.type(), b));
@@ -688,47 +720,58 @@ inline Expr min(Expr a, int b) {
  * the expression. Errors if the integer is not representable as that
  * type. Vectorizes cleanly on most platforms (with the exception of
  * integer types on x86 without SSE4). */
-inline Expr min(int a, Expr b) {
+inline Expr min(int a, const Expr &b) {
     user_assert(b.defined()) << "max of undefined Expr\n";
     Internal::check_representable(b.type(), a);
     return Internal::Min::make(Internal::make_const(b.type(), a), b);
+}
+
+inline Expr min(float a, const Expr &b) {return min(Expr(a), b);}
+inline Expr min(const Expr &a, float b) {return min(a, Expr(b));}
+
+/** Returns an expression representing the lesser of an expressions
+ * vector, after doing any necessary type coersion using
+ * \ref Internal::match_types. Vectorizes cleanly on most platforms
+ * (with the exception of integer types on x86 without SSE4).
+ * The expressions are folded from right ie. min(.., min(.., ..)).
+ * The arguments can be any mix of types but must all be convertible to Expr. */
+template<typename A, typename B, typename C, typename... Rest,
+         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Rest...>::value>::type* = nullptr>
+inline Expr min(const A &a, const B &b, const C &c, Rest&&... rest) {
+    return min(a, min(b, c, std::forward<Rest>(rest)...));
 }
 
 /** Operators on floats treats those floats as Exprs. Making these
  * explicit prevents implicit float->int casts that might otherwise
  * occur. */
 // @{
-inline Expr operator+(Expr a, float b) {return a + Expr(b);}
-inline Expr operator+(float a, Expr b) {return Expr(a) + b;}
-inline Expr operator-(Expr a, float b) {return a - Expr(b);}
-inline Expr operator-(float a, Expr b) {return Expr(a) - b;}
-inline Expr operator*(Expr a, float b) {return a * Expr(b);}
-inline Expr operator*(float a, Expr b) {return Expr(a) * b;}
-inline Expr operator/(Expr a, float b) {return a / Expr(b);}
-inline Expr operator/(float a, Expr b) {return Expr(a) / b;}
-inline Expr operator%(Expr a, float b) {return a % Expr(b);}
-inline Expr operator%(float a, Expr b) {return Expr(a) % b;}
-inline Expr operator>(Expr a, float b) {return a > Expr(b);}
-inline Expr operator>(float a, Expr b) {return Expr(a) > b;}
-inline Expr operator<(Expr a, float b) {return a < Expr(b);}
-inline Expr operator<(float a, Expr b) {return Expr(a) < b;}
-inline Expr operator>=(Expr a, float b) {return a >= Expr(b);}
-inline Expr operator>=(float a, Expr b) {return Expr(a) >= b;}
-inline Expr operator<=(Expr a, float b) {return a <= Expr(b);}
-inline Expr operator<=(float a, Expr b) {return Expr(a) <= b;}
-inline Expr operator==(Expr a, float b) {return a == Expr(b);}
-inline Expr operator==(float a, Expr b) {return Expr(a) == b;}
-inline Expr operator!=(Expr a, float b) {return a != Expr(b);}
-inline Expr operator!=(float a, Expr b) {return Expr(a) != b;}
-inline Expr min(float a, Expr b) {return min(Expr(a), b);}
-inline Expr min(Expr a, float b) {return min(a, Expr(b));}
-inline Expr max(float a, Expr b) {return max(Expr(a), b);}
-inline Expr max(Expr a, float b) {return max(a, Expr(b));}
+inline Expr operator+(const Expr &a, float b) {return a + Expr(b);}
+inline Expr operator+(float a, const Expr &b) {return Expr(a) + b;}
+inline Expr operator-(const Expr &a, float b) {return a - Expr(b);}
+inline Expr operator-(float a, const Expr &b) {return Expr(a) - b;}
+inline Expr operator*(const Expr &a, float b) {return a * Expr(b);}
+inline Expr operator*(float a, const Expr &b) {return Expr(a) * b;}
+inline Expr operator/(const Expr &a, float b) {return a / Expr(b);}
+inline Expr operator/(float a, const Expr &b) {return Expr(a) / b;}
+inline Expr operator%(const Expr &a, float b) {return a % Expr(b);}
+inline Expr operator%(float a, const Expr &b) {return Expr(a) % b;}
+inline Expr operator>(const Expr &a, float b) {return a > Expr(b);}
+inline Expr operator>(float a, const Expr &b) {return Expr(a) > b;}
+inline Expr operator<(const Expr &a, float b) {return a < Expr(b);}
+inline Expr operator<(float a, const Expr &b) {return Expr(a) < b;}
+inline Expr operator>=(const Expr &a, float b) {return a >= Expr(b);}
+inline Expr operator>=(float a, const Expr &b) {return Expr(a) >= b;}
+inline Expr operator<=(const Expr &a, float b) {return a <= Expr(b);}
+inline Expr operator<=(float a, const Expr &b) {return Expr(a) <= b;}
+inline Expr operator==(const Expr &a, float b) {return a == Expr(b);}
+inline Expr operator==(float a, const Expr &b) {return Expr(a) == b;}
+inline Expr operator!=(const Expr &a, float b) {return a != Expr(b);}
+inline Expr operator!=(float a, const Expr &b) {return Expr(a) != b;}
 // @}
 
 /** Clamps an expression to lie within the given bounds. The bounds
  * are type-cast to match the expression. Vectorizes as well as min/max. */
-inline Expr clamp(Expr a, Expr min_val, Expr max_val) {
+inline Expr clamp(const Expr &a, const Expr &min_val, const Expr &max_val) {
     user_assert(a.defined() && min_val.defined() && max_val.defined())
         << "clamp of undefined Expr\n";
     Expr n_min_val = lossless_cast(a.type(), min_val);
@@ -744,7 +787,7 @@ inline Expr clamp(Expr a, Expr min_val, Expr max_val) {
  * expression. Vectorizes cleanly. Unlike in C, abs of a signed
  * integer returns an unsigned integer of the same bit width. This
  * means that abs of the most negative integer doesn't overflow. */
-inline Expr abs(Expr a) {
+inline Expr abs(const Expr &a) {
     user_assert(a.defined())
         << "abs of undefined Expr\n";
     Type t = a.type();
@@ -812,134 +855,11 @@ inline Expr select(Expr condition, Expr true_value, Expr false_value) {
  * which can accept multiple conditions and values in pairs. Evaluates
  * to the first value for which the condition is true. Returns the
  * final value if all conditions are false. */
-// @{
-inline Expr select(Expr c1, Expr v1,
-                   Expr c2, Expr v2,
-                   Expr default_val) {
-    return select(c1, v1,
-                  select(c2, v2, default_val));
+template<typename... Args,
+         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Args...>::value>::type* = nullptr>
+inline Expr select(const Expr &c0, const Expr &v0, const Expr &c1, const Expr &v1, Args&&... args) {
+    return select(c0, v0, select(c1, v1, std::forward<Args>(args)...));
 }
-inline Expr select(Expr c1, Expr v1,
-                   Expr c2, Expr v2,
-                   Expr c3, Expr v3,
-                   Expr default_val) {
-    return select(c1, v1,
-                  c2, v2,
-                  select(c3, v3, default_val));
-}
-inline Expr select(Expr c1, Expr v1,
-                   Expr c2, Expr v2,
-                   Expr c3, Expr v3,
-                   Expr c4, Expr v4,
-                   Expr default_val) {
-    return select(c1, v1,
-                  c2, v2,
-                  c3, v3,
-                  select(c4, v4, default_val));
-}
-inline Expr select(Expr c1, Expr v1,
-                   Expr c2, Expr v2,
-                   Expr c3, Expr v3,
-                   Expr c4, Expr v4,
-                   Expr c5, Expr v5,
-                   Expr default_val) {
-    return select(c1, v1,
-                  c2, v2,
-                  c3, v3,
-                  c4, v4,
-                  select(c5, v5, default_val));
-}
-inline Expr select(Expr c1, Expr v1,
-                   Expr c2, Expr v2,
-                   Expr c3, Expr v3,
-                   Expr c4, Expr v4,
-                   Expr c5, Expr v5,
-                   Expr c6, Expr v6,
-                   Expr default_val) {
-    return select(c1, v1,
-                  c2, v2,
-                  c3, v3,
-                  c4, v4,
-                  c5, v5,
-                  select(c6, v6, default_val));
-}
-inline Expr select(Expr c1, Expr v1,
-                   Expr c2, Expr v2,
-                   Expr c3, Expr v3,
-                   Expr c4, Expr v4,
-                   Expr c5, Expr v5,
-                   Expr c6, Expr v6,
-                   Expr c7, Expr v7,
-                   Expr default_val) {
-    return select(c1, v1,
-                  c2, v2,
-                  c3, v3,
-                  c4, v4,
-                  c5, v5,
-                  c6, v6,
-                  select(c7, v7, default_val));
-}
-inline Expr select(Expr c1, Expr v1,
-                   Expr c2, Expr v2,
-                   Expr c3, Expr v3,
-                   Expr c4, Expr v4,
-                   Expr c5, Expr v5,
-                   Expr c6, Expr v6,
-                   Expr c7, Expr v7,
-                   Expr c8, Expr v8,
-                   Expr default_val) {
-    return select(c1, v1,
-                  c2, v2,
-                  c3, v3,
-                  c4, v4,
-                  c5, v5,
-                  c6, v6,
-                  c7, v7,
-                  select(c8, v8, default_val));
-}
-inline Expr select(Expr c1, Expr v1,
-                   Expr c2, Expr v2,
-                   Expr c3, Expr v3,
-                   Expr c4, Expr v4,
-                   Expr c5, Expr v5,
-                   Expr c6, Expr v6,
-                   Expr c7, Expr v7,
-                   Expr c8, Expr v8,
-                   Expr c9, Expr v9,
-                   Expr default_val) {
-    return select(c1, v1,
-                  c2, v2,
-                  c3, v3,
-                  c4, v4,
-                  c5, v5,
-                  c6, v6,
-                  c7, v7,
-                  c8, v8,
-                  select(c9, v9, default_val));
-}
-inline Expr select(Expr c1, Expr v1,
-                   Expr c2, Expr v2,
-                   Expr c3, Expr v3,
-                   Expr c4, Expr v4,
-                   Expr c5, Expr v5,
-                   Expr c6, Expr v6,
-                   Expr c7, Expr v7,
-                   Expr c8, Expr v8,
-                   Expr c9, Expr v9,
-                   Expr c10, Expr v10,
-                   Expr default_val) {
-    return select(c1, v1,
-                  c2, v2,
-                  c3, v3,
-                  c4, v4,
-                  c5, v5,
-                  c6, v6,
-                  c7, v7,
-                  c8, v8,
-                  c9, v9,
-                  select(c10, v10, default_val));
-}
-// @}
 
 // TODO: Implement support for *_f16 external functions in various backends.
 // No backend supports these yet.
@@ -947,7 +867,7 @@ inline Expr select(Expr c1, Expr v1,
 /** Return the sine of a floating-point expression. If the argument is
  * not floating-point, it is cast to Float(32). Does not vectorize
  * well. */
-inline Expr sin(Expr x) {
+inline Expr sin(const Expr &x) {
     user_assert(x.defined()) << "sin of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "sin_f64", {x}, Internal::Call::PureExtern);
@@ -963,7 +883,7 @@ inline Expr sin(Expr x) {
 /** Return the arcsine of a floating-point expression. If the argument
  * is not floating-point, it is cast to Float(32). Does not vectorize
  * well. */
-inline Expr asin(Expr x) {
+inline Expr asin(const Expr &x) {
     user_assert(x.defined()) << "asin of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "asin_f64", {x}, Internal::Call::PureExtern);
@@ -979,7 +899,7 @@ inline Expr asin(Expr x) {
 /** Return the cosine of a floating-point expression. If the argument
  * is not floating-point, it is cast to Float(32). Does not vectorize
  * well. */
-inline Expr cos(Expr x) {
+inline Expr cos(const Expr &x) {
     user_assert(x.defined()) << "cos of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "cos_f64", {x}, Internal::Call::PureExtern);
@@ -995,7 +915,7 @@ inline Expr cos(Expr x) {
 /** Return the arccosine of a floating-point expression. If the
  * argument is not floating-point, it is cast to Float(32). Does not
  * vectorize well. */
-inline Expr acos(Expr x) {
+inline Expr acos(const Expr &x) {
     user_assert(x.defined()) << "acos of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "acos_f64", {x}, Internal::Call::PureExtern);
@@ -1011,7 +931,7 @@ inline Expr acos(Expr x) {
 /** Return the tangent of a floating-point expression. If the argument
  * is not floating-point, it is cast to Float(32). Does not vectorize
  * well. */
-inline Expr tan(Expr x) {
+inline Expr tan(const Expr &x) {
     user_assert(x.defined()) << "tan of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "tan_f64", {x}, Internal::Call::PureExtern);
@@ -1027,7 +947,7 @@ inline Expr tan(Expr x) {
 /** Return the arctangent of a floating-point expression. If the
  * argument is not floating-point, it is cast to Float(32). Does not
  * vectorize well. */
-inline Expr atan(Expr x) {
+inline Expr atan(const Expr &x) {
     user_assert(x.defined()) << "atan of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "atan_f64", {x}, Internal::Call::PureExtern);
@@ -1064,7 +984,7 @@ inline Expr atan2(Expr y, Expr x) {
 /** Return the hyperbolic sine of a floating-point expression.  If the
  *  argument is not floating-point, it is cast to Float(32). Does not
  *  vectorize well. */
-inline Expr sinh(Expr x) {
+inline Expr sinh(const Expr &x) {
     user_assert(x.defined()) << "sinh of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "sinh_f64", {x}, Internal::Call::PureExtern);
@@ -1080,7 +1000,7 @@ inline Expr sinh(Expr x) {
 /** Return the hyperbolic arcsinhe of a floating-point expression.  If
  * the argument is not floating-point, it is cast to Float(32). Does
  * not vectorize well. */
-inline Expr asinh(Expr x) {
+inline Expr asinh(const Expr &x) {
     user_assert(x.defined()) << "asinh of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "asinh_f64", {x}, Internal::Call::PureExtern);
@@ -1096,7 +1016,7 @@ inline Expr asinh(Expr x) {
 /** Return the hyperbolic cosine of a floating-point expression.  If
  * the argument is not floating-point, it is cast to Float(32). Does
  * not vectorize well. */
-inline Expr cosh(Expr x) {
+inline Expr cosh(const Expr &x) {
     user_assert(x.defined()) << "cosh of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "cosh_f64", {x}, Internal::Call::PureExtern);
@@ -1112,7 +1032,7 @@ inline Expr cosh(Expr x) {
 /** Return the hyperbolic arccosine of a floating-point expression.
  * If the argument is not floating-point, it is cast to
  * Float(32). Does not vectorize well. */
-inline Expr acosh(Expr x) {
+inline Expr acosh(const Expr &x) {
     user_assert(x.defined()) << "acosh of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "acosh_f64", {x}, Internal::Call::PureExtern);
@@ -1128,7 +1048,7 @@ inline Expr acosh(Expr x) {
 /** Return the hyperbolic tangent of a floating-point expression.  If
  * the argument is not floating-point, it is cast to Float(32). Does
  * not vectorize well. */
-inline Expr tanh(Expr x) {
+inline Expr tanh(const Expr &x) {
     user_assert(x.defined()) << "tanh of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "tanh_f64", {x}, Internal::Call::PureExtern);
@@ -1144,7 +1064,7 @@ inline Expr tanh(Expr x) {
 /** Return the hyperbolic arctangent of a floating-point expression.
  * If the argument is not floating-point, it is cast to
  * Float(32). Does not vectorize well. */
-inline Expr atanh(Expr x) {
+inline Expr atanh(const Expr &x) {
     user_assert(x.defined()) << "atanh of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "atanh_f64", {x}, Internal::Call::PureExtern);
@@ -1160,7 +1080,7 @@ inline Expr atanh(Expr x) {
 /** Return the square root of a floating-point expression. If the
  * argument is not floating-point, it is cast to Float(32). Typically
  * vectorizes cleanly. */
-inline Expr sqrt(Expr x) {
+inline Expr sqrt(const Expr &x) {
     user_assert(x.defined()) << "sqrt of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "sqrt_f64", {x}, Internal::Call::PureExtern);
@@ -1176,7 +1096,7 @@ inline Expr sqrt(Expr x) {
 /** Return the square root of the sum of the squares of two
  * floating-point expressions. If the argument is not floating-point,
  * it is cast to Float(32). Vectorizes cleanly. */
-inline Expr hypot(Expr x, Expr y) {
+inline Expr hypot(const Expr &x, const Expr &y) {
     return sqrt(x*x + y*y);
 }
 
@@ -1187,7 +1107,7 @@ inline Expr hypot(Expr x, Expr y) {
  * vectorizable, does the right thing for extremely small or extremely
  * large inputs, and is accurate up to the last bit of the
  * mantissa. Vectorizes cleanly. */
-inline Expr exp(Expr x) {
+inline Expr exp(const Expr &x) {
     user_assert(x.defined()) << "exp of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "exp_f64", {x}, Internal::Call::PureExtern);
@@ -1207,7 +1127,7 @@ inline Expr exp(Expr x) {
  * vectorizable, does the right thing for inputs <= 0 (returns -inf or
  * nan), and is accurate up to the last bit of the
  * mantissa. Vectorizes cleanly. */
-inline Expr log(Expr x) {
+inline Expr log(const Expr &x) {
     user_assert(x.defined()) << "log of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "log_f64", {x}, Internal::Call::PureExtern);
@@ -1251,7 +1171,7 @@ inline Expr pow(Expr x, Expr y) {
 /** Evaluate the error function erf. Only available for
  * Float(32). Accurate up to the last three bits of the
  * mantissa. Vectorizes cleanly. */
-inline Expr erf(Expr x) {
+inline Expr erf(const Expr &x) {
     user_assert(x.defined()) << "erf of undefined Expr\n";
     user_assert(x.type() == Float(32)) << "erf only takes float arguments\n";
     return Internal::halide_erf(x);
@@ -1260,13 +1180,13 @@ inline Expr erf(Expr x) {
 /** Fast approximate cleanly vectorizable log for Float(32). Returns
  * nonsense for x <= 0.0f. Accurate up to the last 5 bits of the
  * mantissa. Vectorizes cleanly. */
-EXPORT Expr fast_log(Expr x);
+EXPORT Expr fast_log(const Expr &x);
 
 /** Fast approximate cleanly vectorizable exp for Float(32). Returns
  * nonsense for inputs that would overflow or underflow. Typically
  * accurate up to the last 5 bits of the mantissa. Gets worse when
  * approaching overflow. Vectorizes cleanly. */
-EXPORT Expr fast_exp(Expr x);
+EXPORT Expr fast_exp(const Expr &x);
 
 /** Fast approximate cleanly vectorizable pow for Float(32). Returns
  * nonsense for x < 0.0f. Accurate up to the last 5 bits of the
@@ -1285,7 +1205,7 @@ inline Expr fast_pow(Expr x, Expr y) {
 /** Fast approximate inverse for Float(32). Corresponds to the rcpps
  * instruction on x86, and the vrecpe instruction on ARM. Vectorizes
  * cleanly. */
-inline Expr fast_inverse(Expr x) {
+inline Expr fast_inverse(const Expr &x) {
     user_assert(x.type() == Float(32)) << "fast_inverse only takes float arguments\n";
     return Internal::Call::make(x.type(), "fast_inverse_f32", {x}, Internal::Call::PureExtern);
 }
@@ -1293,7 +1213,7 @@ inline Expr fast_inverse(Expr x) {
 /** Fast approximate inverse square root for Float(32). Corresponds to
  * the rsqrtps instruction on x86, and the vrsqrte instruction on
  * ARM. Vectorizes cleanly. */
-inline Expr fast_inverse_sqrt(Expr x) {
+inline Expr fast_inverse_sqrt(const Expr &x) {
     user_assert(x.type() == Float(32)) << "fast_inverse_sqrt only takes float arguments\n";
     return Internal::Call::make(x.type(), "fast_inverse_sqrt_f32", {x}, Internal::Call::PureExtern);
 }
@@ -1302,7 +1222,7 @@ inline Expr fast_inverse_sqrt(Expr x) {
  * floating-point expression. If the argument is not floating-point,
  * it is cast to Float(32). The return value is still in floating
  * point, despite being a whole number. Vectorizes cleanly. */
-inline Expr floor(Expr x) {
+inline Expr floor(const Expr &x) {
     user_assert(x.defined()) << "floor of undefined Expr\n";
     if (x.type().element_of() == Float(64)) {
         return Internal::Call::make(x.type(), "floor_f64", {x}, Internal::Call::PureExtern);
@@ -1320,7 +1240,7 @@ inline Expr floor(Expr x) {
  * floating-point expression. If the argument is not floating-point,
  * it is cast to Float(32). The return value is still in floating
  * point, despite being a whole number. Vectorizes cleanly. */
-inline Expr ceil(Expr x) {
+inline Expr ceil(const Expr &x) {
     user_assert(x.defined()) << "ceil of undefined Expr\n";
     if (x.type().element_of() == Float(64)) {
         return Internal::Call::make(x.type(), "ceil_f64", {x}, Internal::Call::PureExtern);
@@ -1339,7 +1259,7 @@ inline Expr ceil(Expr x) {
  * is still in floating point, despite being a whole number. On ties, we
  * follow IEEE754 conventions and round to the nearest even number. Vectorizes
  * cleanly. */
-inline Expr round(Expr x) {
+inline Expr round(const Expr &x) {
     user_assert(x.defined()) << "round of undefined Expr\n";
     if (x.type().element_of() == Float(64)) {
         return Internal::Call::make(Float(64), "round_f64", {x}, Internal::Call::PureExtern);
@@ -1356,7 +1276,7 @@ inline Expr round(Expr x) {
 /** Return the integer part of a floating-point expression. If the argument is
  * not floating-point, it is cast to Float(32). The return value is still in
  * floating point, despite being a whole number. Vectorizes cleanly. */
-inline Expr trunc(Expr x) {
+inline Expr trunc(const Expr &x) {
     user_assert(x.defined()) << "trunc of undefined Expr\n";
     if (x.type().element_of() == Float(64)) {
         return Internal::Call::make(Float(64), "trunc_f64", {x}, Internal::Call::PureExtern);
@@ -1372,7 +1292,7 @@ inline Expr trunc(Expr x) {
 
 /** Returns true if the argument is a Not a Number (NaN). Requires a
   * floating point argument.  Vectorizes cleanly. */
-inline Expr is_nan(Expr x) {
+inline Expr is_nan(const Expr &x) {
     user_assert(x.defined()) << "is_nan of undefined Expr\n";
     user_assert(x.type().is_float()) << "is_nan only works for float";
     Type t = Bool(x.type().lanes());
@@ -1391,13 +1311,13 @@ inline Expr is_nan(Expr x) {
 /** Return the fractional part of a floating-point expression. If the argument
  *  is not floating-point, it is cast to Float(32). The return value has the
  *  same sign as the original expression. Vectorizes cleanly. */
-inline Expr fract(Expr x) {
+inline Expr fract(const Expr &x) {
     user_assert(x.defined()) << "fract of undefined Expr\n";
     return x - trunc(x);
 }
 
 /** Reinterpret the bits of one value as another type. */
-inline Expr reinterpret(Type t, Expr e) {
+inline Expr reinterpret(Type t, const Expr &e) {
     user_assert(e.defined()) << "reinterpret of undefined Expr\n";
     int from_bits = e.type().bits() * e.type().lanes();
     int to_bits = t.bits() * t.lanes();
@@ -1410,7 +1330,7 @@ inline Expr reinterpret(Type t, Expr e) {
 }
 
 template<typename T>
-inline Expr reinterpret(Expr e) {
+inline Expr reinterpret(const Expr &e) {
     return reinterpret(type_of<T>(), e);
 }
 
@@ -1472,7 +1392,7 @@ inline Expr operator^(Expr x, Expr y) {
 }
 
 /** Return the bitwise not of an expression. */
-inline Expr operator~(Expr x) {
+inline Expr operator~(const Expr &x) {
     user_assert(x.defined()) << "bitwise not of undefined Expr\n";
     user_assert(x.type().is_int() || x.type().is_uint())
         << "Argument to bitwise not must be an integer or unsigned integer";
@@ -1494,11 +1414,11 @@ inline Expr operator<<(Expr x, Expr y) {
     Internal::match_types(x, y);
     return Internal::Call::make(x.type(), Internal::Call::shift_left, {x, y}, Internal::Call::PureIntrinsic);
 }
-inline Expr operator<<(Expr x, int y) {
+inline Expr operator<<(const Expr &x, int y) {
     Internal::check_representable(x.type(), y);
     return x << Internal::make_const(x.type(), y);
 }
-inline Expr operator<<(int x, Expr y) {
+inline Expr operator<<(int x, const Expr &y) {
     Internal::check_representable(y.type(), x);
     return Internal::make_const(y.type(), x) << y;
 }
@@ -1520,11 +1440,11 @@ inline Expr operator>>(Expr x, Expr y) {
     Internal::match_types(x, y);
     return Internal::Call::make(x.type(), Internal::Call::shift_right, {x, y}, Internal::Call::PureIntrinsic);
 }
-inline Expr operator>>(Expr x, int y) {
+inline Expr operator>>(const Expr &x, int y) {
     Internal::check_representable(x.type(), y);
     return x >> Internal::make_const(x.type(), y);
 }
-inline Expr operator>>(int x, Expr y) {
+inline Expr operator>>(int x, const Expr &y) {
     Internal::check_representable(y.type(), x);
     return Internal::make_const(y.type(), x) >> y;
 }
@@ -1638,7 +1558,7 @@ inline Expr lerp(Expr zero_val, Expr one_val, Expr weight) {
 }
 
 /** Count the number of set bits in an expression. */
-inline Expr popcount(Expr x) {
+inline Expr popcount(const Expr &x) {
     user_assert(x.defined()) << "popcount of undefined Expr\n";
     return Internal::Call::make(x.type(), Internal::Call::popcount,
                                 {x}, Internal::Call::PureIntrinsic);
@@ -1646,7 +1566,7 @@ inline Expr popcount(Expr x) {
 
 /** Count the number of leading zero bits in an expression. The result is
  *  undefined if the value of the expression is zero. */
-inline Expr count_leading_zeros(Expr x) {
+inline Expr count_leading_zeros(const Expr &x) {
     user_assert(x.defined()) << "count leading zeros of undefined Expr\n";
     return Internal::Call::make(x.type(), Internal::Call::count_leading_zeros,
                                 {x}, Internal::Call::PureIntrinsic);
@@ -1654,7 +1574,7 @@ inline Expr count_leading_zeros(Expr x) {
 
 /** Count the number of trailing zero bits in an expression. The result is
  *  undefined if the value of the expression is zero. */
-inline Expr count_trailing_zeros(Expr x) {
+inline Expr count_trailing_zeros(const Expr &x) {
     user_assert(x.defined()) << "count trailing zeros of undefined Expr\n";
     return Internal::Call::make(x.type(), Internal::Call::count_trailing_zeros,
                                 {x}, Internal::Call::PureIntrinsic);
@@ -1726,7 +1646,7 @@ inline Expr mod_round_to_zero(Expr x, Expr y) {
  *
  * This function vectorizes cleanly.
  */
-inline Expr random_float(Expr seed = Expr()) {
+inline Expr random_float(const Expr &seed = Expr()) {
     // Random floats get even IDs
     static std::atomic<int> counter;
     int id = (counter++)*2;
@@ -1748,7 +1668,7 @@ inline Expr random_float(Expr seed = Expr()) {
 
 /** Return a random variable representing a uniformly distributed
  * unsigned 32-bit integer. See \ref random_float. Vectorizes cleanly. */
-inline Expr random_uint(Expr seed = Expr()) {
+inline Expr random_uint(const Expr &seed = Expr()) {
     // Random ints get odd IDs
     static std::atomic<int> counter;
     int id = (counter++)*2 + 1;
@@ -1768,7 +1688,7 @@ inline Expr random_uint(Expr seed = Expr()) {
 
 /** Return a random variable representing a uniformly distributed
  * 32-bit integer. See \ref random_float. Vectorizes cleanly. */
-inline Expr random_int(Expr seed = Expr()) {
+inline Expr random_int(const Expr &seed = Expr()) {
     return cast<int32_t>(random_uint(seed));
 }
 
@@ -1784,7 +1704,7 @@ inline NO_INLINE void collect_print_args(std::vector<Expr> &args, const char *ar
 }
 
 template<typename ...Args>
-inline NO_INLINE void collect_print_args(std::vector<Expr> &args, Expr arg, Args&&... more_args) {
+inline NO_INLINE void collect_print_args(std::vector<Expr> &args, const Expr &arg, Args&&... more_args) {
     args.push_back(arg);
     collect_print_args(args, std::forward<Args>(more_args)...);
 }
@@ -1798,7 +1718,7 @@ inline NO_INLINE void collect_print_args(std::vector<Expr> &args, Expr arg, Args
 EXPORT Expr print(const std::vector<Expr> &values);
 
 template <typename... Args>
-inline NO_INLINE Expr print(Expr a, Args&&... args) {
+inline NO_INLINE Expr print(const Expr &a, Args&&... args) {
     std::vector<Expr> collected_args = {a};
     Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
     return print(collected_args);
@@ -1808,13 +1728,45 @@ inline NO_INLINE Expr print(Expr a, Args&&... args) {
 /** Create an Expr that prints whenever it is evaluated, provided that
  * the condition is true. */
 // @{
-EXPORT Expr print_when(Expr condition, const std::vector<Expr> &values);
+EXPORT Expr print_when(const Expr &condition, const std::vector<Expr> &values);
 
 template<typename ...Args>
-inline NO_INLINE Expr print_when(Expr condition, Expr a, Args&&... args) {
+inline NO_INLINE Expr print_when(const Expr &condition, const Expr &a, Args&&... args) {
     std::vector<Expr> collected_args = {a};
     Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
     return print_when(condition, collected_args);
+}
+
+// @}
+
+/** Create an Expr that that guarantees a precondition.
+ * If 'condition' is true, the return value is equal to the first Expr.
+ * If 'condition' is false, halide_error() is called, and the return value
+ * is arbitrary. Any additional arguments after the first Expr are stringified
+ * and passed as a user-facing message to halide_error(), similar to print().
+ *
+ * Note that this essentially *always* inserts a runtime check into the
+ * generated code (except when the condition can be proven at compile time);
+ * as such, it should be avoided inside inner loops, except for debugging
+ * or testing purposes.
+ *
+ * However, using this to make assertions about (say) input values
+ * can be useful, both in terms of correctness and (potentially) in terms
+ * of code generation, e.g.
+ \code
+ Param<int> p;
+ Expr y = require(p > 0, p);
+ \endcode
+ * will allow the optimizer to assume positive, nonzero values for y.
+ */
+// @{
+EXPORT Expr require(const Expr &condition, const std::vector<Expr> &values);
+
+template<typename ...Args>
+inline NO_INLINE Expr require(const Expr &condition, const Expr &value, Args&&... args) {
+    std::vector<Expr> collected_args = {value};
+    Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
+    return require(condition, collected_args);
 }
 
 // @}
@@ -1850,7 +1802,7 @@ inline Expr undef() {
 }
 
 namespace Internal {
-EXPORT Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values);
+EXPORT Expr memoize_tag_helper(const Expr &result, const std::vector<Expr> &cache_key_values);
 }  // namespace Internal
 
 /** Control the values used in the memoization cache key for memoize.
@@ -1881,7 +1833,7 @@ EXPORT Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_v
  * on the digest. */
 // @{
 template<typename ...Args>
-inline NO_INLINE Expr memoize_tag(Expr result, Args&&... args) {
+inline NO_INLINE Expr memoize_tag(const Expr &result, Args&&... args) {
     std::vector<Expr> collected_args{std::forward<Args>(args)...};
     return Internal::memoize_tag_helper(result, collected_args);
 }
@@ -1900,14 +1852,14 @@ inline NO_INLINE Expr memoize_tag(Expr result, Args&&... args) {
  * use the boundary condition helpers in the BoundaryConditions
  * namespace instead.
  */
-inline Expr likely(Expr e) {
+inline Expr likely(const Expr &e) {
     return Internal::Call::make(e.type(), Internal::Call::likely,
                                 {e}, Internal::Call::PureIntrinsic);
 }
 
 /** Equivalent to likely, but only triggers a loop partitioning if
  * found in an innermost loop. */
-inline Expr likely_if_innermost(Expr e) {
+inline Expr likely_if_innermost(const Expr &e) {
     return Internal::Call::make(e.type(), Internal::Call::likely_if_innermost,
                                 {e}, Internal::Call::PureIntrinsic);
 }
@@ -1917,7 +1869,7 @@ inline Expr likely_if_innermost(Expr e) {
  * type T clamping to the minimum and maximum values of the result
  * type. */
 template <typename T>
-Expr saturating_cast(Expr e) {
+Expr saturating_cast(const Expr &e) {
     return saturating_cast(type_of<T>(), e);
 }
 

@@ -5,9 +5,7 @@
 
 #include "add_operators.h"
 
-#include "../../src/Expr.h"
-#include "../../src/IROperator.h"
-#include "../../src/Var.h"
+#include "Halide.h"
 
 #include "Type.h"
 
@@ -109,7 +107,6 @@ void defineExpr() {
         .value("CUDA", h::DeviceAPI::CUDA)
         .value("OpenCL", h::DeviceAPI::OpenCL)
         .value("GLSL", h::DeviceAPI::GLSL)
-        .value("Renderscript", h::DeviceAPI::Renderscript)
         .export_values();
 
     return;

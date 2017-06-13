@@ -45,8 +45,10 @@ const string zynq_runtime =
     "int halide_zynq_hwacc_sync(int task_id);\n";
 }
 
-CodeGen_Zynq_C::CodeGen_Zynq_C(ostream &dest)
-    : CodeGen_C(dest, CImplementation) {
+CodeGen_Zynq_C::CodeGen_Zynq_C(ostream &dest,
+                               Target target,
+                               OutputKind output_kind)
+    : CodeGen_C(dest, target, output_kind) {
     stream  << zynq_runtime;
 }
 
@@ -132,6 +134,18 @@ void CodeGen_Zynq_C::visit(const Call *op) {
         stream << "halide_zynq_subimage("
                << print_name(buffer_name) << ", &" << print_name(slice_name) << ", "
                << address_of_subimage_origin << ", " << width << ", " << height << ");\n";
+    } else if (op->name == "address_of") {
+        std::ostringstream rhs;
+        const Load *l = op->args[0].as<Load>();
+        internal_assert(op->args.size() == 1 && l);
+        rhs << "(("
+            << print_type(l->type.element_of()) // index is in elements, not vectors.
+            << " *)"
+            << print_name(l->name)
+            << " + "
+            << print_expr(l->index)
+            << ")";
+        print_assignment(op->type, rhs.str());
     } else {
         CodeGen_C::visit(op);
     }

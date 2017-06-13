@@ -9,13 +9,13 @@
 #include "HalideBuffer.h"
 #include "halide_image_io.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
     /*
     Halide::Func mosaic;
-    Halide::Image<uint8_t> input = load_image("../tutorial/images/rgb.png");
+    Halide::Buffer<uint8_t> input = load_image("../tutorial/images/rgb.png");
     Halide::Var x, y;
 
     // Create an RG/GB mosaic
@@ -23,13 +23,13 @@ int main(int argc, char **argv) {
         Halide::select((x % 2) == 0, input(x, y, 0), input(x, y, 1)), // First row, RG
         Halide::select((x % 2) == 0, input(x, y, 1), input(x, y, 2)))); // GB
 
-    Halide::Image<uint8_t> mosaic_image = mosaic.realize(input.width(), input.height());
+    Halide::Buffer<uint8_t> mosaic_image = mosaic.realize(input.width(), input.height());
     save_image(mosaic_image, "mosaic.png");
     */
 
-    Image<uint8_t> input = load_image(argv[1]);
-    Image<uint8_t> out_native(1440/2, 960/2, 3);
-    Image<uint8_t> out_hls(1440/2, 960/2, 3);
+    Buffer<uint8_t> input = load_image(argv[1]);
+    Buffer<uint8_t> out_native(1440/2, 960/2, 3);
+    Buffer<uint8_t> out_hls(1440/2, 960/2, 3);
 
 
     printf("start.\n");

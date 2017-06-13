@@ -3,10 +3,11 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "benchmark.h"
+#include "halide_benchmark.h"
 #include "HalideBuffer.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
+using namespace Halide::Tools;
 
 //#define cimg_display 0
 //#include "CImg.h"
@@ -17,9 +18,9 @@ using namespace Halide;
 double t;
 
 
-Image<uint16_t> blur(Image<uint16_t> in) {
-    Image<uint16_t> tmp(in.width()-8, in.height());
-    Image<uint16_t> out(in.width()-8, in.height()-2);
+Buffer<uint16_t> blur(Buffer<uint16_t> in) {
+    Buffer<uint16_t> tmp(in.width()-8, in.height());
+    Buffer<uint16_t> out(in.width()-8, in.height()-2);
 
     t = benchmark(10, 1, [&]() {
         for (int y = 0; y < tmp.height(); y++)
@@ -35,8 +36,8 @@ Image<uint16_t> blur(Image<uint16_t> in) {
 }
 
 
-Image<uint16_t> blur_fast(Image<uint16_t> in) {
-    Image<uint16_t> out(in.width()-8, in.height()-2);
+Buffer<uint16_t> blur_fast(Buffer<uint16_t> in) {
+    Buffer<uint16_t> out(in.width()-8, in.height()-2);
 
     t = benchmark(10, 1, [&]() {
         __m128i one_third = _mm_set1_epi16(21846);
@@ -118,8 +119,8 @@ Image<uint16_t> blur_fast(Image<uint16_t> in) {
 */
 
 
-Image<uint16_t> blur_fast2(const Image<uint16_t> &in) {
-    Image<uint16_t> out(in.width()-8, in.height()-2);
+Buffer<uint16_t> blur_fast2(const Buffer<uint16_t> &in) {
+    Buffer<uint16_t> out(in.width()-8, in.height()-2);
 
     int vw = in.width()/8;
     if (vw > 1024) {
@@ -171,20 +172,22 @@ Image<uint16_t> blur_fast2(const Image<uint16_t> &in) {
     return out;
 }
 
-extern "C" {
 #include "halide_blur.h"
-}
 
-Image<uint16_t> blur_halide(Image<uint16_t> in) {
-    Image<uint16_t> out(in.width()-8, in.height()-2);
+Buffer<uint16_t> blur_halide(Buffer<uint16_t> in) {
+    Buffer<uint16_t> out(in.width()-8, in.height()-2);
 
     // Call it once to initialize the halide runtime stuff
     halide_blur(in, out);
+    // Copy-out result if it's device buffer and dirty.
+    out.copy_to_host();
 
     t = benchmark(10, 1, [&]() {
         // Compute the same region of the output as blur_fast (i.e., we're
         // still being sloppy with boundary conditions)
         halide_blur(in, out);
+        // Sync device execution if any.
+        out.device_sync();
     });
 
     return out;
@@ -192,7 +195,7 @@ Image<uint16_t> blur_halide(Image<uint16_t> in) {
 
 int main(int argc, char **argv) {
 
-    Image<uint16_t> input(6408, 4802);
+    Buffer<uint16_t> input(6408, 4802);
 
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
@@ -200,16 +203,16 @@ int main(int argc, char **argv) {
         }
     }
 
-    Image<uint16_t> blurry = blur(input);
+    Buffer<uint16_t> blurry = blur(input);
     double slow_time = t;
 
-    Image<uint16_t> speedy = blur_fast(input);
+    Buffer<uint16_t> speedy = blur_fast(input);
     double fast_time = t;
 
-    //Image<uint16_t> speedy2 = blur_fast2(input);
+    //Buffer<uint16_t> speedy2 = blur_fast2(input);
     //float fast_time2 = t;
 
-    Image<uint16_t> halide = blur_halide(input);
+    Buffer<uint16_t> halide = blur_halide(input);
     double halide_time = t;
 
     // fast_time2 is always slower than fast_time, so skip printing it

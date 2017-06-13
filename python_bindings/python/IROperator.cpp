@@ -3,7 +3,7 @@
 // to avoid compiler confusion, python.hpp must be include before Halide headers
 #include <boost/python.hpp>
 
-#include "../../src/IROperator.h"
+#include "Halide.h"
 
 #include <string>
 
@@ -201,12 +201,12 @@ void defineOperators() {
     // defined in IROperator.h
 
     h::Expr (*max_exprs)(h::Expr, h::Expr) = &h::max;
-    h::Expr (*max_expr_int)(h::Expr, int) = &h::max;
-    h::Expr (*max_int_expr)(int, h::Expr) = &h::max;
+    h::Expr (*max_expr_int)(const h::Expr &, int) = &h::max;
+    h::Expr (*max_int_expr)(int, const h::Expr &) = &h::max;
 
     h::Expr (*min_exprs)(h::Expr, h::Expr) = &h::min;
-    h::Expr (*min_expr_int)(h::Expr, int) = &h::min;
-    h::Expr (*min_int_expr)(int, h::Expr) = &h::min;
+    h::Expr (*min_expr_int)(const h::Expr &, int) = &h::min;
+    h::Expr (*min_int_expr)(int, const h::Expr &) = &h::min;
 
     p::def("max", max_exprs,
            p::args("a", "b"),

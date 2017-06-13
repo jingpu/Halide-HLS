@@ -45,10 +45,10 @@ Expr CameraPipe::avg(Expr a, Expr b) {
 
 Func CameraPipe::hot_pixel_suppression(Func input) {
 
-    Expr a = max(max(input(x-2, y), input(x+2, y)),
-                 max(input(x, y-2), input(x, y+2)));
+    Expr a = max(input(x - 2, y), input(x + 2, y),
+                 input(x, y - 2), input(x, y + 2));
 
-    Func denoised;
+    Func denoised("denoised");
     denoised(x, y) = clamp(input(x, y), 0, a);
 
     return denoised;
@@ -68,7 +68,7 @@ Func CameraPipe::interleave_y(Func a, Func b) {
 
 Func CameraPipe::deinterleave(Func raw) {
     // Deinterleave the color channels
-    Func deinterleaved;
+    Func deinterleaved("deinterleaved");
 
     deinterleaved(x, y, c) = select(c == 0, raw(2*x, 2*y),
                                     c == 1, raw(2*x+1, 2*y),
@@ -84,14 +84,15 @@ std::pair<Func, Scheduler> CameraPipe::demosaic(Func deinterleaved) {
     // gr refers to green sites in the red rows
 
     // Give more convenient names to the four channels we know
-    Func r_r, g_gr, g_gb, b_b;
+    Func r_r("r_r"), g_gr("g_gr"), g_gb("g_gb"), b_b("b_b");
     g_gr(x, y) = deinterleaved(x, y, 0);
     r_r(x, y)  = deinterleaved(x, y, 1);
     b_b(x, y)  = deinterleaved(x, y, 2);
     g_gb(x, y) = deinterleaved(x, y, 3);
 
     // These are the ones we need to interpolate
-    Func b_r, g_r, b_gr, r_gr, b_gb, r_gb, r_b, g_b;
+    Func b_r("b_r"), g_r("g_r"), b_gr("b_gr"), r_gr("r_gr");
+    Func b_gb("b_gb"), r_gb("r_gb"), r_b("r_b"), g_b("g_b");
 
     // First calculate green at the red and blue sites
 
@@ -169,10 +170,10 @@ std::pair<Func, Scheduler> CameraPipe::demosaic(Func deinterleaved) {
     Func b = interleave_y(interleave_x(b_gr, b_r),
                           interleave_x(b_b, b_gb));
 
-    Func output;
+    Func output("output");
     output(x, y, c) = select(c == 0, r(x, y),
-                             c == 1, g(x, y),
-                                     b(x, y));
+                                 c == 1, g(x, y),
+                                 b(x, y));
 
     Scheduler scheduler = [=](Func processed) mutable {
         assert(g_r.defined());
@@ -185,11 +186,11 @@ std::pair<Func, Scheduler> CameraPipe::demosaic(Func deinterleaved) {
         assert(processed.defined());
         g_r.compute_at(processed, yi)
             .store_at(processed, yo)
-            .vectorize(x, vec, TailStrategy::RoundUp)
+            .vectorize(x, 2*vec, TailStrategy::RoundUp)
             .fold_storage(y, 2);
         g_b.compute_at(processed, yi)
             .store_at(processed, yo)
-            .vectorize(x, vec, TailStrategy::RoundUp)
+            .vectorize(x, 2*vec, TailStrategy::RoundUp)
             .fold_storage(y, 2);
         output.compute_at(processed, x)
             .vectorize(x)
@@ -218,7 +219,7 @@ Func CameraPipe::color_correct(Func input) {
     matrix(x, y) = cast<int16_t>(val * 256.0f); // Q8.8 fixed point
     matrix.compute_root();
 
-    Func corrected;
+    Func corrected("corrected");
     Expr ir = cast<int32_t>(input(x, y, 0));
     Expr ig = cast<int32_t>(input(x, y, 1));
     Expr ib = cast<int32_t>(input(x, y, 2));
@@ -250,7 +251,7 @@ Func CameraPipe::apply_curve(Func input) {
         // On HVX, LUT lookups are much faster if they are to LUTs not
         // greater than 256 elements, so we reduce the tonemap to 256
         // elements and use linear interpolation to upsample it.
-        lutResample = 4;
+        lutResample = 8;
     }
 
     minRaw /= lutResample;
@@ -276,7 +277,7 @@ Func CameraPipe::apply_curve(Func input) {
 
     curve.compute_root(); // It's a LUT, compute it once ahead of time.
 
-    Func curved;
+    Func curved("curved");
 
     if (lutResample == 1) {
         // Use clamp to restrict size of LUT as allocated by compute_root
@@ -285,9 +286,9 @@ Func CameraPipe::apply_curve(Func input) {
         // Use linear interpolation to sample the LUT.
         Expr in = input(x, y, c);
         Expr u0 = in/lutResample;
-        Expr u = in - u0*lutResample;
-        Expr y0 = curve(clamp(u0, 0, 255));
-        Expr y1 = curve(clamp(u0 + 1, 0, 255));
+        Expr u = in%lutResample;
+        Expr y0 = curve(clamp(u0, 0, 127));
+        Expr y1 = curve(clamp(u0 + 1, 0, 127));
         curved(x, y, c) = cast<uint8_t>((cast<uint16_t>(y0)*lutResample + (y1 - y0)*u)/lutResample);
     }
 
@@ -313,8 +314,19 @@ Func CameraPipe::build() {
     // Schedule
     Expr out_width = processed.output_buffer().width();
     Expr out_height = processed.output_buffer().height();
+    // In HVX 128, we need 2 threads to saturate HVX with work,
+    //and in HVX 64 we need 4 threads, and on other devices,
+    // we might need many threads.
+    Expr strip_size;
+    if (get_target().has_feature(Target::HVX_128)) {
+        strip_size = processed.output_buffer().dim(1).extent() / 2;
+    } else if (get_target().has_feature(Target::HVX_64)) {
+        strip_size = processed.output_buffer().dim(1).extent() / 4;
+    } else {
+        strip_size = 32;
+    }
+    strip_size = (strip_size / 2) * 2;
 
-    int strip_size = 32;
     int vec = get_target().natural_vector_size(UInt(16));
     if (get_target().has_feature(Target::HVX_64)) {
         vec = 32;
@@ -322,24 +334,28 @@ Func CameraPipe::build() {
         vec = 64;
     }
     denoised.compute_at(processed, yi).store_at(processed, yo)
-        .prefetch(y, 2)
+        .prefetch(input, y, 2)
         .fold_storage(y, 8)
-        .vectorize(x, vec);
+        .tile(x, y, x, y, xi, yi, 2*vec, 2)
+        .vectorize(xi)
+        .unroll(yi);
     deinterleaved.compute_at(processed, yi).store_at(processed, yo)
         .fold_storage(y, 4)
-        .vectorize(x, 2*vec, TailStrategy::RoundUp)
         .reorder(c, x, y)
+        .vectorize(x, 2*vec, TailStrategy::RoundUp)
         .unroll(c);
     corrected.compute_at(processed, x)
-        .vectorize(x, vec)
         .reorder(c, x, y)
+        .vectorize(x)
+        .unroll(y)
         .unroll(c);
     processed.compute_root()
+        .reorder(c, x, y)
         .split(y, yo, yi, strip_size)
-        .split(yi, yi, yii, 2)
-        .split(x, x, xi, 2*vec, TailStrategy::RoundUp)
-        .reorder(xi, c, yii, x, yi, yo)
-        .vectorize(xi, 2*vec)
+        .tile(x, yi, x, yi, xi, yii, 2*vec, 2, TailStrategy::RoundUp)
+        .vectorize(xi)
+        .unroll(yii)
+        .unroll(c)
         .parallel(yo);
 
     demosaiced_scheduler(processed);
@@ -364,4 +380,3 @@ Func CameraPipe::build() {
 Halide::RegisterGenerator<CameraPipe> register_me{"camera_pipe"};
 
 }  // namespace
-

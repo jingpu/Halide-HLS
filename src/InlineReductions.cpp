@@ -215,6 +215,8 @@ Tuple argmin(RDom r, Expr e, const std::string &name) {
     return f(v.call_args);
 }
 
+// TODO(jingpu) fix the build error of the commented code.
+/*
 void argmaxmin_tree_split(Func f,  int radix, const Internal::FindFreeVars &v, bool is_argmax) {
     // Tree-like split-rfactor-unroll
     // split each RVar by a factor of radix, and create a tree structure
@@ -300,5 +302,6 @@ Tuple argmin_tree(RDom r, Expr e, int radix, const std::string &name) {
 
     return f(v.call_args);
 }
+*/
 }
 

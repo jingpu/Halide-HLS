@@ -16,9 +16,16 @@
 extern "C" {
 
 // forward declarations of some POSIX APIs
+/* open-only flags */
+#define	O_RDONLY	0x0000		/* open for reading only */
+#define	O_WRONLY	0x0001		/* open for writing only */
+#define	O_RDWR		0x0002		/* open for reading and writing */
+#define	O_ACCMODE	0x0003		/* mask for above modes */
+/* mmap-only flags */
 #define PROT_WRITE       0x2
 #define MAP_SHARED       0x01
 typedef int32_t off_t; // FIXME this is not actually correct
+extern int open(const char *pathname, int flags, int mode);
 extern int ioctl(int fd, unsigned long cmd, ...);
 extern void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
 extern int munmap(void *addr, size_t length);
@@ -63,7 +70,7 @@ static int cma_free_buffer(cma_buffer_t* ptr) {
     return ioctl(fd_cma, FREE_IMAGE, (long unsigned int)ptr);
 }
 
-WEAK int halide_zynq_cma_alloc(struct buffer_t *buf) {
+WEAK int halide_zynq_cma_alloc(struct halide_buffer_t *buf) {
     debug(0) << "halide_zynq_cma_alloc\n";
     if (fd_cma == 0) {
         error(NULL) << "Zynq runtime is uninitialized.\n";
@@ -80,25 +87,19 @@ WEAK int halide_zynq_cma_alloc(struct buffer_t *buf) {
 
     // Currently kernel buffer only supports 2-D data layout,
     // so we fold lower dimensions into the 'depth' field.
-    size_t nDims = 4;
-    while (nDims > 0) {
-        if (buf->extent[nDims - 1] != 0) {
-            break;
-        }
-        --nDims;
-    }
+    size_t nDims = buf->dimensions;
     if (nDims < 2) {
         free(cbuf);
         error(NULL) << "buffer_t has less than 2 dimension, not supported in CMA driver.";
         return -3;
     }
-    cbuf->depth = buf->elem_size;
+    cbuf->depth = buf->type.bytes();
     if (nDims > 2) {
         for (size_t i = 0; i < nDims - 2; i++)
-            cbuf->depth *= buf->extent[i];
+            cbuf->depth *= buf->dim[i].extent;
     }
-    cbuf->width = buf->extent[nDims-2];
-    cbuf->height = buf->extent[nDims-1];
+    cbuf->width = buf->dim[nDims-2].extent;
+    cbuf->height = buf->dim[nDims-1].extent;
     // TODO check stride of dimension are the same as width
     cbuf->stride = cbuf->width;
 
@@ -109,7 +110,7 @@ WEAK int halide_zynq_cma_alloc(struct buffer_t *buf) {
         return -2;
     }
 
-    buf->dev = (uint64_t) cbuf;
+    buf->device = (uint64_t) cbuf;
     buf->host = (uint8_t*) mmap(NULL, cbuf->stride * cbuf->height * cbuf->depth,
                                 PROT_WRITE, MAP_SHARED, fd_cma, cbuf->mmap_offset);
 
@@ -121,24 +122,24 @@ WEAK int halide_zynq_cma_alloc(struct buffer_t *buf) {
     return 0;
 }
 
-WEAK int halide_zynq_cma_free(struct buffer_t *buf) {
+WEAK int halide_zynq_cma_free(struct halide_buffer_t *buf) {
     debug(0) << "halide_zynq_cma_free\n";
     if (fd_cma == 0) {
         error(NULL) << "Zynq runtime is uninitialized.\n";
         return -1;
     }
 
-    cma_buffer_t *cbuf = (cma_buffer_t *)buf->dev;
+    cma_buffer_t *cbuf = (cma_buffer_t *)buf->device;
     munmap((void*)buf->host, cbuf->stride * cbuf->height * cbuf->depth);
     cma_free_buffer(cbuf);
     free(cbuf);
-    buf->dev = 0;
+    buf->device = 0;
     return 0;
 }
 
-WEAK int halide_zynq_subimage(const struct buffer_t* image, struct cma_buffer_t* subimage, void *address_of_subimage_origin, int width, int height) {
+WEAK int halide_zynq_subimage(const struct halide_buffer_t* image, struct cma_buffer_t* subimage, void *address_of_subimage_origin, int width, int height) {
     debug(0) << "halide_zynq_subimage\n";
-    *subimage = *((cma_buffer_t *)image->dev); // copy depth, stride, data, etc.
+    *subimage = *((cma_buffer_t *)image->device); // copy depth, stride, data, etc.
     subimage->width = width;
     subimage->height = height;
     size_t offset = (uint8_t *)address_of_subimage_origin - image->host;

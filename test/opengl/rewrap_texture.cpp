@@ -7,10 +7,10 @@ int main() {
 }
 #else
 
+#include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
-#include <stddef.h>
 
 #include "Halide.h"
 #include "HalideRuntimeOpenGL.h"
@@ -32,10 +32,10 @@ int main() {
     const int width = 255;
     const int height = 10;
 
-    Image<uint8_t> input(width, height, 3);
-    Image<uint8_t> out1(width, height, 3);
-    Image<uint8_t> out2(width, height, 3);
-    Image<uint8_t> out3(width, height, 3);
+    Buffer<uint8_t> input(width, height, 3);
+    Buffer<uint8_t> out1(width, height, 3);
+    Buffer<uint8_t> out2(width, height, 3);
+    Buffer<uint8_t> out3(width, height, 3);
 
     Var x, y, c;
     Func g;
@@ -43,8 +43,7 @@ int main() {
     g.bound(c, 0, 3);
     g.glsl(x, y, c);
 
-
-    g.realize(out1, target); // run once to initialize OpenGL
+    g.realize(out1, target);  // run once to initialize OpenGL
 
     GLuint texture_id;
     glGenTextures(1, &texture_id);
