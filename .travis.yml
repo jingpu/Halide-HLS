@@ -1,4 +1,3 @@
-sudo: required
 language: cpp
 compiler:
   # Comment out for now to keep build matrix small
