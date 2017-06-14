@@ -611,7 +611,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
             do_indent();
             if (args[i].is_buffer()) {
                 stream << "halide_buffer_t* " << print_name(args[i].name)
-                       << " = *((halide_buffer_t**) args[" << i << "]);\n";
+                       << " = ((halide_buffer_t*) args[" << i << "]);\n";
             } else {
                 stream << print_type(args[i].type, AppendSpace) << print_name(args[i].name)
                        << " = *((" << print_type(args[i].type) << "*) args[" << i << "]);\n";
