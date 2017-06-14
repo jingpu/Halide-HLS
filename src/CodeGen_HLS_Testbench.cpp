@@ -164,7 +164,7 @@ void CodeGen_HLS_Testbench::visit(const Realize *op) {
     if (ends_with(op->name, ".stream")) {
         // create a AXI stream type
         internal_assert(op->types.size() == 1);
-        allocations.push(op->name, {op->types[0], "null"});
+        allocations.push(op->name, {op->types[0]});
         Stencil_Type stream_type({Stencil_Type::StencilContainerType::AxiStream,
                     op->types[0], op->bounds, 1});
         stencils.push(op->name, stream_type);

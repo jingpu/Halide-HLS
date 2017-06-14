@@ -941,8 +941,12 @@ typedef enum halide_target_feature_t {
     halide_target_feature_trace_stores = 44, ///< Trace all stores done by the pipeline. Equivalent to calling Func::trace_stores on every non-inlined Func.
     halide_target_feature_trace_realizations = 45, ///< Trace all realizations done by the pipeline. Equivalent to calling Func::trace_realizations on every non-inlined Func.
     halide_target_feature_cuda_capability61 = 46,  ///< Enable CUDA compute capability 6.1 (Pascal)
-    halide_target_feature_zynq = 47, // Enable Xilinx Zynq runtime.
-    halide_target_feature_end = 48 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_hvx_v65 = 47, ///< Enable Hexagon v65 architecture.
+    halide_target_feature_hvx_v66 = 48, ///< Enable Hexagon v66 architecture.
+    //----- HLS Modification Begins -----//
+    halide_target_feature_zynq = 49, // Enable Xilinx Zynq runtime.
+    halide_target_feature_end = 50 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    //----- HLS Modification Ends -------//
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine

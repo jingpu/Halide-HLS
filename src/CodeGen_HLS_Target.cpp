@@ -152,7 +152,7 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::add_kernel(Stmt stmt,
                 stream << "&";  // hls_stream needs to be passed by reference
             }
             stream << arg_name;
-            allocations.push(args[i].name, {args[i].stencil_type.elemType, "null"});
+            allocations.push(args[i].name, {args[i].stencil_type.elemType});
             stencils.push(args[i].name, args[i].stencil_type);
         } else {
             stream << print_type(args[i].scalar_type) << " " << arg_name;

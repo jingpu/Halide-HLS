@@ -69,7 +69,11 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
+            #if LLVM_VERSION < 50
             function->setDoesNotAlias(i+1);
+            #else
+            function->addParamAttr(i, Attribute::NoAlias);
+            #endif
         }
     }
 
@@ -198,7 +202,7 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
         // jumping back we're rendering any expression we carry back
         // meaningless, so we had better only be dealing with
         // constants here.
-        int32_t size = alloc->constant_allocation_size();
+        int32_t size = CodeGen_GPU_Dev::get_constant_bound_allocation_size(alloc);
         user_assert(size > 0)
             << "Allocation " << alloc->name << " has a dynamic size. "
             << "Only fixed-size allocations are supported on the gpu. "

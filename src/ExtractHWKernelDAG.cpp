@@ -638,7 +638,7 @@ class BuildDAGForFunction : public IRVisitor {
                     // push RDom value to stencil_bounds and store_bounds
                     if(stage.stage > 0) {
                         //const Definition &r = cur_func.updates()[stage.stage - 1];
-                        Schedule update_schedule = cur_func.update_schedule(stage.stage - 1);
+                        StageSchedule update_schedule = cur_func.update_schedule(stage.stage - 1);
                         // TODO check the sliding dimensions are all pure, referring to
                         // BoundsInference::Stage::define_bounds()
                         //if (r.domain.defined()) {

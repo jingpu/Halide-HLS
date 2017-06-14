@@ -353,7 +353,7 @@ void CodeGen_HLS_Base::visit(const Realize *op) {
     if (ends_with(op->name, ".stream")) {
         // create a stream type
         internal_assert(op->types.size() == 1);
-        allocations.push(op->name, {op->types[0], "null"});
+        allocations.push(op->name, {op->types[0]});
         Stencil_Type stream_type({Stencil_Type::StencilContainerType::Stream,
                     op->types[0], op->bounds, 1});
         stencils.push(op->name, stream_type);
@@ -374,7 +374,7 @@ void CodeGen_HLS_Base::visit(const Realize *op) {
                ends_with(op->name, ".stencil_update")) {
         // create a stencil type
         internal_assert(op->types.size() == 1);
-        allocations.push(op->name, {op->types[0], "null"});
+        allocations.push(op->name, {op->types[0]});
         Stencil_Type stype({Stencil_Type::StencilContainerType::Stencil, op->types[0], op->bounds, 1});
         stencils.push(op->name, stype);
 

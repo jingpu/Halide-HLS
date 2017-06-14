@@ -26,5 +26,5 @@ Build Status
 
 Updates
 ------------
-
-- 2017/06/13 merge Halide release 2017/05/03
+- 2017/06/14 merge Halide nightly 2017/06/13 ( d55ebd5b806110cd77e7c4f2616ddb9ffbf2e99e ), picking up aotcpp_generators tests.
+- 2017/06/13 merge Halide release 2017/05/03.
