@@ -26,6 +26,7 @@ int main(int argc, char **argv) {
 
     Buffer<uint8_t> out_native(in.width(), in.height(), in.channels());
     Buffer<uint8_t> out_hls(in.width(), in.height(), in.channels());
+    Buffer<uint8_t> out_hls_argv(in.width(), in.height(), in.channels());
 
     for (int y = 0; y < in.height(); y++) {
         for (int x = 0; x < in.width(); x++) {
@@ -41,10 +42,10 @@ int main(int argc, char **argv) {
 
     printf("start.\n");
 
-
     pipeline_native(in, weight, 0, out_native);
 
     printf("finish running native code\n");
+
 
     pipeline_hls(in, weight, 0, out_hls);
     printf("finish running HLS code\n");
@@ -53,20 +54,24 @@ int main(int argc, char **argv) {
     void* arg_values[4] = { in.raw_buffer(),
                             weight.raw_buffer(),
                             &bias,
-                            out_hls.raw_buffer() };
+                            out_hls_argv.raw_buffer() };
     pipeline_hls_argv(arg_values);
     printf("finish running HLS code with argv\n");
 
-
+    save_png(out_native, "out.png");
 
     bool success = true;
     for (int y = 0; y < out_native.height(); y++) {
         for (int x = 0; x < out_native.width(); x++) {
 	    for (int c = 0; c < out_native.channels(); c++) {
-	        if (out_native(x, y, c) != out_hls(x, y, c)) {
-                    printf("out_native(%d, %d, %d) = %d, but out_c(%d, %d, %d) = %d\n",
+	        if (out_native(x, y, c) != out_hls(x, y, c) ||
+                    out_hls(x, y, c) != out_hls_argv(x, y, c)) {
+                    printf("Mismatch found: out_native(%d, %d, %d) = %d, "
+                           "out_hls(%d, %d, %d) = %d, "
+                           "out_hls_argv(%d, %d, %d) = %d\n",
 			   x, y, c, out_native(x, y, c),
-			   x, y, c, out_hls(x, y, c));
+			   x, y, c, out_hls(x, y, c),
+                           x, y, c, out_hls_argv(x, y, c));
                     success = false;
                 }
             }
@@ -80,5 +85,4 @@ int main(int argc, char **argv) {
         printf("Failed!\n");
         return 1;
     }
-
 }

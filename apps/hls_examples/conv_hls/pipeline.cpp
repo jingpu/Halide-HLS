@@ -16,52 +16,69 @@ Var x("x"), y("y"), c("c");
 Var xo("xo"), xi("xi"), yi("yi"), yo("yo");
 
 class MyPipeline {
-public:
     ImageParam input;
     ImageParam weight;
     Param<uint16_t> bias;
-    Func kernel;
+    Func kernel_f, kernel;
     Func clamped;
-    Func conv1;
+    Func conv1, conv1_shifted;
     Func output;
     Func hw_output;
     std::vector<Argument> args;
 
     RDom win;
 
+    Func convolve55_rd(Func in) {
+        Func local_sum, res;
+        RDom r(-2, 5, -2, 5);
+
+        local_sum(x, y, c) = bias;
+
+        local_sum(x, y, c) += cast<uint16_t>(in(x+r.x, y+r.y, c)) * weight(r.x+2, r.y+2);
+        res(x, y, c) = cast<uint8_t>(local_sum(x, y, c) >> 8);
+
+        // unroll the reduction
+        local_sum.update(0).unroll(r.x).unroll(r.y);
+        return res;
+    }
+
+public:
     MyPipeline() : input(UInt(8), 3, "input"), weight(UInt(8), 2, "weight"), bias("bias"),
                    kernel("kernel"), conv1("conv1"),
                    output("output"), hw_output("hw_output"),
                    win(-2, 5, -2, 5) {
-        // Define a 9x9 Gaussian Blur with a repeat-edge boundary condition.
         float sigma = 1.5f;
 
-        kernel(x, y) = cast<uint16_t>(exp(-(x*x + y*y)/(2*sigma*sigma)) / (float)(2*M_PI*sigma*sigma));
+        kernel_f(x) = exp(-x*x/(2*sigma*sigma)) / (sqrtf(2*M_PI)*sigma);
+        // normalize and convert to 8bit integer
+        kernel(x) = cast<uint8_t>(kernel_f(x) * 255 /
+                                  (kernel_f(0) + kernel_f(1)*2 + kernel_f(2)*2));
+        // precompute kernel values
+        kernel.compute_root();
 
         // define the algorithm
         clamped = BoundaryConditions::repeat_edge(input);
-        //conv1 = clamped;
-        conv1(x, y, c) += clamped(x+win.x, y+win.y, c) * kernel(win.x, win.y);
+        conv1(x, y, c) += cast<uint32_t>(clamped(x+win.x, y+win.y, c)) * kernel(win.x) * kernel(win.y);
+        conv1_shifted(x, y, c) = cast<uint8_t>(conv1(x, y, c) >> 16);
 
         // unroll the reduction
         conv1.update(0).unroll(c).unroll(win.x).unroll(win.y);
 
-        hw_output = convolve55_rd(conv1);
+        hw_output = convolve55_rd(conv1_shifted);
         output(x, y, c) = hw_output(x, y, c);
 
         // constraints
         output.bound(c, 0, 3);
 
-        weight.set_bounds(0, 0, 5);
-        weight.set_bounds(1, 0, 5);
-        weight.set_stride(0, 1);
-        weight.set_stride(1, 5);
+        weight.dim(0).set_bounds(0, 5);
+        weight.dim(1).set_bounds(0, 5);
+        weight.dim(0).set_stride(1);
+        weight.dim(1).set_stride(5);
 
         args.push_back(input);
         args.push_back(weight);
         args.push_back(bias);
 
-        kernel.compute_root();
     }
 
     void compile_cpu() {
@@ -71,7 +88,7 @@ public:
         output.fuse(xo, yo, xo).parallel(xo);
 
         output.vectorize(xi, 8);
-        conv1.compute_at(output, xo).vectorize(x, 8);
+        conv1_shifted.compute_at(output, xo).vectorize(x, 8);
 
         //output.print_loop_nest();
         output.compile_to_lowered_stmt("pipeline_native.ir.html", args, HTML);
@@ -83,7 +100,7 @@ public:
         std::cout << "\ncompiling gpu code..." << std::endl;
 
         output.compute_root().reorder(x, y, c).gpu_tile(x, y, c, 16, 16, 1);
-        conv1.compute_root().reorder(x, y, c).gpu_tile(x, y, c, 16, 16, 1);
+        conv1_shifted.compute_root().reorder(x, y, c).gpu_tile(x, y, c, 16, 16, 1);
         //conv1.compute_at(output, Var::gpu_blocks()).gpu_threads(x, y, c);
         //output.print_loop_nest();
 
@@ -107,7 +124,7 @@ public:
         hw_output.tile(x, y, xo, yo, xi, yi, 256, 256).reorder(c, xi, yi, xo, yo);
         //hw_output.unroll(xi, 2);
         hw_output.accelerate({clamped}, xi, xo, {kernel});  // define the inputs and the output
-        conv1.linebuffer();
+        conv1_shifted.linebuffer();
         conv1.unroll(c).unroll(x).unroll(y);
         hw_output.unroll(c);
 
@@ -117,21 +134,6 @@ public:
         output.compile_to_lowered_stmt("pipeline_hls.ir.html", args, HTML, hls_target);
         output.compile_to_hls("pipeline_hls.cpp", args, "pipeline_hls", hls_target);
         output.compile_to_header("pipeline_hls.h", args, "pipeline_hls", hls_target);
-    }
-
-private:
-    Func convolve55_rd(Func in) {
-        Func local_sum, res;
-        RDom r(-2, 5, -2, 5);
-
-        local_sum(x, y, c) = bias;
-
-        local_sum(x, y, c) += cast<uint16_t>(in(x+r.x, y+r.y, c)) * weight(r.x+2, r.y+2);
-        res(x, y, c) = cast<uint8_t>(local_sum(x, y, c) >> 8);
-
-        // unroll the reduction
-        local_sum.update(0).unroll(r.x).unroll(r.y);
-        return res;
     }
 };
 

@@ -224,11 +224,18 @@ void buffer_to_stencil(const halide_buffer_t *buffer,
     assert((EXTENT_3 == 1)
            || (buffer->dimensions == 4 && EXTENT_3 == buffer->dim[3].extent));
 
+    const int min_0 = buffer->dim[0].min;
+    const int min_1 = buffer->dimensions > 1 ? buffer->dim[1].min : 0;
+    const int min_2 = buffer->dimensions > 2 ? buffer->dim[2].min : 0;
+    const int min_3 = buffer->dimensions > 3 ? buffer->dim[3].min : 0;
     for(size_t idx_3 = 0; idx_3 < EXTENT_3; idx_3++)
     for(size_t idx_2 = 0; idx_2 < EXTENT_2; idx_2++)
     for(size_t idx_1 = 0; idx_1 < EXTENT_1; idx_1++)
     for(size_t idx_0 = 0; idx_0 < EXTENT_0; idx_0++) {
-        const int pos[4] = {(int)idx_0, (int)idx_1, (int)idx_2, (int)idx_3};
+        const int pos[4] = {(int)idx_0 + min_0,
+                            (int)idx_1 + min_1,
+                            (int)idx_2 + min_2,
+                            (int)idx_3 + min_3};
         const uint8_t *ptr = buffer->address_of(pos);
         const T *address =  (T *)ptr;
         stencil(idx_0, idx_1, idx_2, idx_3) = *address;
