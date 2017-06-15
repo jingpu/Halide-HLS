@@ -372,29 +372,22 @@ void Module::compile(const Outputs &output_files) const {
     if (!output_files.c_source_name.empty()) {
         debug(1) << "Module.compile(): c_source_name " << output_files.c_source_name << "\n";
         std::ofstream file(output_files.c_source_name);
-        Internal::CodeGen_C cg(file,
-                               target(),
-                               target().has_feature(Target::CPlusPlusMangling) ?
-                               Internal::CodeGen_C::CPlusPlusImplementation : Internal::CodeGen_C::CImplementation);
-        cg.compile(*this);
-    }
-    if (!output_files.hls_source_name.empty()) {
-        debug(1) << "Module.compile(): hls_source_name " << output_files.hls_source_name << "\n";
-        std::ofstream file(output_files.hls_source_name);
-        Internal::CodeGen_HLS_Testbench cg(file,
-                               target(),
-                               target().has_feature(Target::CPlusPlusMangling) ?
-                               Internal::CodeGen_C::CPlusPlusImplementation : Internal::CodeGen_C::CImplementation);
-        cg.compile(*this);
-    }
-    if (!output_files.zynq_c_source_name.empty()) {
-        debug(1) << "Module.compile(): zynq_c_source_name " << output_files.zynq_c_source_name << "\n";
-        std::ofstream file(output_files.zynq_c_source_name);
-        Internal::CodeGen_Zynq_C cg(file,
-                               target(),
-                               target().has_feature(Target::CPlusPlusMangling) ?
-                               Internal::CodeGen_C::CPlusPlusImplementation : Internal::CodeGen_C::CImplementation);
-        cg.compile(*this);
+        //----- HLS Modification Begins -----//
+        CodeGen_C::OutputKind output_kind =
+            target().has_feature(Target::CPlusPlusMangling)
+                ? CodeGen_C::CPlusPlusImplementation
+                : CodeGen_C::CImplementation;
+        CodeGen_C *cg;
+        if (target().has_feature(Target::VivadoHLS)) {
+            cg = new CodeGen_HLS_Testbench(file, target(), output_kind);
+        } else if (target().has_feature(Target::Zynq)) {
+            cg = new CodeGen_Zynq_C(file, target(), output_kind);
+        } else {
+            cg = new CodeGen_C(file, target(), output_kind);
+        }
+        cg->compile(*this);
+        delete cg;
+        //----- HLS Modification Ends -------//
     }
     if (!output_files.stmt_name.empty()) {
         debug(1) << "Module.compile(): stmt_name " << output_files.stmt_name << "\n";

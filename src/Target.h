@@ -66,7 +66,10 @@ struct Target {
         Profile = halide_target_feature_profile,
         NoRuntime = halide_target_feature_no_runtime,
         Metal = halide_target_feature_metal,
+        //----- HLS Modification Begins -----//
+        VivadoHLS = halide_target_feature_vivado_hls,
         Zynq = halide_target_feature_zynq,
+        //----- HLS Modification Ends -------//
         MinGW = halide_target_feature_mingw,
         CPlusPlusMangling = halide_target_feature_c_plus_plus_mangling,
         LargeBuffers = halide_target_feature_large_buffers,

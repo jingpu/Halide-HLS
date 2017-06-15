@@ -206,22 +206,25 @@ void Pipeline::compile_to_c(const string &filename,
     m.compile(Outputs().c_source(output_name(filename, m, ".c")));
 }
 
-
+//----- HLS Modification Begins -----//
 void Pipeline::compile_to_hls(const string &filename,
                             const vector<Argument> &args,
                             const string &fn_name,
                             const Target &target) {
-    Module m = compile_to_module(args, fn_name, target);
-    m.compile(Outputs().hls_source(output_name(filename, m, ".cpp")));
+    Target new_target = target.with_feature(Target::VivadoHLS);
+    Module m = compile_to_module(args, fn_name, new_target);
+    m.compile(Outputs().c_source(output_name(filename, m, ".cpp")));
 }
 
 void Pipeline::compile_to_zynq_c(const string &filename,
                                  const vector<Argument> &args,
                                  const string &fn_name,
                                  const Target &target) {
-    Module m = compile_to_module(args, fn_name, target);
-    m.compile(Outputs().zynq_c_source(output_name(filename, m, ".c")));
+    Target new_target = target.with_feature(Target::Zynq);
+    Module m = compile_to_module(args, fn_name, new_target);
+    m.compile(Outputs().c_source(output_name(filename, m, ".c")));
 }
+//----- HLS Modification Ends -------//
 
 void Pipeline::print_loop_nest() {
     user_assert(defined()) << "Can't print loop nest of undefined Pipeline.\n";

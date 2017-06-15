@@ -318,6 +318,9 @@ enum class DeviceAPI {
     GLSL,
     OpenGLCompute,
     Metal,
+    //----- HLS Modification Begins -----//
+    HLS,
+    //----- HLS Modification Ends -------//
     Hexagon
 };
 
@@ -331,6 +334,9 @@ const DeviceAPI all_device_apis[] = {DeviceAPI::None,
                                      DeviceAPI::GLSL,
                                      DeviceAPI::OpenGLCompute,
                                      DeviceAPI::Metal,
+                                     //----- HLS Modification Begins -----//
+                                     DeviceAPI::HLS,
+                                     //----- HLS Modification Ends -------//
                                      DeviceAPI::Hexagon};
 
 namespace Internal {

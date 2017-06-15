@@ -107,22 +107,6 @@ struct Outputs {
     }
 
     /** Make a new Outputs struct that emits everything this one does
-     * and also a HLS C source file with the given name. */
-    Outputs hls_source(const std::string &hls_source_name) {
-        Outputs updated = *this;
-        updated.hls_source_name = hls_source_name;
-        return updated;
-    }
-
-    /** Make a new Outputs struct that emits everything this one does
-     * and also a Zynq C source file with the given name. */
-    Outputs zynq_c_source(const std::string &zynq_c_source_name) {
-        Outputs updated = *this;
-        updated.zynq_c_source_name = zynq_c_source_name;
-        return updated;
-    }
-
-    /** Make a new Outputs struct that emits everything this one does
      * and also a stmt file with the given name. */
     Outputs stmt(const std::string &stmt_name) const {
         Outputs updated = *this;
