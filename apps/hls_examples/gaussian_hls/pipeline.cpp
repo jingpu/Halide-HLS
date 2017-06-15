@@ -28,10 +28,13 @@ public:
         float sigma = 1.5f;
 
         kernel_f(x) = exp(-x*x/(2*sigma*sigma)) / (sqrtf(2*M_PI)*sigma);
-        // normalize and convert to 8bit fixed point
+
+        // Normalize and convert to 8bit fixed point.
+        // Kernel values will inlined into  the blurring kernel as constant
         kernel(x) = cast<uint8_t>(kernel_f(x) * 255 /
                                   (kernel_f(0) + kernel_f(1)*2 + kernel_f(2)*2
                                    + kernel_f(3)*2 + kernel_f(4)*2));
+
         //in_bounded = BoundaryConditions::repeat_edge(in);
         in_bounded(x, y) = in(x + 4, y + 4);
 
@@ -65,7 +68,6 @@ public:
 
     void compile_cpu() {
         std::cout << "\ncompiling cpu code..." << std::endl;
-        //kernel.compute_root();
 
         output.tile(x, y, xo, yo, xi, yi, 256, 64)
             .vectorize(xi, 8)
@@ -95,12 +97,11 @@ public:
 
     void compile_hls() {
         std::cout << "\ncompiling HLS code..." << std::endl;
-        //kernel.compute_root();
-        output.tile(x, y, xo, yo, xi, yi, 480, 640);
+        output.tile(x, y, xo, yo, xi, yi, 64, 64);
         in_bounded.compute_at(output, xo);
 
         hw_output.compute_at(output, xo)
-            .tile(x, y, xo, yo, xi, yi, 480, 640);
+            .tile(x, y, xo, yo, xi, yi, 64, 64);
         //hw_output.unroll(xi, 2);
 
         hw_output.accelerate({in_bounded}, xi, xo);

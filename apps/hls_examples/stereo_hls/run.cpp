@@ -24,9 +24,7 @@ int main(int argc, char **argv) {
     Buffer<uint8_t> right_remap = load_image(argv[4]);
 
     Buffer<uint8_t> out_native(left.width(), left.height());
-    Buffer<uint8_t> out_hls(600, 400);
-    //Buffer<uint8_t> out_hls(left.width(), left.height());
-
+    Buffer<uint8_t> out_hls(64, 64);
 
     printf("start.\n");
 
@@ -35,12 +33,11 @@ int main(int argc, char **argv) {
 
     printf("finish running native code\n");
 
-
     pipeline_hls(right, left, right_remap, left_remap, out_hls);
     save_image(out_hls, "out_hls.png");
 
     printf("finish running HLS code\n");
-    printf("\nchecking results...\n");
+
     int fails = 0;
     for (int y = 0; y < out_hls.height(); y++) {
         for (int x = 0; x < out_hls.width(); x++) {
@@ -54,9 +51,9 @@ int main(int argc, char **argv) {
     }
     if (fails) {
         printf("%d fails.\n", fails);
-        //return 1;
+        return 1;
     } else {
         printf("passed.\n");
+        return 0;
     }
-    return 0;
 }

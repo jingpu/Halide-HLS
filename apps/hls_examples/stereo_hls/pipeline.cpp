@@ -269,7 +269,7 @@ void compile_cpu() {
 void compile_hls() {
     std::cout << "\ncompiling HLS code..." << std::endl;
 
-    output.tile(x, y, xo, yo, x_in, y_in, 600, 400);
+    output.tile(x, y, xo, yo, x_in, y_in, 64, 64);
     right_remapped.compute_at(output, xo);
     left_remapped.compute_at(output, xo);
     //right_padded.compute_at(hw_output, xo);
@@ -278,8 +278,9 @@ void compile_hls() {
     //left_remap_padded.compute_at(hw_output, xo);
 
     hw_output.compute_at(output, xo);
-    hw_output.tile(x, y, xo, yo, x_in, y_in, 600, 400);
+    hw_output.tile(x, y, xo, yo, x_in, y_in, 64, 64);
 
+    // TODO(jingpu) use rfactor() schedule instead.
     //offset.update(0).unroll(search.x, 4);
     RVar search_xo, search_xi;
     offset.update(0).split(search.x, search_xo, search_xi, 4);

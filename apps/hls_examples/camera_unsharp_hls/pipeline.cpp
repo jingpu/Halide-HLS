@@ -619,8 +619,8 @@ public:
         Expr out_width = processed.output_buffer().width();
         Expr out_height = processed.output_buffer().height();
         processed
-            .bound(x, 0, (out_width/640)*640)
-            .bound(y, 0, (out_height/480)*480)
+            .bound(x, 0, (out_width/64)*64)
+            .bound(y, 0, (out_height/64)*64)
             .bound(c, 0, 3); // bound color loop 0-3, properly
 
         args = {input};
@@ -631,12 +631,12 @@ public:
         std::cout << "\ncompiling HLS code..." << std::endl;
 
         // Block in chunks over tiles
-        processed.tile(x, y, xo, yo, xi, yi, 640, 480)
+        processed.tile(x, y, xo, yo, xi, yi, 64, 64)
             .reorder(c, xi, yi, xo, yo);
         shifted.compute_at(processed, xo);
         hw_output.compute_at(processed, xo);
 
-        hw_output.tile(x, y, xo, yo, xi, yi, 640, 480)
+        hw_output.tile(x, y, xo, yo, xi, yi, 64, 64)
             .reorder(c, xi, yi, xo, yo).unroll(c);;
         //hw_output.unroll(xi, 2);
         hw_output.accelerate({shifted}, xi, xo);

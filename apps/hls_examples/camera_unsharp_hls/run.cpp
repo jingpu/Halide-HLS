@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
     Buffer<uint16_t> input = load_image(argv[1]);
     fprintf(stderr, "%d %d\n", input.width(), input.height());
     Buffer<uint8_t> out_native(2560, 1920, 3);
-    Buffer<uint8_t> out_hls(640*1, 480*1, 3);
+    Buffer<uint8_t> out_hls(64*1, 64*1, 3);  // Cropped
 
     printf("start.\n");
     pipeline_native(input, out_native);

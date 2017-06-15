@@ -15,7 +15,7 @@ using namespace Halide::Tools;
 int main(int argc, char **argv) {
     Buffer<uint8_t> input = load_image(argv[1]);
     Buffer<uint8_t> out_native(input.width()-8, input.height()-8, 3);
-    Buffer<uint8_t> out_hls(480*1, 640*1, 3);
+    Buffer<uint8_t> out_hls(64, 64, 3);  // Cropped
 
     printf("start.\n");
 

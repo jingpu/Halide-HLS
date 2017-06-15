@@ -120,8 +120,7 @@ public:
         // inputs of 'clamped', buffering intermediates at (output, xo) loop
         // level
         hw_output.compute_root();
-        //hw_output.tile(x, y, xo, yo, xi, yi, 1920, 1080).reorder(c, xi, yi, xo, yo);
-        hw_output.tile(x, y, xo, yo, xi, yi, 256, 256).reorder(c, xi, yi, xo, yo);
+        hw_output.tile(x, y, xo, yo, xi, yi, 64, 64).reorder(c, xi, yi, xo, yo);
         //hw_output.unroll(xi, 2);
         hw_output.accelerate({clamped}, xi, xo, {kernel});  // define the inputs and the output
         conv1_shifted.linebuffer();

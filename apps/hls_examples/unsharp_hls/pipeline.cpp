@@ -114,10 +114,10 @@ public:
         std::cout << "\ncompiling HLS code..." << std::endl;
         //kernel.compute_root();
 
-        output.tile(x, y, xo, yo, xi, yi, 480, 640).reorder(c, xi, yi, xo, yo);
+        output.tile(x, y, xo, yo, xi, yi, 64, 64).reorder(c, xi, yi, xo, yo);
 
         hw_output.compute_at(output, xo);
-        hw_output.tile(x, y, xo, yo, xi, yi, 480, 640).reorder(c, xi, yi, xo, yo);
+        hw_output.tile(x, y, xo, yo, xi, yi, 64, 64).reorder(c, xi, yi, xo, yo);
         in_bounded.compute_at(output, xo);
 
         hw_output.accelerate({in_bounded}, xi, xo);
@@ -125,7 +125,7 @@ public:
         //blur_y.linebuffer();
         ratio.linebuffer();
         hw_output.unroll(c);  // hw output bound
-        in_bounded.fifo_depth(hw_output, 480*9); // hw input bounds
+        in_bounded.fifo_depth(hw_output, 64*9); // hw input bounds
 
         //output.print_loop_nest();
         // Create the target for HLS simulation

@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
 
     Buffer<uint8_t> input = load_image(argv[1]);
     Buffer<uint8_t> out_native(input.width()-6, input.height()-6);
-    Buffer<uint8_t> out_hls(480*2, 640*2);
+    Buffer<uint8_t> out_hls(64*2, 64*2);
 
     printf("start.\n");
 
@@ -43,7 +43,11 @@ int main(int argc, char **argv) {
             }
 	}
     }
-    if (success)
+    if (success) {
+        printf("passed.\n");
         return 0;
-    else return 1;
+    } else {
+        printf("failed.\n");
+        return 1;
+    }
 }

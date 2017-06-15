@@ -12,46 +12,10 @@
 using namespace Halide::Runtime;
 using namespace Halide::Tools;
 
-
-class my_load_image {
-public:
-    my_load_image(const std::string &f) : filename(f) {}
-    template<typename ImageType>
-    inline operator ImageType() {
-        ImageType im;
-        (void) load<ImageType, Internal::CheckFail>(filename, &im);
-        // shuffle data
-        ImageType res(im.channels(), im.width(), im.height());
-        //ImageType res(3, 256+8, 256+8);
-        for(int c = 0; c < res.extent(0); c++)
-            for(int x = 0; x < res.extent(1); x++)
-                for(int y = 0; y < res.extent(2); y++)
-                    res(c, x, y) = im(x, y, c);
-        return res;
-    }
-private:
-  const std::string filename;
-};
-
-
-template<typename ImageType>
-void my_save_image(ImageType &im, const std::string &filename) {
-    int width = im.extent(1);
-    int height = im.extent(2);
-    int channels = im.extent(0);
-    ImageType shuffled(width, height, channels);
-    for(int x = 0; x < width; x++)
-        for(int y = 0; y < height; y++)
-            for(int c = 0; c < channels; c++)
-                shuffled(x, y, c) = im(c, x, y);
-    (void) save<ImageType, Internal::CheckFail>(shuffled, filename);
-}
-
-
 int main(int argc, char **argv) {
     Buffer<uint8_t> input = load_image(argv[1]);
     Buffer<uint8_t> out_native(input.width()-8, input.height()-8);
-    Buffer<uint8_t> out_hls(480, 640);
+    Buffer<uint8_t> out_hls(64, 64);
 
     printf("start.\n");
 
@@ -73,7 +37,7 @@ int main(int argc, char **argv) {
                            x, y, c, out_hls(x, y, c));
                     fails++;
                 }
-          }
+            }
 	}
     }
     if (!fails) {

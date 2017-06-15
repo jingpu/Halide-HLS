@@ -131,11 +131,11 @@ public:
     void compile_hls() {
         std::cout << "\ncompiling HLS code..." << std::endl;
 
-        output.tile(x, y, xo, yo, xi, yi, 480, 640);
+        output.tile(x, y, xo, yo, xi, yi, 64, 64);
         padded.compute_at(output, xo);
         hw_output.compute_at(output, xo);
 
-        hw_output.tile(x, y, xo, yo, xi, yi, 480, 640);
+        hw_output.tile(x, y, xo, yo, xi, yi, 64, 64);
         hw_output.unroll(xi, 2);
         hw_output.accelerate({padded}, xi, xo);
 
