@@ -944,8 +944,9 @@ typedef enum halide_target_feature_t {
     halide_target_feature_hvx_v65 = 47, ///< Enable Hexagon v65 architecture.
     halide_target_feature_hvx_v66 = 48, ///< Enable Hexagon v66 architecture.
     //----- HLS Modification Begins -----//
-    halide_target_feature_zynq = 49, // Enable Xilinx Zynq runtime.
-    halide_target_feature_end = 50 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_vivado_hls = 49,  ///< Enable Vivado HLS code generation.
+    halide_target_feature_zynq = 50, ///< Enable Xilinx Zynq runtime.
+    halide_target_feature_end = 51 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
     //----- HLS Modification Ends -------//
 } halide_target_feature_t;
 
