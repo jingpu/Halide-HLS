@@ -5,10 +5,10 @@
 #include "pipeline_native.h"
 #include "pipeline_hls.h"
 
-#include "HalideBuffer.h"
+#include "BufferMinimal.h"
 #include "halide_image_io.h"
 
-using namespace Halide::Runtime;
+using Halide::Runtime::HLS::BufferMinimal;
 using namespace Halide::Tools;
 
 const unsigned char gaussian2d[5][5] = {
@@ -21,12 +21,12 @@ const unsigned char gaussian2d[5][5] = {
 
 
 int main(int argc, char **argv) {
-    Buffer<uint8_t> in(800, 800, 3);
-    Buffer<uint8_t> weight(5, 5);
+    BufferMinimal<uint8_t> in(800, 800, 3);
+    BufferMinimal<uint8_t> weight(5, 5);
 
-    Buffer<uint8_t> out_native(in.width(), in.height(), in.channels());
-    Buffer<uint8_t> out_hls(64, 64, in.channels());  // Cropped
-    Buffer<uint8_t> out_hls_argv(64, 64, in.channels());  // Cropped
+    BufferMinimal<uint8_t> out_native(in.width(), in.height(), in.channels());
+    BufferMinimal<uint8_t> out_hls(64, 64, in.channels());  // Cropped
+    BufferMinimal<uint8_t> out_hls_argv(64, 64, in.channels());  // Cropped
 
     for (int y = 0; y < in.height(); y++) {
         for (int x = 0; x < in.width(); x++) {
