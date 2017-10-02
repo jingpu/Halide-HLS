@@ -9,7 +9,7 @@
 
 #include "IR.h"
 #include "Bounds.h"
-#include "ExtractHWKernelDAG.h"
+#include "ExtractHWKernel.h"
 #include "Target.h"
 
 

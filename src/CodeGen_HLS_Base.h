@@ -27,7 +27,7 @@ public:
         : CodeGen_C(dest, target, output_kind, include_guard) {}
 
     struct Stencil_Type {
-        typedef enum {Stencil, Stream, AxiStream} StencilContainerType;
+        typedef enum {Stencil, Stream, AxiStream, Array} StencilContainerType;
         StencilContainerType type;
         Type elemType;  // type of the element
         Region bounds;  // extent of each dimension

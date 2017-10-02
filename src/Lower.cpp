@@ -18,7 +18,7 @@
 #include "DeepCopy.h"
 #include "Deinterleave.h"
 #include "EarlyFree.h"
-#include "ExtractHWKernelDAG.h"
+#include "ExtractHWKernel.h"
 #include "FindCalls.h"
 #include "Func.h"
 #include "Function.h"
@@ -54,7 +54,7 @@
 #include "SplitTuples.h"
 #include "StorageFlattening.h"
 #include "StorageFolding.h"
-#include "StreamOpt.h"
+#include "HWKernelOpt.h"
 #include "Substitute.h"
 #include "Tracing.h"
 #include "TrimNoOps.h"
@@ -177,20 +177,20 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     // equivalence means semantic equivalence.
     debug(1) << "Uniquifying variable names...\n";
     s = uniquify_variable_names(s);
-    debug(2) << "Lowering after uniquifying variable names:\n" << s << "\n\n";
+    debug(0) << "Lowering after uniquifying variable names:\n" << s << "\n\n";
 
     {
         // passes specific to HLS backend
-        debug(1) << "Performing HLS target optimization..\n";
+        debug(0) << "Performing HLS target optimization..\n";
         vector<HWKernelDAG> dags;
-        s = extract_hw_kernel_dag(s, env, inlined_stages, dags);
+        s = extract_hw_kernel(s, env, inlined_stages, dags);
 
         for(const HWKernelDAG &dag : dags) {
-            s = stream_opt(s, dag);
-            //s = replace_image_param(s, dag);
+            //s = stream_opt(s, dag);
+            s = hwkernel_opt(s, dag);
         }
-
-        debug(2) << "Lowering after HLS optimization:\n" << s << '\n';
+ 
+        debug(0) << "Lowering after HLS optimization:\n" << s << '\n';
     }
 
     debug(1) << "Performing storage folding optimization...\n";

@@ -306,7 +306,7 @@ SOURCE_FILES = \
   Elf.cpp \
   EliminateBoolVectors.cpp \
   Error.cpp \
-  ExtractHWKernelDAG.cpp \
+  ExtractHWKernel.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
   Float16.cpp \
@@ -373,7 +373,7 @@ SOURCE_FILES = \
   SimplifySpecializations.cpp \
   SkipStages.cpp \
   SlidingWindow.cpp \
-  StreamOpt.cpp \
+  HWKernelOpt.cpp \
   Solve.cpp \
   SplitTuples.cpp \
   StmtToHtml.cpp \

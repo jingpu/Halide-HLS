@@ -41,8 +41,12 @@ vector<HLS_Argument> HLS_Closure::arguments(const Scope<CodeGen_HLS_Base::Stenci
         if (i.second.read) debug(3) << " (read)";
         if (i.second.write) debug(3) << " (write)";
         debug(3) << "\n";
+        //Array as passing arguments
+        CodeGen_HLS_Base::Stencil_Type stype = {};
+        stype.type = CodeGen_HLS_Base::Stencil_Type::StencilContainerType::Array;
+        res.push_back({i.first, false, i.second.type, stype});
     }
-    internal_assert(buffers.empty()) << "we expect no references to buffers in a hw pipeline.\n";
+    //internal_assert(buffers.empty()) << "we expect no references to buffers in a hw pipeline.\n";
     for (const pair<string, Type> &i : vars) {
         debug(3) << "var: " << i.first << "\n";
         if(ends_with(i.first, ".stream") ||

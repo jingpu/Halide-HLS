@@ -155,7 +155,14 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::add_kernel(Stmt stmt,
             allocations.push(args[i].name, {args[i].stencil_type.elemType});
             stencils.push(args[i].name, args[i].stencil_type);
         } else {
-            stream << print_type(args[i].scalar_type) << " " << arg_name;
+            // add Array
+            if (args[i].stencil_type.type == Stencil_Type::StencilContainerType::Array) {
+                stream << print_type(args[i].scalar_type) << " *" << arg_name;
+                //allocations.push(args[i].name, {args[i].scalar_type, "null"});
+                //debug(4) << "Push " << args[i].name << " to allocations\n";
+            } else {
+              stream << print_type(args[i].scalar_type) << " " << arg_name;
+            }
         }
 
         if (i < args.size()-1) stream << ",\n";
@@ -188,9 +195,15 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::add_kernel(Stmt stmt,
                            << "variable=" << arg_name << ".value complete dim=0\n";
                 }
             } else {
-                // scalar arguments use AXI-lite interface
-                stream << "#pragma HLS INTERFACE s_axilite "
-                       << "port=" << arg_name << " bundle=config\n";
+                // add Array
+                if (args[i].stencil_type.type == Stencil_Type::StencilContainerType::Array) {
+                    stream << "#pragma HLS INTERFACE m_axi " 
+                           << "port=" << arg_name << "\n";
+                } else {
+                    // scalar arguments use AXI-lite interface
+                    stream << "#pragma HLS INTERFACE s_axilite "
+                           << "port=" << arg_name << " bundle=config\n";
+                }
             }
         }
         stream << "\n";
@@ -206,8 +219,14 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::add_kernel(Stmt stmt,
                 stream << print_stencil_type(args[i].stencil_type) << " &"
                        << print_name(args[i].name) << " = " << arg_name << ";\n";
             } else {
-                stream << print_type(args[i].scalar_type) << " &"
-                       << print_name(args[i].name) << " = " << arg_name << ";\n";
+                // add Array
+                if (args[i].stencil_type.type == Stencil_Type::StencilContainerType::Array) {
+                    stream << print_type(args[i].scalar_type) << " *" 
+                           << print_name(args[i].name) << " = " << arg_name << ";\n";
+                } else {
+                    stream << print_type(args[i].scalar_type) << " &"
+                           << print_name(args[i].name) << " = " << arg_name << ";\n";
+                }
             }
         }
         stream << "\n";
