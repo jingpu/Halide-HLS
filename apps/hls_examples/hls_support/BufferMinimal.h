@@ -25,7 +25,8 @@ namespace HLS {
 template<typename T, int D = 3>
 class BufferMinimal {
     /** The underlying buffer_t */
-    halide_buffer_t buf = {0};
+    //halide_buffer_t buf = {0};
+    halide_buffer_t buf;
 
     /** Some in-class storage for shape of the dimensions. */
     halide_dimension_t shape[D];
@@ -115,6 +116,7 @@ public:
     /** Allocate a new image of the given size. Pass zeroes to make a
      * buffer suitable for bounds query calls. */
     BufferMinimal(int first, int second = 0, int third = 0) {
+        memset(&buf, 0, sizeof(halide_buffer_t));
         buf.type = static_halide_type();
         buf.dimensions = get_dimension_from_args(first, second, third);
         this->make_shape_storage();
