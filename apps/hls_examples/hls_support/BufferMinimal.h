@@ -25,7 +25,6 @@ namespace HLS {
 template<typename T, int D = 3>
 class BufferMinimal {
     /** The underlying buffer_t */
-    //halide_buffer_t buf = {0};
     halide_buffer_t buf;
 
     /** Some in-class storage for shape of the dimensions. */
