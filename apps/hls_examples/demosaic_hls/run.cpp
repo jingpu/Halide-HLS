@@ -6,16 +6,16 @@
 #include "pipeline_hls.h"
 #include "pipeline_native.h"
 
-#include "HalideBuffer.h"
+#include "BufferMinimal.h"
 #include "halide_image_io.h"
 
-using namespace Halide::Runtime;
+using Halide::Runtime::HLS::BufferMinimal;
 using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
     /*
     Halide::Func mosaic;
-    Halide::Buffer<uint8_t> input = load_image("../tutorial/images/rgb.png");
+    Halide::BufferMinimal<uint8_t> input = load_image("../tutorial/images/rgb.png");
     Halide::Var x, y;
 
     // Create an RG/GB mosaic
@@ -23,13 +23,13 @@ int main(int argc, char **argv) {
         Halide::select((x % 2) == 0, input(x, y, 0), input(x, y, 1)), // First row, RG
         Halide::select((x % 2) == 0, input(x, y, 1), input(x, y, 2)))); // GB
 
-    Halide::Buffer<uint8_t> mosaic_image = mosaic.realize(input.width(), input.height());
+    Halide::BufferMinimal<uint8_t> mosaic_image = mosaic.realize(input.width(), input.height());
     save_image(mosaic_image, "mosaic.png");
     */
 
-    Buffer<uint8_t> input = load_image(argv[1]);
-    Buffer<uint8_t> out_native(1440/2, 960/2, 3);
-    Buffer<uint8_t> out_hls(1440/2, 960/2, 3);
+    BufferMinimal<uint8_t> input = load_image(argv[1]);
+    BufferMinimal<uint8_t> out_native(1440/2, 960/2, 3);
+    BufferMinimal<uint8_t> out_hls(1440/2, 960/2, 3);
 
 
     printf("start.\n");

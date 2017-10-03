@@ -6,16 +6,16 @@
 #include "pipeline_hls.h"
 #include "pipeline_native.h"
 
-#include "HalideBuffer.h"
+#include "BufferMinimal.h"
 #include "halide_image_io.h"
 
-using namespace Halide::Runtime;
+using Halide::Runtime::HLS::BufferMinimal;
 using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
-    Buffer<uint8_t> input = load_image(argv[1]);
-    Buffer<uint8_t> out_native(input.width()-8, input.height()-8);
-    Buffer<uint8_t> out_hls(64, 64);
+    BufferMinimal<uint8_t> input = load_image(argv[1]);
+    BufferMinimal<uint8_t> out_native(input.width()-8, input.height()-8);
+    BufferMinimal<uint8_t> out_hls(64, 64);
 
     printf("start.\n");
 
