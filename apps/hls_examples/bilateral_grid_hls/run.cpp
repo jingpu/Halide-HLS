@@ -3,19 +3,19 @@
 #include <cassert>
 #include <math.h>
 
+#include "BufferMinimal.h"
+#include "halide_image_io.h"
+
 #include "pipeline_hls.h"
 #include "pipeline_native.h"
 
-#include "HalideBuffer.h"
-#include "halide_image_io.h"
-
 using namespace Halide::Tools;
-using namespace Halide::Runtime;
+using Halide::Runtime::HLS::BufferMinimal;
 
 int main(int argc, char **argv) {
-    Buffer<uint8_t> input = load_image(argv[1]);
-    Buffer<uint8_t> out_native(480*4, 640*4);
-    Buffer<uint8_t> out_hls(480, 640);
+    BufferMinimal<uint8_t> input = load_image(argv[1]);
+    BufferMinimal<uint8_t> out_native(480*4, 640*4);
+    BufferMinimal<uint8_t> out_hls(480, 640);
 
     printf("start.\n");
 
@@ -25,8 +25,10 @@ int main(int argc, char **argv) {
     printf("finish running native code\n");
 
     pipeline_hls(input, out_hls);
+    save_image(out_hls, "out_hls.png");
 
     printf("finish running HLS code\n");
+
 
     bool pass = true;
     for (int y = 0; y < out_hls.height(); y++) {

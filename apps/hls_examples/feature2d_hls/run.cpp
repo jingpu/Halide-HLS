@@ -12,7 +12,7 @@
 #include "pipeline_corners.h"
 #include "pipeline_kpt.h"
 
-#include "HalideBuffer.h"
+#include "BufferMinimal.h"
 #include "halide_image_io.h"
 
 #include "opencv2/highgui/highgui.hpp"
@@ -20,7 +20,7 @@
 #include "opencv2/features2d/features2d.hpp"
 #include "opencv2/calib3d/calib3d.hpp"
 
-using namespace Halide::Runtime;
+using Halide::Runtime::HLS::BufferMinimal;
 using namespace Halide::Tools;
 using namespace cv;
 
@@ -145,19 +145,19 @@ int main(int argc, char **argv) {
     float threshold = 1000;
     int nfeatures = 20;
 
-    Buffer<uint8_t> input0 = load_image(argv[1]);
-    Buffer<uint8_t> input1 = load_image(argv[2]);
-    Buffer<int32_t> intg0(input0.width(), input0.height());
-    Buffer<int32_t> intg1(input1.width(), input1.height());
+    BufferMinimal<uint8_t> input0 = load_image(argv[1]);
+    BufferMinimal<uint8_t> input1 = load_image(argv[2]);
+    BufferMinimal<int32_t> intg0(input0.width(), input0.height());
+    BufferMinimal<int32_t> intg1(input1.width(), input1.height());
 
-    Buffer<uint8_t> out_native0(16, nfeatures);
-    Buffer<uint8_t> out_native1(16, nfeatures);
-    Buffer<float> out_corners0(input0.width(), input0.height(), input0.channels());
-    Buffer<float> out_corners1(input1.width(), input1.height(), input1.channels());
-    //Buffer<float> out_kpt0(input0.width(), input0.height(), input0.channels());
-    //Buffer<float> out_kpt1(input1.width(), input1.height(), input1.channels());
-    //Buffer<uint8_t> out_native(input.width(), input.height(), input.channels());
-    //Buffer<uint8_t> out_hls(input.width(), input.height(), input.channels());
+    BufferMinimal<uint8_t> out_native0(16, nfeatures);
+    BufferMinimal<uint8_t> out_native1(16, nfeatures);
+    BufferMinimal<float> out_corners0(input0.width(), input0.height(), input0.channels());
+    BufferMinimal<float> out_corners1(input1.width(), input1.height(), input1.channels());
+    //BufferMinimal<float> out_kpt0(input0.width(), input0.height(), input0.channels());
+    //BufferMinimal<float> out_kpt1(input1.width(), input1.height(), input1.channels());
+    //BufferMinimal<uint8_t> out_native(input.width(), input.height(), input.channels());
+    //BufferMinimal<uint8_t> out_hls(input.width(), input.height(), input.channels());
 
     Mat cv_img0 = imread(argv[1], CV_LOAD_IMAGE_GRAYSCALE);
     Mat cv_img1 = imread(argv[2], CV_LOAD_IMAGE_GRAYSCALE);

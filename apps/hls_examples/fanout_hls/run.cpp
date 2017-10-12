@@ -5,18 +5,18 @@
 #include "pipeline_hls.h"
 #include "pipeline_native.h"
 
-#include "HalideBuffer.h"
+#include "BufferMinimal.h"
 #include "halide_image_io.h"
 
-using namespace Halide::Runtime;
+using Halide::Runtime::HLS::BufferMinimal;
 using namespace Halide::Tools;
 
 
 int main(int argc, char **argv) {
-    Buffer<uint8_t> in(200);
+    BufferMinimal<uint8_t> in(200);
 
-    Buffer<uint8_t> out_native(in.width());
-    Buffer<uint8_t> out_hls(in.width());
+    BufferMinimal<uint8_t> out_native(in.width());
+    BufferMinimal<uint8_t> out_hls(in.width());
 
     for (int x = 0; x < in.width(); x++) {
         in(x) = (uint8_t) rand();
