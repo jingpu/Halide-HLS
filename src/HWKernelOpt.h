@@ -14,7 +14,7 @@ namespace Internal {
 
 /** Perform streaming and double buffering optimization
  */
-Stmt hwkernel_opt(Stmt s, const HWKernelDAG &dag);
+Stmt hwkernel_opt(Stmt s, const std::map<std::string, Function> &env, const HWKernelDAG &dag);
 
 }
 }

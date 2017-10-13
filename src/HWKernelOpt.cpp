@@ -423,11 +423,13 @@ Stmt add_func_constraints(Stmt s, const HWKernelDAG &dag) {
 //Perform hw optimization for all function
 class HWKernelOpt : public IRMutator {
     //const HWKernelDAG &dag;
+    const map<string, Function> &env;
     Scope<Expr> scope;
 
     using IRMutator::visit;
    void visit(const ProducerConsumer *op) {
-      if (starts_with(op->name, "output")){ //FIXME accelerate_at function name
+      map<string, Function>::const_iterator it = env.find(op->name); // This is a way to hack const map key when C++ 11 is not supported
+      if (it!=env.end() && it->second.schedule().is_accelerated()){
           Stmt body = mutate(op->body);
           stmt = ProducerConsumer::make("_hls_target." + op->name, true, body);
       } else {
@@ -436,20 +438,21 @@ class HWKernelOpt : public IRMutator {
     }
 
 public:
-    /*HWKernelOpt(const HWKernelDAG &d)
-        : dag(d) {}*/
+    HWKernelOpt(const std::map<std::string, Function> &e)
+        : env(e) {}
 };
 
+Stmt hw_kernel_opt(Stmt s, const map<std::string, Function> &env){
+    return HWKernelOpt(env).mutate(s);
+}  
 
-Stmt hwkernel_opt(Stmt s, const HWKernelDAG &dag) {
+Stmt hwkernel_opt(Stmt s, const map<std::string, Function> &env, const HWKernelDAG &dag) {
     debug(3) << s << "\n";
-    // Now we find initiation before loop
     s = add_func_constraints(s, dag);
     debug(0) << "after add output constraints:\n" << s << "\n";
-    //s = reset_init(s); 
     s = push_init_into_update(s, dag);
     //debug(0) << "after push def into update:\n" << s << "\n";
-    s = HWKernelOpt().mutate(s);
+    s = hw_kernel_opt(s, env);
     debug(3) << "after kernel optimization:\n" << s << "\n";
     return s;
 }

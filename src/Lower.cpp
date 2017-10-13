@@ -186,7 +186,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
         s = extract_hw_kernel(s, env, inlined_stages, dags);
 
         for(const HWKernelDAG &dag : dags) {
-            s = hwkernel_opt(s, dag);
+            s = hwkernel_opt(s, env, dag);
         }
  
         debug(0) << "Lowering after HLS optimization:\n" << s << '\n';
