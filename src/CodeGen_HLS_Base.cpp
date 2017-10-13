@@ -182,7 +182,8 @@ void CodeGen_HLS_Base::visit(const Call *op) {
         stream << a1 << " = " << print_name(stream_name) << ".read();\n";
         id = "0"; // skip evaluation
     } else if (ends_with(op->name, ".stencil") ||
-               ends_with(op->name, ".stencil_update")) {
+               ends_with(op->name, ".stencil_update") ||
+               ends_with(op->name, ".acc")) {
         ostringstream rhs;
         // IR: out.stencil_update(0, 0, 0)
         // C: out_stencil_update(0, 0, 0)
@@ -190,14 +191,17 @@ void CodeGen_HLS_Base::visit(const Call *op) {
         for(size_t i = 0; i < op->args.size(); i++)
             args_indices[i] = print_expr(op->args[i]);
 
-        rhs << print_name(op->name) << "(";
-        for(size_t i = 0; i < op->args.size(); i++) {
-            rhs << args_indices[i];
-            if (i != op->args.size() - 1)
-                rhs << ", ";
+        if (ends_with(op->name, ".acc")) {
+            rhs << print_name(op->name);
+        } else {
+            rhs << print_name(op->name) << "(";
+            for(size_t i = 0; i < op->args.size(); i++) {
+                rhs << args_indices[i];
+                if (i != op->args.size() - 1)
+                    rhs << ", ";
+            }
+            rhs << ")";
         }
-        rhs << ")";
-
         print_assignment(op->type, rhs.str());
     } else if (op->name == "dispatch_stream") {
         // emits the calling arguments in comment
@@ -388,6 +392,15 @@ void CodeGen_HLS_Base::visit(const Realize *op) {
         // We didn't generate free stmt inside for stream type
         allocations.pop(op->name);
         stencils.pop(op->name);
+    } else if (ends_with(op->name, ".acc")) {
+        allocations.push(op->name, {op->types[0]});
+
+        do_indent();
+        stream << print_type(op->types[0]) << ' ' << print_name(op->name) << ";\n";
+
+        op->body.accept(this);
+
+        allocations.pop(op->name);
     } else {
         CodeGen_C::visit(op);
     }
@@ -395,7 +408,8 @@ void CodeGen_HLS_Base::visit(const Realize *op) {
 
 void CodeGen_HLS_Base::visit(const Provide *op) {
     if (ends_with(op->name, ".stencil") ||
-        ends_with(op->name, ".stencil_update")) {
+        ends_with(op->name, ".stencil_update") ||
+        ends_with(op->name, ".acc")) {
         // IR: buffered.stencil_update(1, 2, 3) =
         // C: buffered_stencil_update(1, 2, 3) =
         vector<string> args_indices(op->args.size());
@@ -406,15 +420,19 @@ void CodeGen_HLS_Base::visit(const Provide *op) {
         string id_value = print_expr(op->values[0]);
 
         do_indent();
-        stream << print_name(op->name) << "(";
 
-        for(size_t i = 0; i < op->args.size(); i++) {
-            stream << args_indices[i];
-            if (i != op->args.size() - 1)
-                stream << ", ";
+        if(ends_with(op->name, ".acc")) {
+            stream << print_name(op->name) << " = " << id_value << ";\n";
+        } else {
+            stream << print_name(op->name) << "(";
+
+            for(size_t i = 0; i < op->args.size(); i++) {
+                stream << args_indices[i];
+                if (i != op->args.size() - 1)
+                    stream << ", ";
+            }
+            stream << ") = " << id_value << ";\n";
         }
-        stream << ") = " << id_value << ";\n";
-
         cache.clear();
     } else {
         CodeGen_C::visit(op);

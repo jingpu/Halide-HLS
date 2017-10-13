@@ -98,6 +98,7 @@ private:
         // if it is a op node of a stream or a stencil, skip it
         if (ends_with(op->name, ".stencil") ||
             ends_with(op->name, ".stencil_update") ||
+            ends_with(op->name, ".acc") ||
             ends_with(op->name, ".stream")) {
             Stmt body = mutate(op->body);
 
@@ -206,7 +207,8 @@ private:
     void visit(const Provide *op) {
         // if it is a op node of a stream or a stencil, skip it
         if (ends_with(op->name, ".stencil") ||
-            ends_with(op->name, ".stencil_update")) {
+            ends_with(op->name, ".stencil_update") ||
+            ends_with(op->name, ".acc")) {
             vector<Expr> new_values(op->values.size());
             for (size_t i = 0; i < op->values.size(); i++) {
                 Expr old_value = op->values[i];

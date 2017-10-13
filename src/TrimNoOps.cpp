@@ -112,7 +112,8 @@ class IsNoOp : public IRVisitor {
 
     void visit(const Provide *op) {
         // Store op to stencil is needed op
-        if (ends_with(op->name, ".stencil")) {
+        if (ends_with(op->name, ".stencil") ||
+            ends_with(op->name, ".acc") ) {
             // TODO align with Store rule
             condition = const_false();
         } else {

@@ -21,6 +21,46 @@ using std::set;
 using std::pair;
 using std::vector;
 
+namespace {
+
+class ExpandExpr : public IRMutator {
+    using IRMutator::visit;
+    const Scope<Expr> &scope;
+
+    void visit(const Variable *var) {
+        if (scope.contains(var->name)) {
+            // xuan TODO check if remove likely_if_innermost is ok
+            //expr = scope.get(var->name);
+            expr = mutate(scope.get(var->name));
+            debug(4) << "Fully expanded " << var->name << " -> " << expr << "\n";
+        } else {
+            expr = var;
+        }
+    }
+    
+    void visit(const Call *op) {
+        if (op->is_intrinsic(Call::likely) ||
+                   op->is_intrinsic(Call::likely_if_innermost)) {
+            assert(op->args.size() == 1);
+            expr = mutate(op->args[0]);
+        } else {
+            IRMutator::visit(op); 
+        }
+    }  
+
+public:
+    ExpandExpr(const Scope<Expr> &s) : scope(s) {}
+
+};
+
+// Perform all the substitutions in a scope
+Expr expand_expr(Expr e, const Scope<Expr> &scope) {
+    ExpandExpr ee(scope);
+    Expr result = ee.mutate(e);
+    debug(4) << "Expanded " << e << " into " << result << "\n";
+    return result;
+}
+
 struct InitInfo {
     string op_name;
     vector<Expr> op_values;
@@ -45,103 +85,309 @@ InitInfo extract_init_info(Stmt s) {
     return eii.init_info;
 }
 
-class InsertInit : public IRMutator {
-    using IRMutator::visit;
-    InitInfo init_info;
-    vector<Expr> op_args;
-    string hw_output_name;
-    string first_loop_var;
-    vector<Expr> hw_output_args;
-    
-    void visit(const Provide *op) {
-        hw_output_name = op->name;
-        hw_output_args = op->args;
-        vector<Expr> new_values(op->values.size());
-        for (size_t i = 0; i < op->values.size(); i++) {
-            Expr old_value = op->values[i];
-            Expr new_value = mutate(old_value);
-            new_values[i] = new_value;
-        }
-        stmt = Provide::make("hw_output_acc", new_values, {0});
-    }
+class OuterReductionLoops : public IRVisitor {
+    string kernel_name;
+    vector<string> outer_rvars;
 
-    void visit(const Call *op) {
-        if(op->name == hw_output_name){
-            IRMutator::visit(op);
-            // TOOD: to be fixed
-            // expr = Call::make(Int(16), "hw_output_acc", {0}, Call::Halide);
-        }else{
-            IRMutator::visit(op);
-        }
-    }
-
+    using IRVisitor::visit;
     void visit(const For *op) {
-        if(ends_with(op->name, "r$y")){
-            first_loop_var = op->name;
+        for(const string &s : outer_rvars) {
+            if(starts_with(op->name, kernel_name) && ends_with(op->name, s)) {
+                Expr v = Variable::make(Int(32), op->name);
+                outer_rloops.push_back(v);
+                break;
+            }
         }
-        if(ends_with(op->name, "r$x")){
-            // First we alter the loop
-            Stmt new_body = mutate(op->body);
-            Stmt new_for_loop = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, new_body);
-            // Initialize a variable to accumulate 
-            Expr hw_output_acc = Variable::make(Int(16), "hw_output_acc");
-            Stmt hw_output_acc_with_init = Provide::make("hw_output_acc", init_info.op_values, {0});
-            stmt = Block::make(hw_output_acc_with_init, new_for_loop);
-            // Add if else statement to utilize hw_output_acc
-            Stmt acc_provide = Provide::make(hw_output_name, {hw_output_acc}, hw_output_args);
-            Stmt else_provide = Provide::make(hw_output_name, {Add::make(hw_output_acc, Call::make(Int(16), hw_output_name, hw_output_args, Call::Halide))}, hw_output_args);
-            Expr condition_var = Variable::make(Int(32), first_loop_var);
-            Expr condition = EQ::make(condition_var, 0);
-            Stmt ifthen = IfThenElse::make(condition, acc_provide, else_provide);
-            stmt = Block::make(stmt, ifthen);
-        }else{
-            IRMutator::visit(op);    
-        }
+
+        op->body.accept(this);
     }
+
 public:
-    void set_init_info(InitInfo ii){
-        init_info = ii;
-    }
+    vector<Expr> outer_rloops;
+
+    OuterReductionLoops(string kernel_name, vector<string>outer_rvars) :
+        kernel_name(kernel_name), outer_rvars(outer_rvars) {}
 };
 
-Stmt insert_init(Stmt s, InitInfo init_info){
-    InsertInit ini;
-    ini.set_init_info(init_info);
-    s = ini.mutate(s);
-    return s;
+vector<Expr> outer_reduction_loops(string kernel_name, vector<string> outer_rvars, Stmt s) {
+    OuterReductionLoops orl(kernel_name, outer_rvars);
+    s.accept(&orl);
+    return orl.outer_rloops;
+}
 }
 
-class ResetInit : public IRMutator {
+Stmt add_acc_init(string acc_name, InitInfo init_info) {
+    return Provide::make(acc_name, init_info.op_values, {0});
+}
+
+
+Stmt add_acc_consumer(string kernel_name, string acc_name, Type acc_type, vector<Expr> outer_rloops, vector<Expr>func_args) {
+    bool first = true;
+    Expr cond;
+    Expr zero = 0;
+    for (const Expr &e : outer_rloops) {
+        Expr eq = e == 0; //EQ::make(e, zero);
+        if (first)
+            cond = eq;
+        else
+            cond = And::make(cond, eq);
+        first = false;
+    }
+
+    Expr res_var = Variable::make(Handle(), kernel_name);
+    Expr acc_call = Call::make(acc_type, acc_name, {0}, Call::Intrinsic);
+
+    Stmt then_case = Provide::make(kernel_name, {acc_call} , func_args);
+
+    Expr value = Add::make(Call::make(acc_type, kernel_name, func_args, Call::Halide), acc_call);
+    Stmt else_case = Provide::make(kernel_name, {value}, func_args);
+
+    if (outer_rloops.size()) {
+        return IfThenElse::make(cond, then_case, else_case);
+    } else {
+        return then_case;
+    }
+}
+
+class ReplaceReferenceWithAcc : public IRMutator {
+    const HWKernel &kernel;
+    const HWKernelDAG &dag;
+    const vector<Expr> &outer_rloops;
+    const vector<string> &pure_args;
+    const InitInfo &init_info;
+
+    Scope<Expr> scope;
+    string innermost_pure_arg;
+    string acc_name;
+    Type acc_type;
+    vector<Expr> func_args;
+
     using IRMutator::visit;
+
+    void visit(const For *op) {
+        bool is_pure = false;
+        for (const string &arg : pure_args) {
+            if (starts_with(op->name, kernel.name) &&
+               (ends_with(op->name, "." + arg))) {
+                is_pure = true;
+                break;
+            }
+        }
+        if (is_pure) {
+            Stmt new_body;
+            debug(0) << "replace loop var " << op->name << "\n";
+            // replace the loop var over the dimensions of the original function
+            // realization with the loop var over the stencil dimension.
+            // e.g. funcA.s0.x -> funcA.stencil.s0.x
+            //      funcA.s1.x -> funcA.stencil.s1.x
+            string old_var_name = op->name;
+            vector<string> v = split_string(old_var_name, ".");
+            string stage_name = v[1];
+            string dim_name = v[2];
+            //string stage_dim_name = op->name.substr(kernel.name.size()+1, old_var_name.size() - kernel.name.size());
+            string new_var_name = kernel.name + "." + stage_name + ".stencil." + dim_name;
+            Expr new_var = Variable::make(Int(32), new_var_name);
+            Expr new_min = 0;
+            //Expr new_extent = kernel.dims[dim_idx].step;
+
+            // create a let statement for the old_loop_var
+            Expr old_min = op->min;
+            Expr old_var_value = new_var + old_min;
+
+            // traversal down into the body
+            scope.push(old_var_name, simplify(expand_expr(old_var_value, scope)));
+
+            if (ends_with(op->name, "." + innermost_pure_arg)) {
+                debug(0) << "build new for loop\n";
+                acc_name = kernel.name + ".acc";
+                /*Expr res_var = Variable::make(Handle(), kernel.name);
+                Expr acc_var = Variable::make(Handle(), acc_name);*/
+
+                Stmt init = add_acc_init(acc_name, init_info);
+                Stmt produce = ProducerConsumer::make(acc_name, true, Block::make(init,  mutate(op->body)));
+                Stmt acc_consumer = add_acc_consumer(kernel.name, acc_name, acc_type, outer_rloops, func_args);
+                Stmt consume = ProducerConsumer::make(acc_name, false, acc_consumer);
+
+                Stmt pc = Block::make(produce, consume);//(acc_name, produce, Stmt(), consume);
+
+                //FIXME bounds should be extracted from touched region by this for loops
+                Region acc_bounds;
+                acc_bounds.push_back(Range(0, 1));
+                new_body = Realize::make(acc_name, kernel.func.output_types(), acc_bounds, const_true(), pc);
+            } else {
+                new_body = mutate(op->body);
+            }
+
+            scope.pop(old_var_name);
+
+            new_body = LetStmt::make(old_var_name, old_var_value, new_body);
+            stmt = For::make(new_var_name, new_min, op->extent, op->for_type, op->device_api, new_body);
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+
+    void visit(const Call *op) {
+        if(op->name  == kernel.name) {
+            vector<Expr> new_args;
+            new_args.push_back(0);
+            acc_type = op->type;
+            expr = Call::make(op->type, acc_name, new_args, Call::Intrinsic);
+        } else if (std::find(kernel.input_streams.begin(), kernel.input_streams.end(),
+                     op->name) != kernel.input_streams.end() // call to a input stencil)
+            ) {
+           debug(0) << "call to input " << op->name << "\n";
+           const auto it = dag.kernels.find(op->name);
+           internal_assert(it != dag.kernels.end());
+           const HWKernel &stencil_kernel = it->second;
+
+           vector<Expr> new_args(op->args.size());
+            for (size_t i = 0; i < op->args.size(); i++) {
+                Expr old_arg = mutate(op->args[i]);
+                Expr offset;
+                // This is call to input stencil
+                // we use the min_pos stored in in_kernel.consumer_stencils
+                const auto it = stencil_kernel.consumer_stencils.find(kernel.name);
+                internal_assert(it != kernel.consumer_stencils.end());
+                offset = it->second[i].min_pos;
+                Expr new_arg = old_arg;// - offset;TODO check whether this is correct
+                new_arg = simplify(expand_expr(new_arg, scope));
+                // TODO check if the new_arg only depends on the loop vars
+                // inside the producer
+                new_args[i] = new_arg;
+            }
+            expr = Call::make(op->type, op->name, new_args, Call::Halide);
+            debug(0) << "replacing call " << Expr(op) << " with\n"
+                     << "\t" << expr << "\n";
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+    void visit(const Provide *op) {
+        if(op->name  == kernel.name) {
+           /*for(size_t i = 0; i < op->args.size(); i++) {
+               provide_args.push_back(op->args[i]);
+               debug(0) << " provide arg " << i << ": " << op->args[i] << "\n";
+           }*/
+            func_args = op->args;
+
+            // Replace the arguments. e.g.
+            //   func.s0.x -> func.stencil.x + x,min
+            for (size_t i = 0; i < kernel.func.args().size(); i++) {
+                //func_args[i] = simplify(expand_expr(mutate(op->args[i]) - kernel.dims[i].min_pos, scope));
+                func_args[i] = simplify(expand_expr(mutate(op->args[i]), scope));
+            }
+
+           //TODO new args
+            vector<Expr> new_args;
+            new_args.push_back(0);
+            vector<Expr> new_values(op->values.size());
+            for (size_t i = 0; i < op->values.size(); i++) {
+                new_values[i] = mutate(op->values[i]);
+            }
+
+            stmt = Provide::make(acc_name, new_values, new_args);
+        } else {
+            IRMutator::visit(op);
+        }
+
+    }
+
+public:
+    ReplaceReferenceWithAcc(const HWKernel &k, const HWKernelDAG &d, const vector<Expr> &v, const vector<string> &p, const InitInfo &ii)
+        : kernel(k), dag(d), outer_rloops(v), pure_args(p), init_info(ii){
+        innermost_pure_arg = pure_args.back();
+        debug(0) << "innermost pure arg " << innermost_pure_arg << "\n";
+    } 
+};
+
+
+class PushInitIntoUpdate : public IRMutator {
+    const HWKernelDAG &dag;
+
+    HWKernel kernel;
+    vector<Expr> outer_rloops;
+    vector<string> pure_args;  
+    using IRMutator::visit;
+
     
     void visit(const ProducerConsumer *op) {    
-        if(op->is_producer){
+        if(dag.kernels.count(op->name) &&
+           op->is_producer){
             Stmt body = op->body;
             const Block *body_block = body.as<Block>();
             // The following if finds the producer with update
-            if(body_block){
-                debug(0) << op->name << "\n";
-                debug(0) << "First: \n" << body_block->first << "\n";
-                debug(0) << "Rest: \n" << body_block->rest << "\n";
+            if(body_block
+               && body_block->first.defined()
+               && body_block->rest.defined()){
+                /*debug(0) << "First: \n" << body_block->first << "\n";
+                debug(0) << "Rest: \n" << body_block->rest << "\n";*/
+                kernel = dag.kernels.find(op->name)->second;
+                const StageSchedule &s = kernel.func.update_schedule(0);
+        
+                int innermost_pure_arg_index = (int)s.dims().size() - 1;
+                map<string, int> rvar_loop_index;
+                for (int i = (int)s.dims().size() - 1; i >= 0; i--) {
+                    const Dim &dim = s.dims()[i];
+                    debug(0) << "update dim " << i << ": " << dim.var << "\n";
+                    bool is_pure = true;
+                    for (const ReductionVariable &r : s.rvars()) {
+                        if (dim.var.compare(r.var) == 0) {
+                            rvar_loop_index[r.var] = i;
+                            is_pure = false;
+                            break;
+                        }
+                    }
+                    if (is_pure) {
+                        pure_args.push_back(dim.var);
+                        innermost_pure_arg_index = i;
+                    }
+                }
+        
+        
+                vector<string> outer_rvars;
+                for(auto const& x : rvar_loop_index) {
+                    if (x.second > innermost_pure_arg_index) {
+                        outer_rvars.push_back(x.first);
+                    }
+                }
+                outer_rloops = outer_reduction_loops(kernel.name, outer_rvars, body_block->rest);
+        
+        
+                debug(0) << "pure arg innermost" << innermost_pure_arg_index << "\n";
                 InitInfo init_info = extract_init_info(body_block->first);
-                body = insert_init(body_block->rest, init_info);
-            } else{
+                //body = insert_init(body_block->rest, init_info);
+                Stmt produce = ReplaceReferenceWithAcc(kernel, dag, outer_rloops, pure_args, init_info).mutate(body_block->rest);
+                stmt = ProducerConsumer::make(op->name, op->is_producer, produce);
+                //TODO support stencil partial output, currently only support single partial output
+            /*} else{
+                IRMutator::visit(op);
+            }*/
+            /*if (body.same_as(op->body)) {
+                stmt = op;
+            } else {*/
+            //if (!body.same_as(op->body)) {
+                //stmt = ProducerConsumer::make(op->name, op->is_producer, body);
+                //debug(0) << "Modified: \n" << stmt << "\n";
+            }else { 
                 IRMutator::visit(op);
             }
-            if (body.same_as(op->body)) {
-                stmt = op;
-            } else {
-                stmt = ProducerConsumer::make(op->name, op->is_producer, body);
-                debug(0) << "Modified: \n" << stmt << "\n";
-            }
         }else {
+            debug(0) << "rest: "<< op->name << "\n";
             IRMutator::visit(op);
         }
     }
 
 public:
-    /*ResetInit(const Scope<Expr> &s) : scope(s) {}*/
+    PushInitIntoUpdate(const HWKernelDAG &dag) : dag(dag) {}
 };
+
+
+Stmt push_init_into_update(Stmt s, const HWKernelDAG &dag){
+  return PushInitIntoUpdate(dag).mutate(s);
+}
 
 Stmt add_func_constraints(Stmt s, const HWKernelDAG &dag) {
 
@@ -173,6 +419,7 @@ Stmt add_func_constraints(Stmt s, const HWKernelDAG &dag) {
     return s;
 }
 
+
 //Perform hw optimization for all function
 class HWKernelOpt : public IRMutator {
     //const HWKernelDAG &dag;
@@ -197,10 +444,10 @@ public:
 Stmt hwkernel_opt(Stmt s, const HWKernelDAG &dag) {
     debug(3) << s << "\n";
     // Now we find initiation before loop
-    s = ResetInit().mutate(s);
     s = add_func_constraints(s, dag);
-    debug(3) << "after add output constraints:\n" << s << "\n";
-    //s = push_init_into_update(s, dag);
+    debug(0) << "after add output constraints:\n" << s << "\n";
+    //s = reset_init(s); 
+    s = push_init_into_update(s, dag);
     //debug(0) << "after push def into update:\n" << s << "\n";
     s = HWKernelOpt().mutate(s);
     debug(3) << "after kernel optimization:\n" << s << "\n";

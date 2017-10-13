@@ -177,7 +177,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     // equivalence means semantic equivalence.
     debug(1) << "Uniquifying variable names...\n";
     s = uniquify_variable_names(s);
-    debug(0) << "Lowering after uniquifying variable names:\n" << s << "\n\n";
+    debug(2) << "Lowering after uniquifying variable names:\n" << s << "\n\n";
 
     {
         // passes specific to HLS backend
@@ -186,7 +186,6 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
         s = extract_hw_kernel(s, env, inlined_stages, dags);
 
         for(const HWKernelDAG &dag : dags) {
-            //s = stream_opt(s, dag);
             s = hwkernel_opt(s, dag);
         }
  
@@ -195,7 +194,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
 
     debug(1) << "Performing storage folding optimization...\n";
     s = storage_folding(s, env);
-    debug(2) << "Lowering after storage folding:\n" << s << '\n';
+    debug(0) << "Lowering after storage folding:\n" << s << '\n';
 
     debug(1) << "Injecting debug_to_file calls...\n";
     s = debug_to_file(s, outputs, env);
@@ -228,7 +227,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     if (t.has_feature(Target::Zynq)) {
         s = inject_zynq_intrinsics(s, env);
     }
-    debug(2) << "Lowering after storage flattening:\n" << s << "\n\n";
+    debug(0) << "Lowering after storage flattening:\n" << s << "\n\n";
 
     debug(1) << "Unpacking buffer arguments...\n";
     s = unpack_buffers(s);

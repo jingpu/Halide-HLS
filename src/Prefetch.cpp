@@ -53,6 +53,7 @@ private:
             internal_assert(v[1].substr(0, 1) == "s");
             {
                 string str = v[1].substr(1, v[1].size() - 1);
+                debug(0) << "prefetch " << loop_name << " " << str << "\n"; 
                 bool has_only_digits = (str.find_first_not_of( "0123456789" ) == string::npos);
                 internal_assert(has_only_digits);
                 stage = atoi(str.c_str());
@@ -95,6 +96,7 @@ private:
         //----- HLS Modification Begins -----//
         if (ends_with(op->name, ".stencil") ||
             ends_with(op->name, ".stencil_update") ||
+            ends_with(op->name, ".acc") ||
             ends_with(op->name, ".stream")) {
             stmt = op;
             return;
