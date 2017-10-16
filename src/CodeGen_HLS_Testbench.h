@@ -27,7 +27,6 @@ public:
 
 protected:
     using CodeGen_HLS_Base::visit;
-
     void visit(const ProducerConsumer *);
     void visit(const Call *);
     void visit(const Realize *);
@@ -35,6 +34,7 @@ protected:
 
 private:
     CodeGen_HLS_Target cg_target;
+    Scope<Expr> init_scope;
 };
 
 }

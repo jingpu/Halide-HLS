@@ -157,7 +157,8 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::add_kernel(Stmt stmt,
         } else {
             // add Array
             if (args[i].stencil_type.type == Stencil_Type::StencilContainerType::Array) {
-                stream << print_type(args[i].scalar_type) << " *" << arg_name;
+                stream << print_type(args[i].scalar_type) << " " << arg_name << "[" << args[i].size << "]";
+                
                 //allocations.push(args[i].name, {args[i].scalar_type, "null"});
                 //debug(4) << "Push " << args[i].name << " to allocations\n";
             } else {

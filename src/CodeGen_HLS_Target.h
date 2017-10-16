@@ -19,6 +19,8 @@ struct HLS_Argument {
 
     bool is_stencil;
 
+    Expr size;
+
     Type scalar_type;
 
     CodeGen_HLS_Base::Stencil_Type stencil_type;

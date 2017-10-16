@@ -44,7 +44,7 @@ vector<HLS_Argument> HLS_Closure::arguments(const Scope<CodeGen_HLS_Base::Stenci
         //Array as passing arguments
         CodeGen_HLS_Base::Stencil_Type stype = {};
         stype.type = CodeGen_HLS_Base::Stencil_Type::StencilContainerType::Array;
-        res.push_back({i.first, false, i.second.type, stype});
+        res.push_back({i.first, false, Expr(0), i.second.type, stype});
     }
     //internal_assert(buffers.empty()) << "we expect no references to buffers in a hw pipeline.\n";
     for (const pair<string, Type> &i : vars) {
@@ -52,12 +52,12 @@ vector<HLS_Argument> HLS_Closure::arguments(const Scope<CodeGen_HLS_Base::Stenci
         if(ends_with(i.first, ".stream") ||
            ends_with(i.first, ".stencil") ) {
             CodeGen_HLS_Base::Stencil_Type stype = streams_scope.get(i.first);
-            res.push_back({i.first, true, Type(), stype});
+            res.push_back({i.first, true, Expr(0), Type(), stype});
         } else if (ends_with(i.first, ".stencil_update")) {
             internal_error << "we don't expect to see a stencil_update type in HLS_Closure.\n";
         } else {
             // it is a scalar variable
-            res.push_back({i.first, false, i.second, CodeGen_HLS_Base::Stencil_Type()});
+            res.push_back({i.first, false, Expr(0), i.second, CodeGen_HLS_Base::Stencil_Type()});
         }
     }
     return res;
@@ -91,6 +91,12 @@ void CodeGen_HLS_Testbench::visit(const ProducerConsumer *op) {
                  << op->name << '\n';
         HLS_Closure c(hw_body);
         vector<HLS_Argument> args = c.arguments(stencils);
+
+        for(size_t i = 0; i < args.size(); i++) {
+            if(init_scope.contains(args[i].name)){
+                args[i].size = init_scope.get(args[i].name);
+            }
+        }
 
         // generate HLS target code using the child code generator
         string ip_name = unique_name("hls_target");
@@ -159,6 +165,20 @@ void CodeGen_HLS_Testbench::visit(const Call *op) {
             << print_expr(l->index)
             << ")";
         print_assignment(op->type, rhs.str());
+    } else if (op->name == Call::buffer_init){
+        const Variable* buffer_memory = op->args[0].as<Variable>();
+        const Call* buffer_shape = op->args[8].as<Call>();
+        if(buffer_memory && buffer_shape && buffer_shape->name==Call::make_struct){ 
+            string buffer_name = buffer_memory->name;
+            vector<Expr> shape = buffer_shape->args;
+            Expr dim0_extent = shape[1];
+            Expr dim1_extent = shape[5];
+            Expr total_size = simplify(Mul::make(dim0_extent, dim1_extent));
+            init_scope.push(buffer_name.substr(0, buffer_name.find(".buffer")), total_size);
+            debug(0) << "Buffer Init: " << buffer_name.substr(0, buffer_name.find(".buffer")) << " " << total_size << "\n";
+        }else{
+            CodeGen_HLS_Base::visit(op);
+        }
     } else {
         CodeGen_HLS_Base::visit(op);
     }
