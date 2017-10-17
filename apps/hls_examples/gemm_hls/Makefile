@@ -18,7 +18,10 @@ pipeline_hls.cpp pipeline_native.o pipeline_cuda.o pipeline_zynq.o: pipeline
 	HL_DEBUG_CODEGEN=0 ./pipeline
 
 run: run.cpp pipeline_hls.h pipeline_hls.cpp hls_target.cpp pipeline_native.o
-	$(CXX) $(CXXFLAGS) -O1 -DNDEBUG $(HLS_CXXFLAGS) -g -Wall -Werror $^ -lpthread -ldl $(PNGFLAGS) -o $@
+	$(CXX) $(CXXFLAGS) -O1 -DNDEBUG $(HLS_CXXFLAGS) -g -Wall -Werror $^ -lpthread -ldl $(PNGFLAGS) -o $@ 
+
+gemm_test: gemm_test.cpp hls_target.cpp
+	$(CXX) $(CXXFLAGS) -std=c++0x -O1 -DNDEBUG -g $^ -o $@ 
 
 run_cuda: pipeline_native.o pipeline_cuda.o run_cuda.cpp
 	$(CXX) -O3 $(CXXFLAGS) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)

@@ -1,6 +1,7 @@
 #include "HWKernelOpt.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IREquality.h"
 #include "Scope.h"
 #include "Debug.h"
 #include "Substitute.h"
@@ -446,12 +447,120 @@ Stmt hw_kernel_opt(Stmt s, const map<std::string, Function> &env){
     return HWKernelOpt(env).mutate(s);
 }  
 
+class SubstituteLoopVar : public IRMutator {
+    const map<string, Expr> &replace;
+    Scope<int> hidden;
+
+    Expr find_replacement(const string &s) {
+        map<string, Expr>::const_iterator iter = replace.find(s);
+        if (iter != replace.end() && !hidden.contains(s)) {
+            return iter->second;
+        } else {
+            return Expr();
+        }
+    }
+
+public:
+    SubstituteLoopVar(const map<string, Expr> &m) : replace(m) {}
+
+    using IRMutator::visit;
+
+    void visit(const Variable *v) {
+        Expr r = find_replacement(v->name);
+        if (r.defined()) {
+            expr = simplify(Add::make(r, v)); // Different with the Substitute class
+        } else {
+            expr = v;
+        }
+    }
+
+    void visit(const Let *op) {
+        Expr new_value = mutate(op->value);
+        hidden.push(op->name, 0);
+        Expr new_body = mutate(op->body);
+        hidden.pop(op->name);
+
+        if (new_value.same_as(op->value) &&
+            new_body.same_as(op->body)) {
+            expr = op;
+        } else {
+            expr = Let::make(op->name, new_value, new_body);
+        }
+    }
+
+    void visit(const LetStmt *op) {
+        Expr new_value = mutate(op->value);
+        hidden.push(op->name, 0);
+        Stmt new_body = mutate(op->body);
+        hidden.pop(op->name);
+
+        if (new_value.same_as(op->value) &&
+            new_body.same_as(op->body)) {
+            stmt = op;
+        } else {
+            stmt = LetStmt::make(op->name, new_value, new_body);
+        }
+    }
+
+    void visit(const For *op) {
+
+        Expr new_min = mutate(op->min);
+        Expr new_extent = mutate(op->extent);
+        hidden.push(op->name, 0);
+        Stmt new_body = mutate(op->body);
+        hidden.pop(op->name);
+
+        if (new_min.same_as(op->min) &&
+            new_extent.same_as(op->extent) &&
+            new_body.same_as(op->body)) {
+            stmt = op;
+        } else {
+            stmt = For::make(op->name, new_min, new_extent, op->for_type, op->device_api, new_body);
+        }
+    }
+
+};
+
+Stmt substitute_loop_var(const string &name, const Expr &replacement, const Stmt &stmt) {
+    map<string, Expr> m;
+    m[name] = replacement;
+    SubstituteLoopVar s(m);
+    return s.mutate(stmt);
+}
+
+class ShiftLoopMin : public IRMutator {
+
+    using IRMutator::visit;
+
+    void visit(const For *op) {
+        string loop_var = op->name;
+        Expr loop_min = op->min;
+        Expr new_min = Expr(0);
+        Stmt body = op->body;
+        if(!equal(new_min, loop_min)){
+            body = substitute_loop_var(loop_var, loop_min, op->body);
+        }
+        body = mutate(body);
+        if(body.same_as(op->body)){
+            stmt = op;
+        }else {
+            stmt = For::make(op->name, new_min, op->extent, op->for_type, op->device_api, body);
+        }
+    }
+};
+
+Stmt shift_loop_min(Stmt s){
+    return ShiftLoopMin().mutate(s);
+}  
+
 Stmt hwkernel_opt(Stmt s, const map<std::string, Function> &env, const HWKernelDAG &dag) {
     debug(3) << s << "\n";
     s = add_func_constraints(s, dag);
-    debug(0) << "after add output constraints:\n" << s << "\n";
+    debug(3) << "after add output constraints:\n" << s << "\n";
     s = push_init_into_update(s, dag);
-    //debug(0) << "after push def into update:\n" << s << "\n";
+    debug(0) << "after push def into update:\n" << s << "\n";
+    s = shift_loop_min(s);
+    debug(0) << "after shift loop init:\n" << s << "\n";
     s = hw_kernel_opt(s, env);
     debug(3) << "after kernel optimization:\n" << s << "\n";
     return s;

@@ -139,7 +139,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
 
     debug(1) << "Adding checks for parameters\n";
     s = add_parameter_checks(s, t);
-    debug(2) << "Lowering after injecting parameter checks:\n" << s << '\n';
+    debug(1) << "Lowering after injecting parameter checks:\n" << s << '\n';
 
     // Compute the maximum and minimum possible value of each
     // function. Used in later bounds inference passes.
@@ -150,7 +150,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     // inference.
     debug(1) << "Adding checks for images\n";
     s = add_image_checks(s, outputs, t, order, env, func_bounds);
-    debug(2) << "Lowering after injecting image checks:\n" << s << '\n';
+    debug(1) << "Lowering after injecting image checks:\n" << s << '\n';
 
     // This pass injects nested definitions of variable names, so we
     // can't simplify statements from here until we fix them up. (We
@@ -158,7 +158,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     vector<BoundsInference_Stage> inlined_stages;
     debug(1) << "Performing computation bounds inference...\n";
     s = bounds_inference(s, outputs, order, env, func_bounds, inlined_stages, t);
-    debug(2) << "Lowering after computation bounds inference:\n" << s << '\n';
+    debug(1) << "Lowering after computation bounds inference:\n" << s << '\n';
 
     debug(1) << "Performing sliding window optimization...\n";
     s = sliding_window(s, env);
@@ -166,7 +166,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
 
     debug(1) << "Performing allocation bounds inference...\n";
     s = allocation_bounds_inference(s, env, func_bounds);
-    debug(2) << "Lowering after allocation bounds inference:\n" << s << '\n';
+    debug(1) << "Lowering after allocation bounds inference:\n" << s << '\n';
 
     debug(1) << "Removing code that depends on undef values...\n";
     s = remove_undef(s);
@@ -177,11 +177,11 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     // equivalence means semantic equivalence.
     debug(1) << "Uniquifying variable names...\n";
     s = uniquify_variable_names(s);
-    debug(2) << "Lowering after uniquifying variable names:\n" << s << "\n\n";
+    debug(1) << "Lowering after uniquifying variable names:\n" << s << "\n\n";
 
     {
         // passes specific to HLS backend
-        debug(0) << "Performing HLS target optimization..\n";
+        debug(1) << "Performing HLS target optimization..\n";
         vector<HWKernelDAG> dags;
         s = extract_hw_kernel(s, env, inlined_stages, dags);
 
@@ -189,12 +189,12 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
             s = hwkernel_opt(s, env, dag);
         }
  
-        debug(0) << "Lowering after HLS optimization:\n" << s << '\n';
+        debug(1) << "Lowering after HLS optimization:\n" << s << '\n';
     }
 
     debug(1) << "Performing storage folding optimization...\n";
     s = storage_folding(s, env);
-    debug(0) << "Lowering after storage folding:\n" << s << '\n';
+    debug(1) << "Lowering after storage folding:\n" << s << '\n';
 
     debug(1) << "Injecting debug_to_file calls...\n";
     s = debug_to_file(s, outputs, env);
@@ -202,7 +202,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
 
     debug(1) << "Simplifying...\n"; // without removing dead lets, because storage flattening needs the strides
     s = simplify(s, false);
-    debug(2) << "Lowering after first simplification:\n" << s << "\n\n";
+    debug(1) << "Lowering after first simplification:\n" << s << "\n\n";
 
     debug(1) << "Injecting prefetches...\n";
     s = inject_prefetch(s, env);
@@ -227,11 +227,11 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     if (t.has_feature(Target::Zynq)) {
         s = inject_zynq_intrinsics(s, env);
     }
-    debug(0) << "Lowering after storage flattening:\n" << s << "\n\n";
+    debug(1) << "Lowering after storage flattening:\n" << s << "\n\n";
 
     debug(1) << "Unpacking buffer arguments...\n";
     s = unpack_buffers(s);
-    debug(2) << "Lowering after unpacking buffer arguments...\n";
+    debug(1) << "Lowering after unpacking buffer arguments...\n";
 
     if (any_memoized) {
         debug(1) << "Rewriting memoized allocations...\n";
@@ -271,7 +271,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     s = simplify(s);
     s = unify_duplicate_lets(s);
     s = remove_trivial_for_loops(s);
-    debug(2) << "Lowering after second simplifcation:\n" << s << "\n\n";
+    debug(1) << "Lowering after second simplifcation:\n" << s << "\n\n";
 
     debug(1) << "Reduce prefetch dimension...\n";
     s = reduce_prefetch_dimension(s, t);
@@ -300,7 +300,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
 
     debug(1) << "Trimming loops to the region over which they do something...\n";
     s = trim_no_ops(s);
-    debug(2) << "Lowering after loop trimming:\n" << s << "\n\n";
+    debug(1) << "Lowering after loop trimming:\n" << s << "\n\n";
 
     debug(1) << "Injecting early frees...\n";
     s = inject_early_frees(s);
