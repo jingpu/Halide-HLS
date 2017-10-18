@@ -37,10 +37,10 @@ protected:
 vector<HLS_Argument> HLS_Closure::arguments(const Scope<CodeGen_HLS_Base::Stencil_Type> &streams_scope) {
     vector<HLS_Argument> res;
     for (const pair<string, Buffer> &i : buffers) {
-        debug(3) << "buffer: " << i.first << " " << i.second.size;
-        if (i.second.read) debug(3) << " (read)";
-        if (i.second.write) debug(3) << " (write)";
-        debug(3) << "\n";
+        debug(0) << "buffer: " << i.first << " " << i.second.size;
+        if (i.second.read) debug(0) << " (read)";
+        if (i.second.write) debug(0) << " (write)";
+        debug(0) << "\n";
         //Array as passing arguments
         CodeGen_HLS_Base::Stencil_Type stype = {};
         stype.type = CodeGen_HLS_Base::Stencil_Type::StencilContainerType::Array;
@@ -171,9 +171,12 @@ void CodeGen_HLS_Testbench::visit(const Call *op) {
         if(buffer_memory && buffer_shape && buffer_shape->name==Call::make_struct){ 
             string buffer_name = buffer_memory->name;
             vector<Expr> shape = buffer_shape->args;
-            Expr dim0_extent = shape[1];
-            Expr dim1_extent = shape[5];
-            Expr total_size = simplify(Mul::make(dim0_extent, dim1_extent));
+            Expr total_size = Expr(1);
+            int dims = shape.size() / 4;
+            for(int i=0; i<dims; i++){
+                Expr dim_extent = shape[4*i+1];
+                total_size = simplify(Mul::make(total_size, dim_extent));
+            }
             init_scope.push(buffer_name.substr(0, buffer_name.find(".buffer")), total_size);
             debug(0) << "Buffer Init: " << buffer_name.substr(0, buffer_name.find(".buffer")) << " " << total_size << "\n";
         }else{
