@@ -140,8 +140,8 @@ public:
 
 
 int main(int argc, char **argv) {
-    //MyPipeline p1;
-    //p1.compile_cpu();
+    MyPipeline p1;
+    p1.compile_cpu();
 
     MyPipeline p2;
     p2.compile_hls();
