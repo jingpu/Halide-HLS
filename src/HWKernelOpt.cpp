@@ -397,20 +397,27 @@ Stmt add_func_constraints(Stmt s, const HWKernelDAG &dag) {
     for (auto &p : dag.kernels) {
         const HWKernel &kernel = p.second;
         const vector<Bound> bounds = kernel.func.schedule().bounds();
-        int dim = 0;
+        map<int, Bound> mapped_bounds;
         Expr prev_stride;
         for (auto &b : bounds) {
-            //FIXME dim order  
-            string min_name = kernel.name + ".min." + std::to_string(dim) + ".constrained";
-            string stride_name = kernel.name + ".stride." + std::to_string(dim) + ".constrained";
+            for (size_t i = 0; i < kernel.func.args().size(); i++) {
+                if (b.var == kernel.func.args()[i]) {
+                    mapped_bounds[i] = b;
+                    continue;
+                } 
+            }
+        }
+        for (auto &p : mapped_bounds) {
+            const Bound b = p.second;
+            string min_name = kernel.name + ".min." + std::to_string(p.first) + ".constrained";
+            string stride_name = kernel.name + ".stride." + std::to_string(p.first) + ".constrained";
             constraints.push_back(make_pair(min_name, b.min));
-            if (dim == 0) {
+            if (p.first == 0) {
                 prev_stride = b.extent * 1;
             } else {
                 constraints.push_back(make_pair(stride_name, prev_stride));
                 prev_stride = prev_stride * b.extent;
             }
-            dim++;
         }
     }
     // Inject the code that defines the constrained sizes.
@@ -558,9 +565,9 @@ Stmt hwkernel_opt(Stmt s, const map<std::string, Function> &env, const HWKernelD
     s = add_func_constraints(s, dag);
     debug(3) << "after add output constraints:\n" << s << "\n";
     s = push_init_into_update(s, dag);
-    debug(0) << "after push def into update:\n" << s << "\n";
+    debug(3) << "after push def into update:\n" << s << "\n";
     s = shift_loop_min(s);
-    debug(0) << "after shift loop init:\n" << s << "\n";
+    debug(3) << "after shift loop init:\n" << s << "\n";
     s = hw_kernel_opt(s, env);
     debug(3) << "after kernel optimization:\n" << s << "\n";
     return s;
