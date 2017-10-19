@@ -31,6 +31,7 @@ protected:
     void visit(const Call *);
     void visit(const Realize *);
     void visit(const Block *);
+    void visit(const Allocate *);
 
 private:
     CodeGen_HLS_Target cg_target;

@@ -187,6 +187,17 @@ void CodeGen_HLS_Testbench::visit(const Call *op) {
     }
 }
 
+void CodeGen_HLS_Testbench::visit(const Allocate *op) {
+    
+    Expr total_size = Expr(1);
+    for (auto &dim_extent : op->extents) {
+        total_size = simplify(Mul::make(total_size, dim_extent));
+    }
+    init_scope.push(op->name, total_size);
+    CodeGen_HLS_Base::visit(op);
+    
+}
+
 void CodeGen_HLS_Testbench::visit(const Realize *op) {
     if (ends_with(op->name, ".stream")) {
         // create a AXI stream type
