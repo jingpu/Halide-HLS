@@ -138,7 +138,7 @@ public:
     }
 };
 
-class MyPipelineAnySize{
+class MyPipelineConfigurable{
 
 public:
     ImageParam A;
@@ -155,7 +155,7 @@ public:
 
     RDom r;
 
-    MyPipelineAnySize()
+    MyPipelineConfigurable()
     : A(UInt(8), 2), B(UInt(8), 2), 
     x_len("x_len"), y_len("y_len"),
     output("output"), hw_output("hw_output"),
@@ -280,10 +280,10 @@ int main(int argc, char **argv) {
     MyPipeline p2;
     p2.compile_hls();
     */
-    MyPipelineAnySize p3;
+    MyPipelineConfigurable p3;
     p3.compile_cpu();
     
-    MyPipelineAnySize p4;
+    MyPipelineConfigurable p4;
     p4.compile_hls();
     
     return 0;

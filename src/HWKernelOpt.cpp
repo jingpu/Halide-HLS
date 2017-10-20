@@ -30,8 +30,6 @@ class ExpandExpr : public IRMutator {
 
     void visit(const Variable *var) {
         if (scope.contains(var->name)) {
-            // xuan TODO check if remove likely_if_innermost is ok
-            //expr = scope.get(var->name);
             expr = mutate(scope.get(var->name));
             debug(4) << "Fully expanded " << var->name << " -> " << expr << "\n";
         } else {
@@ -176,17 +174,17 @@ class ReplaceReferenceWithAcc : public IRMutator {
         }
         if (is_pure) {
             Stmt new_body;
-            debug(0) << "replace loop var " << op->name << "\n";
             // replace the loop var over the dimensions of the original function
             // realization with the loop var over the stencil dimension.
             // e.g. funcA.s0.x -> funcA.stencil.s0.x
             //      funcA.s1.x -> funcA.stencil.s1.x
             string old_var_name = op->name;
             vector<string> v = split_string(old_var_name, ".");
-            string stage_name = v[1];
-            string dim_name = v[2];
+            string kernel_stage_name = v[0]+ '.' + v[1];
+            string dim_name = old_var_name.substr(kernel_stage_name.size()+1, old_var_name.size()- kernel_stage_name.size());
+            
             //string stage_dim_name = op->name.substr(kernel.name.size()+1, old_var_name.size() - kernel.name.size());
-            string new_var_name = kernel.name + "." + stage_name + ".stencil." + dim_name;
+            string new_var_name = kernel_stage_name + ".stencil." + dim_name;
             Expr new_var = Variable::make(Int(32), new_var_name);
             Expr new_min = 0;
             //Expr new_extent = kernel.dims[dim_idx].step;
@@ -194,12 +192,13 @@ class ReplaceReferenceWithAcc : public IRMutator {
             // create a let statement for the old_loop_var
             Expr old_min = op->min;
             Expr old_var_value = new_var + old_min;
+            debug(4) << "replacing loop var " << op->name 
+                     << " with " << new_var_name << "\n";
 
             // traversal down into the body
             scope.push(old_var_name, simplify(expand_expr(old_var_value, scope)));
 
             if (ends_with(op->name, "." + innermost_pure_arg)) {
-                debug(0) << "build new for loop\n";
                 acc_name = kernel.name + ".acc";
                 /*Expr res_var = Variable::make(Handle(), kernel.name);
                 Expr acc_var = Variable::make(Handle(), acc_name);*/
@@ -238,7 +237,6 @@ class ReplaceReferenceWithAcc : public IRMutator {
         } else if (std::find(kernel.input_streams.begin(), kernel.input_streams.end(),
                      op->name) != kernel.input_streams.end() // call to a input stencil)
             ) {
-           debug(0) << "call to input " << op->name << "\n";
            const auto it = dag.kernels.find(op->name);
            internal_assert(it != dag.kernels.end());
            const HWKernel &stencil_kernel = it->second;
@@ -259,7 +257,7 @@ class ReplaceReferenceWithAcc : public IRMutator {
                 new_args[i] = new_arg;
             }
             expr = Call::make(op->type, op->name, new_args, Call::Halide);
-            debug(0) << "replacing call " << Expr(op) << " with\n"
+            debug(4) << "replacing call " << Expr(op) << " with\n"
                      << "\t" << expr << "\n";
         } else {
             IRMutator::visit(op);
@@ -268,10 +266,6 @@ class ReplaceReferenceWithAcc : public IRMutator {
 
     void visit(const Provide *op) {
         if(op->name  == kernel.name) {
-           /*for(size_t i = 0; i < op->args.size(); i++) {
-               provide_args.push_back(op->args[i]);
-               debug(0) << " provide arg " << i << ": " << op->args[i] << "\n";
-           }*/
             func_args = op->args;
 
             // Replace the arguments. e.g.
@@ -300,7 +294,6 @@ public:
     ReplaceReferenceWithAcc(const HWKernel &k, const HWKernelDAG &d, const vector<Expr> &v, const vector<string> &p, const InitInfo &ii)
         : kernel(k), dag(d), outer_rloops(v), pure_args(p), init_info(ii){
         innermost_pure_arg = pure_args.back();
-        debug(0) << "innermost pure arg " << innermost_pure_arg << "\n";
     } 
 };
 
@@ -323,8 +316,6 @@ class PushInitIntoUpdate : public IRMutator {
             if(body_block
                && body_block->first.defined()
                && body_block->rest.defined()){
-                /*debug(0) << "First: \n" << body_block->first << "\n";
-                debug(0) << "Rest: \n" << body_block->rest << "\n";*/
                 kernel = dag.kernels.find(op->name)->second;
                 const StageSchedule &s = kernel.func.update_schedule(0);
         
@@ -332,7 +323,6 @@ class PushInitIntoUpdate : public IRMutator {
                 map<string, int> rvar_loop_index;
                 for (int i = (int)s.dims().size() - 1; i >= 0; i--) {
                     const Dim &dim = s.dims()[i];
-                    debug(0) << "update dim " << i << ": " << dim.var << "\n";
                     bool is_pure = true;
                     for (const ReductionVariable &r : s.rvars()) {
                         if (dim.var.compare(r.var) == 0) {
@@ -357,26 +347,15 @@ class PushInitIntoUpdate : public IRMutator {
                 outer_rloops = outer_reduction_loops(kernel.name, outer_rvars, body_block->rest);
         
         
-                debug(0) << "pure arg innermost" << innermost_pure_arg_index << "\n";
+                debug(4) << "inner most pure variable index" << innermost_pure_arg_index << "\n";
                 InitInfo init_info = extract_init_info(body_block->first);
-                //body = insert_init(body_block->rest, init_info);
                 Stmt produce = ReplaceReferenceWithAcc(kernel, dag, outer_rloops, pure_args, init_info).mutate(body_block->rest);
                 stmt = ProducerConsumer::make(op->name, op->is_producer, produce);
                 //TODO support stencil partial output, currently only support single partial output
-            /*} else{
-                IRMutator::visit(op);
-            }*/
-            /*if (body.same_as(op->body)) {
-                stmt = op;
-            } else {*/
-            //if (!body.same_as(op->body)) {
-                //stmt = ProducerConsumer::make(op->name, op->is_producer, body);
-                //debug(0) << "Modified: \n" << stmt << "\n";
             }else { 
                 IRMutator::visit(op);
             }
         }else {
-            debug(0) << "rest: "<< op->name << "\n";
             IRMutator::visit(op);
         }
     }

@@ -177,7 +177,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     // equivalence means semantic equivalence.
     debug(1) << "Uniquifying variable names...\n";
     s = uniquify_variable_names(s);
-    debug(1) << "Lowering after uniquifying variable names:\n" << s << "\n\n";
+    debug(2) << "Lowering after uniquifying variable names:\n" << s << "\n\n";
 
     {
         // passes specific to HLS backend
@@ -194,7 +194,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
 
     debug(1) << "Performing storage folding optimization...\n";
     s = storage_folding(s, env);
-    debug(1) << "Lowering after storage folding:\n" << s << '\n';
+    debug(2) << "Lowering after storage folding:\n" << s << '\n';
 
     debug(1) << "Injecting debug_to_file calls...\n";
     s = debug_to_file(s, outputs, env);
@@ -202,7 +202,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
 
     debug(1) << "Simplifying...\n"; // without removing dead lets, because storage flattening needs the strides
     s = simplify(s, false);
-    debug(1) << "Lowering after first simplification:\n" << s << "\n\n";
+    debug(2) << "Lowering after first simplification:\n" << s << "\n\n";
 
     debug(1) << "Injecting prefetches...\n";
     s = inject_prefetch(s, env);
@@ -227,11 +227,11 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     if (t.has_feature(Target::Zynq)) {
         s = inject_zynq_intrinsics(s, env);
     }
-    debug(1) << "Lowering after storage flattening:\n" << s << "\n\n";
+    debug(2) << "Lowering after storage flattening:\n" << s << "\n\n";
 
     debug(1) << "Unpacking buffer arguments...\n";
     s = unpack_buffers(s);
-    debug(1) << "Lowering after unpacking buffer arguments...\n";
+    debug(2) << "Lowering after unpacking buffer arguments...\n" << s << "\n\n";
 
     if (any_memoized) {
         debug(1) << "Rewriting memoized allocations...\n";
@@ -300,7 +300,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
 
     debug(1) << "Trimming loops to the region over which they do something...\n";
     s = trim_no_ops(s);
-    debug(1) << "Lowering after loop trimming:\n" << s << "\n\n";
+    debug(2) << "Lowering after loop trimming:\n" << s << "\n\n";
 
     debug(1) << "Injecting early frees...\n";
     s = inject_early_frees(s);
