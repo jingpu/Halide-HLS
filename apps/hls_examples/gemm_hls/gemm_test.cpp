@@ -60,7 +60,7 @@ int main(int argc, char **argv)
 
 
 #ifdef HW_COSIM
-   hls_target(hw_result, in_mat_a, in_mat_b); 
+   hls_target(hw_result, in_mat_a, in_mat_b, 64, 384); 
 #endif
 
    // Print result matrix
@@ -68,12 +68,13 @@ int main(int argc, char **argv)
    for (int i = 0; i < MAT_B_ROWS; i++) {
       for (int j = 0; j < MAT_A_ROWS; j++) {
 #ifdef HW_COSIM
-    	 sw_result[i* MAT_B_ROWS + j] = sw_result_tmp[i* MAT_B_ROWS + j];
+         sw_result[i* MAT_B_ROWS + j] = sw_result_tmp[i* MAT_B_ROWS + j];
          // Check HW result against SW
          if (hw_result[i* MAT_B_ROWS + j] != sw_result[i* MAT_B_ROWS + j]) {
         	cout << i << " " << j << " " << unsigned(hw_result[i* MAT_B_ROWS + j]) << " " <<  unsigned(sw_result[i* MAT_B_ROWS + j]) << endl;
             err_cnt++;
-         }
+         } 
+         
 #else
          cout << sw_result[i][j];
 #endif
