@@ -89,6 +89,19 @@ public:
         for (int t = 0; t < T; t++) {
             output(x, y, t) = h[t](x, y);
         }
+
+        // set bounds
+        input.dim(0).set_bounds(0, NUM_INPUT);
+        input.dim(1).set_bounds(0, BATCH_SIZE);
+        input.dim(2).set_bounds(0, T);
+        Wxh.dim(0).set_bounds(0, NUM_INPUT);
+        Wxh.dim(1).set_bounds(0, 4*NUM_HIDDEN);
+        Whh.dim(0).set_bounds(0, NUM_HIDDEN);
+        Whh.dim(1).set_bounds(0, 4*NUM_HIDDEN);
+        output.bound(x, 0, NUM_HIDDEN);
+        output.bound(y, 0, BATCH_SIZE);
+        output.bound(z, 0, T);
+        
         args = {input, Wxh, Whh, b};
     }
 
@@ -104,7 +117,7 @@ public:
     void compile_hls() {
         std::cout << "\ncompiling HLS code..." << std::endl;
         
-        //output.accelerate({input, Wxh, Whh, b}, x, y);
+        output.accelerate({input, Wxh, Whh, b}, x, y);
  
         Target hls_target = get_target_from_environment();
         hls_target.set_feature(Target::CPlusPlusMangling);
@@ -120,9 +133,9 @@ int main(int argc, char **argv) {
   
     MyPipeline p1;
     p1.compile_cpu();
-    /*
+    
     MyPipeline p2;
     p2.compile_hls();
-    */
+    
     return 0;
 }
