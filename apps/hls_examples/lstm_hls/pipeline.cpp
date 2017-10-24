@@ -16,7 +16,6 @@ Var x("x"), y("y"), z("z");
 class MyPipelinePerCell {
 public:
     // Params
-    Param<int32_t> t;        // Time step
     ImageParam Wxh;         // Weight from input to hidden, (NUM_INPUT, 4*NUM_HIDDEN)
     ImageParam Whh;         // Recurrent weight of hidden, (NUM_HIDDEN, 4*NUM_HIDDEN)
     ImageParam Why;         // Weight from Hidden to Output, (NUM_HIDDEN, NUM_OUTPUT)
@@ -33,8 +32,6 @@ public:
 
     // Funcs
     Func input_buf_copy;     // Buff copy for input
-    Func h_init;             // Initial state for h (4*NUM_HIDDEN, BATCH_SIZE)
-    Func c_init;             // Initial state for c, (4*NUM_HIDDEN, BATCH_SIZE)
     Func h_t;                // Hiddens at time t, (NUM_HIDDEN, BATCH_SIZE)
     Func c_t;                // Cell states at time t, (NUM_HIDDEN, BATCH_SIZE)
     Func hw_output;          // Output at time t, (NUM_OUTPUT, BATCH_SIZE)
@@ -72,16 +69,32 @@ public:
         // set bounds
         input_t.dim(0).set_bounds(0, NUM_INPUT);
         input_t.dim(1).set_bounds(0, BATCH_SIZE);
+        input_t.dim(0).set_stride(1);
+        input_t.dim(1).set_stride(NUM_INPUT);
         h_tm1.dim(0).set_bounds(0, NUM_HIDDEN);
         h_tm1.dim(1).set_bounds(0, BATCH_SIZE);
+        h_tm1.dim(0).set_stride(1);
+        h_tm1.dim(1).set_stride(NUM_HIDDEN);
         c_tm1.dim(0).set_bounds(0, NUM_HIDDEN);
         c_tm1.dim(1).set_bounds(0, BATCH_SIZE);
+        c_tm1.dim(0).set_stride(1);
+        c_tm1.dim(1).set_stride(NUM_HIDDEN);
         Wxh.dim(0).set_bounds(0, NUM_INPUT);
         Wxh.dim(1).set_bounds(0, 4*NUM_HIDDEN);
+        Wxh.dim(0).set_stride(1);
+        Wxh.dim(1).set_stride(NUM_INPUT);
         Whh.dim(0).set_bounds(0, NUM_HIDDEN);
         Whh.dim(1).set_bounds(0, 4*NUM_HIDDEN);
+        Whh.dim(0).set_stride(1);
+        Whh.dim(1).set_stride(NUM_HIDDEN);
         Why.dim(0).set_bounds(0, NUM_HIDDEN);
         Why.dim(1).set_bounds(0, NUM_OUTPUT);
+        Why.dim(0).set_stride(1);
+        Why.dim(1).set_stride(NUM_HIDDEN);
+        b.dim(0).set_bounds(0, 4*NUM_HIDDEN);
+        b.dim(1).set_bounds(0, 1);
+        b.dim(0).set_stride(1);
+        b.dim(1).set_stride(4*NUM_HIDDEN);
         output.bound(x, 0, NUM_HIDDEN);
         output.bound(y, 0, BATCH_SIZE);
         
