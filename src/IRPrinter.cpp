@@ -92,7 +92,10 @@ ostream &operator<<(ostream &out, const DeviceAPI &api) {
     case DeviceAPI::HLS:
         out << "<HLS>";
         break;
-    //----- HLS Modification Ends -------//
+    case DeviceAPI::CatapultHLS:
+        out << "<CatapultHLS>";
+        break;
+      //----- HLS Modification Ends -------//
     case DeviceAPI::Hexagon:
         out << "<Hexagon>";
         break;

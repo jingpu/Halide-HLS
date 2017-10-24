@@ -68,6 +68,7 @@ struct Target {
         Metal = halide_target_feature_metal,
         //----- HLS Modification Begins -----//
         VivadoHLS = halide_target_feature_vivado_hls,
+        CatapultHLS = halide_target_feature_catapult_hls,
         Zynq = halide_target_feature_zynq,
         //----- HLS Modification Ends -------//
         MinGW = halide_target_feature_mingw,

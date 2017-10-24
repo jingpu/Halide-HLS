@@ -14,7 +14,7 @@ run_hls: $(HLS_LOG)
 pipeline: pipeline.cpp
 	$(CXX) $(CXXFLAGS) -Wall -g $^ $(LIB_HALIDE) -o $@ $(LDFLAGS) -ltinfo
 
-pipeline_hls.cpp pipeline_native.o pipeline_cuda.o pipeline_zynq.o: pipeline
+pipeline_hls.cpp pipeline_native.o pipeline_cuda.o pipeline_zynq.o hls_target.cpp: pipeline
 	HL_DEBUG_CODEGEN=0 ./pipeline
 
 run: run.cpp pipeline_hls.h pipeline_hls.cpp hls_target.cpp pipeline_native.o

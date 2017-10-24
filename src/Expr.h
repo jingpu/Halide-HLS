@@ -320,6 +320,7 @@ enum class DeviceAPI {
     Metal,
     //----- HLS Modification Begins -----//
     HLS,
+    CatapultHLS,
     //----- HLS Modification Ends -------//
     Hexagon
 };
@@ -336,6 +337,7 @@ const DeviceAPI all_device_apis[] = {DeviceAPI::None,
                                      DeviceAPI::Metal,
                                      //----- HLS Modification Begins -----//
                                      DeviceAPI::HLS,
+                                     DeviceAPI::CatapultHLS,
                                      //----- HLS Modification Ends -------//
                                      DeviceAPI::Hexagon};
 

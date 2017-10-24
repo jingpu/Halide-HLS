@@ -6,6 +6,7 @@
 
 #include "CodeGen_C.h"
 #include "CodeGen_HLS_Testbench.h"
+#include "CodeGen_CatapultHLS_Testbench.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_Zynq_C.h"
 #include "Debug.h"
@@ -382,6 +383,8 @@ void Module::compile(const Outputs &output_files) const {
             cg = new CodeGen_HLS_Testbench(file, target(), output_kind);
         } else if (target().has_feature(Target::Zynq)) {
             cg = new CodeGen_Zynq_C(file, target(), output_kind);
+        } else if (target().has_feature(Target::CatapultHLS)) {
+            cg = new CodeGen_CatapultHLS_Testbench(file, target(), output_kind);
         } else {
             cg = new CodeGen_C(file, target(), output_kind);
         }

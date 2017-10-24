@@ -278,6 +278,9 @@ SOURCE_FILES = \
   CodeGen_HLS_Base.cpp \
   CodeGen_HLS_Target.cpp \
   CodeGen_HLS_Testbench.cpp \
+  CodeGen_CatapultHLS_Base.cpp \
+  CodeGen_CatapultHLS_Target.cpp \
+  CodeGen_CatapultHLS_Testbench.cpp \
   CodeGen_Internal.cpp \
   CodeGen_LLVM.cpp \
   CodeGen_MIPS.cpp \
@@ -1410,6 +1413,28 @@ test_hls_apps: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLU
 	for app in $(ALL_HLS_APPS); do \
 	  make -C apps/hls_examples/$$app clean all HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR) || exit; \
 	done
+
+ALL_CATAPULT_HLS_APPS = bilateral_grid_hls camera_pipe_hls camera_unsharp_hls conv_hls demosaic_flow_hls demosaic_harris_hls demosaic_hls fanout_hls gaussian_hls harris_hls stereo_hls unsharp_hls
+.PHONY: test_catapult_hls_apps
+test_catapult_hls_apps: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(INCLUDE_DIR)/HalideRuntime.h
+	mkdir -p apps/hls_examples
+	# Make a local copy of the apps if we're building out-of-tree,
+	# because the app Makefiles are written to build in-tree
+	if [ "$(ROOT_DIR)" != "$(CURDIR)" ]; then \
+	  echo "Building out-of-tree, so making local copy of apps"; \
+	  for app in $(ALL_CATAPULT_HLS_APPS); do \
+	    cp -r $(ROOT_DIR)/apps/hls_examples/$$app apps/hls_examples; \
+	  done; \
+	  mkdir -p tools; \
+	  cp -r $(ROOT_DIR)/apps/support apps; \
+	  cp -r $(ROOT_DIR)/apps/images apps; \
+	  cp -r $(ROOT_DIR)/apps/hls_examples/hls_support apps/hls_examples; \
+	  cp $(ROOT_DIR)/tools/* tools/; \
+	fi
+	for app in $(ALL_CATAPULT_HLS_APPS); do \
+	  make -C apps/hls_examples/$$app clean all HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR) || exit; \
+	done
+
 
 .PHONY: test_python
 test_python: $(LIB_DIR)/libHalide.a $(INCLUDE_DIR)/Halide.h

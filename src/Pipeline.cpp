@@ -216,6 +216,15 @@ void Pipeline::compile_to_hls(const string &filename,
     m.compile(Outputs().c_source(output_name(filename, m, ".cpp")));
 }
 
+void Pipeline::compile_to_catapult_hls(const string &filename,
+                                       const vector<Argument> &args,
+                                       const string &fn_name,
+                                       const Target &target) {
+    Target new_target = target.with_feature(Target::CatapultHLS);
+    Module m = compile_to_module(args, fn_name, new_target);
+    m.compile(Outputs().c_source(output_name(filename, m, ".cpp")));
+}
+
 void Pipeline::compile_to_zynq_c(const string &filename,
                                  const vector<Argument> &args,
                                  const string &fn_name,

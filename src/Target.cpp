@@ -247,6 +247,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"metal", Target::Metal},
     //----- HLS Modification Begins -----//
     {"vivado_hls", Target::VivadoHLS},
+    {"catapult_hls", Target::CatapultHLS},
     {"zynq", Target::Zynq},
     //----- HLS Modification Ends -------//
     {"mingw", Target::MinGW},

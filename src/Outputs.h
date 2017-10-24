@@ -42,6 +42,10 @@ struct Outputs {
      * output is desired. */
     std::string hls_source_name;
 
+    /** The name of the emitted Catapult HLS C source file. Empty if no C source file
+     * output is desired. */
+    std::string catapult_hls_source_name;
+
     /** The name of the emitted Zynq C source file. Empty if no C source file
      * output is desired. */
     std::string zynq_c_source_name;
