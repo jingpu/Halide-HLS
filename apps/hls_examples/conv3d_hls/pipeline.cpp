@@ -179,10 +179,10 @@ public:
         
         // define the algorithm
         //clamped = BoundaryConditions::repeat_edge(input);
-        clamped(x, y, c) = input(x+1, y+1, c);
-        //in(x, y, c) = input(x, y, c);
+        //clamped(x, y, c) = input(x+1, y+1, c);
         //clamped = BoundaryConditions::constant_exterior(input, 0, {{0, 260}, {0,260}, {0, 12}});
-        clamped_buf_copy(x, y, c) = clamped(x, y, c); 
+        clamped_buf_copy = BoundaryConditions::constant_exterior(input, 0, {{0, 124}, {0, 32}, {0, 32}});
+        //clamped_buf_copy(x, y, c) = clamped(x, y, c); 
         weight_buf_copy(x, y, c, k) = weight(x, y, c, k); 
         conv1(c, x, y) += cast<uint16_t>(clamped_buf_copy(r.x+r.w*8, x+r.y-1, y+r.z-1)) * cast<uint16_t>(weight_buf_copy(r.x+r.w*8, r.y, r.z, c));
         //hw_output(x, y, c) = conv1(x, y, c);
@@ -218,7 +218,6 @@ public:
         std::cout << "\ncompiling cpu code..." << std::endl;
 
         clamped.compute_root();
-
         //hw_output.tile(x, y, xo, yo, xi, yi, 64, 64).reorder(xi, yi, c, xo, yo);
         //hw_output.compute_root();
         //hw_output.compute_at(output, xo);//.tile(x, y, xo, yo, xi, yi, 64, 64).reorder(xi, yi, c, xo, yo);
@@ -263,8 +262,8 @@ public:
         // HLS schedule: make a hw pipeline producing 'hw_output', taking
         // inputs of 'clamped', buffering intermediates at (output, xo) loop
         // level
-        //clamped.compute_at(output, xo);
-        clamped.compute_root();
+        //clamped.compute_at(output, co);
+        //clamped.compute_root();
 
         //hw_output.tile(x, y, xo, yo, xi, yi, 64, 64).reorder(xi, yi, c, xo, yo);
         //hw_output.compute_at(output, xo); // compute_root(); //TODO outer loop scheduled by hw side
