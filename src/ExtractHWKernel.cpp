@@ -272,8 +272,9 @@ extract_stencil_specs(Box box, const set<string> &scan_loops,
 
         dim_specs.min_pos = min;
         const IntImm *extent_int = extent.as<IntImm>();
-        internal_assert(extent_int) << "stencil window extent ("
-                                    << extent << ") is not a const.\n";
+        // xuan remove this
+        //internal_assert(extent_int) << "stencil window extent ("
+        //                            << extent << ") is not a const.\n";
         dim_specs.size = extent_int->value;
 
         Expr store_min = simplify(expand_expr(box[i].min, store_bounds));
@@ -645,7 +646,8 @@ class BuildDAGForFunction : public IRVisitor {
                         for (ReductionVariable i : update_schedule.rvars()) {
                             string arg = cur_func.name() + ".s" + std::to_string(stage.stage) + "." + i.var;
                             internal_assert(is_const(i.min));
-                            internal_assert(is_const(i.extent));
+                            //xuan remove this
+                            //internal_assert(is_const(i.extent));  
                             Expr min = i.min;
                             Expr max = simplify(i.extent + i.min - 1);
                             stencil_bounds.push(arg + ".min", min);
