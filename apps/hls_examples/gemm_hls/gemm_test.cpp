@@ -5,7 +5,7 @@
 
 #define MAT_A_ROWS 384//384//16
 #define MAT_A_COLS 64 //256
-#define MAT_B_ROWS 384 //384 //16
+#define MAT_B_ROWS 192 //384 //16
 #define MAT_B_COLS 64 //256
 
 
@@ -60,7 +60,7 @@ int main(int argc, char **argv)
 
 
 #ifdef HW_COSIM
-   hls_target(hw_result, in_mat_a, in_mat_b, 8, 384, 384); 
+   hls_target(hw_result, in_mat_a, in_mat_b, 8, 192, 384); 
 #endif
 
    // Print result matrix

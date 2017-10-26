@@ -167,15 +167,15 @@ public:
     A_buf_copy(x, y) = A(x, y); 
     B_buf_copy(x, y) = B(x, y);
 
-    hw_output(x, y) += cast<uint16_t>(A_buf_copy(r.y*8+r.x, x))* cast<uint16_t>(B_buf_copy(r.y*8+r.x, y)); //A transpose
+    hw_output(x, y) += cast<uint16_t>(A_buf_copy(r.y*8+r.x, y))* cast<uint16_t>(B_buf_copy(r.y*8+r.x, x)); //A transpose
 
     //hw_output(x, y) = output_buf(x, y);
     output(x, y) = hw_output(x, y);
-    A.dim(1).set_bounds(0, x_len);
+    A.dim(1).set_bounds(0, y_len);
     A.dim(0).set_bounds(0, r_len * 8);
     A.dim(0).set_stride(1);
-    A.dim(1).set_stride(r_len*8);
-    B.dim(1).set_bounds(0, y_len);
+    A.dim(1).set_stride(r_len * 8);
+    B.dim(1).set_bounds(0, x_len);
     B.dim(0).set_bounds(0, r_len * 8);
     B.dim(0).set_stride(1);
     B.dim(1).set_stride(r_len * 8);
