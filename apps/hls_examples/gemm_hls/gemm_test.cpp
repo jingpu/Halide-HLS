@@ -60,7 +60,7 @@ int main(int argc, char **argv)
 
 
 #ifdef HW_COSIM
-   hls_target(hw_result, in_mat_a, in_mat_b, 64, 384); 
+   hls_target(hw_result, in_mat_a, in_mat_b, 8, 384, 384); 
 #endif
 
    // Print result matrix
