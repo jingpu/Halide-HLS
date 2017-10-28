@@ -7,7 +7,7 @@
 #define NUM_INPUT 16
 #define NUM_HIDDEN 16
 #define NUM_OUTPUT 16
-#define BATCH_SIZE 1
+#define BATCH_SIZE 16
 #define T 1
 
 typedef float Weight_t;
@@ -140,10 +140,8 @@ int main(int argc, char **argv)
         for(int i = 0; i < BATCH_SIZE; i++) {
             for(int j = 0; j < NUM_OUTPUT; j++){
                 for(int k = 0; k < NUM_HIDDEN; k++){
-                    sw_result[t * BATCH_SIZE * NUM_OUTPUT + i * NUM_OUTPUT + j] += h_t[i * BATCH_SIZE + j * NUM_HIDDEN + k] 
+                    sw_result[t * BATCH_SIZE * NUM_OUTPUT + i * NUM_OUTPUT + j] += h_t[i * NUM_HIDDEN + k] 
                         * Why[j * NUM_HIDDEN + k];
-                
-                // std::cout << sw_result[t * BATCH_SIZE * NUM_OUTPUT + i * NUM_OUTPUT + j] << std::endl;
                 }
             }
         }
@@ -155,7 +153,7 @@ int main(int argc, char **argv)
 #ifdef HW_COSIM
                 // Check HW result against SW
                 if (hw_result[i * NUM_OUTPUT + j] != sw_result[i * NUM_OUTPUT + j]) {
-                    cout << i << " " << j << " " << unsigned(hw_result[i * NUM_OUTPUT + j]) << " " <<  unsigned(sw_result[i * NUM_OUTPUT + j]) << endl;
+                    cout << i << " " << j << " " << hw_result[i * NUM_OUTPUT + j] << " " <<  sw_result[i * NUM_OUTPUT + j] << endl;
                     err_cnt++;
                 } 
 #else
