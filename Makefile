@@ -374,6 +374,8 @@ SOURCE_FILES = \
   SkipStages.cpp \
   SlidingWindow.cpp \
   HWKernelOpt.cpp \
+  HWExtractAndReplace.cpp \
+  HWReplaceBack.cpp \
   Solve.cpp \
   SplitTuples.cpp \
   StmtToHtml.cpp \
