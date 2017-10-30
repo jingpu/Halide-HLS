@@ -55,8 +55,6 @@
 #include "StorageFlattening.h"
 #include "StorageFolding.h"
 #include "HWKernelOpt.h"
-#include "HWExtractAndReplace.h"
-#include "HWReplaceBack.h"
 #include "Substitute.h"
 #include "Tracing.h"
 #include "TrimNoOps.h"
@@ -342,18 +340,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
 
     s = remove_dead_allocations(s);
     s = remove_trivial_for_loops(s);
-
-    // HLS optimization
-    Scope<Expr> hw_replacement;
-    // s = hwextract_and_replace(s, hw_replacement);
-    // End of HLS optimization
-
     s = simplify(s);
-    
-    // HLS optimization
-    // s = hwreplace_back(s, hw_replacement);
-    // End of HLS optimization
-    
     debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
 
     debug(1) << "Splitting off Hexagon offload...\n";
