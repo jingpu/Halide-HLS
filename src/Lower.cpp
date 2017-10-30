@@ -55,6 +55,7 @@
 #include "StorageFlattening.h"
 #include "StorageFolding.h"
 #include "HWKernelOpt.h"
+#include "HWSimplify.h"
 #include "Substitute.h"
 #include "Tracing.h"
 #include "TrimNoOps.h"
@@ -336,6 +337,8 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
         debug(1) << "Perfecting nested loops for better inner loop pipelining...\n";
         s = perfect_nested_loops(s);
         debug(2) << "Lowering after perfecting nested loops:\n" << s << "\n\n";
+
+        s = hwsimplify(s);
     }
 
     s = remove_dead_allocations(s);
