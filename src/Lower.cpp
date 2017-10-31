@@ -55,6 +55,8 @@
 #include "StorageFlattening.h"
 #include "StorageFolding.h"
 #include "HWKernelOpt.h"
+#include "HWRevertLet.h"
+#include "HWSimplify.h"
 #include "Substitute.h"
 #include "Tracing.h"
 #include "TrimNoOps.h"
@@ -336,12 +338,21 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
         debug(1) << "Perfecting nested loops for better inner loop pipelining...\n";
         s = perfect_nested_loops(s);
         debug(2) << "Lowering after perfecting nested loops:\n" << s << "\n\n";
+
+        s = hwsimplify(s);
     }
 
     s = remove_dead_allocations(s);
     s = remove_trivial_for_loops(s);
     s = simplify(s);
     debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
+
+    {
+        // HLS backend
+        s = hwrevert_let(s);
+        s = unify_duplicate_lets(s);
+        debug(1) << "Reverting some loop extent to let stmt again:\n" << s << "\n";
+    }
 
     debug(1) << "Splitting off Hexagon offload...\n";
     s = inject_hexagon_rpc(s, t, result_module);

@@ -145,6 +145,7 @@ public:
     ImageParam B;
     Param<int32_t> x_len;
     Param<int32_t> y_len;
+    Param<int32_t> r_len;
     //Func prod;
     Func A_buf_copy;
     Func B_buf_copy;
@@ -157,33 +158,33 @@ public:
 
     MyPipelineConfigurable()
     : A(UInt(8), 2), B(UInt(8), 2), 
-    x_len("x_len"), y_len("y_len"),
+    x_len("x_len"), y_len("y_len"), r_len("r_len"),
     output("output"), hw_output("hw_output"),
-    r(0, 8, 0, 8)
+    r(0, 8, 0, r_len)
     {
 
     //Copy handler
     A_buf_copy(x, y) = A(x, y); 
     B_buf_copy(x, y) = B(x, y);
 
-    hw_output(x, y) += cast<uint16_t>(A_buf_copy(r.y*8+r.x, x))* cast<uint16_t>(B_buf_copy(r.y*8+r.x, y)); //A transpose
+    hw_output(x, y) += cast<uint16_t>(A_buf_copy(r.y*8+r.x, y))* cast<uint16_t>(B_buf_copy(r.y*8+r.x, x)); //A transpose
 
     //hw_output(x, y) = output_buf(x, y);
     output(x, y) = hw_output(x, y);
     A.dim(1).set_bounds(0, y_len);
-    A.dim(0).set_bounds(0, x_len);
+    A.dim(0).set_bounds(0, r_len * 8);
     A.dim(0).set_stride(1);
-    A.dim(1).set_stride(x_len);
-    B.dim(1).set_bounds(0, y_len);
-    B.dim(0).set_bounds(0, x_len);
+    A.dim(1).set_stride(r_len * 8);
+    B.dim(1).set_bounds(0, x_len);
+    B.dim(0).set_bounds(0, r_len * 8);
     B.dim(0).set_stride(1);
-    B.dim(1).set_stride(x_len);
+    B.dim(1).set_stride(r_len * 8);
 
-    output.bound(x, 0, y_len);
+    output.bound(x, 0, x_len);
     output.bound(y, 0, y_len);
 
     // Arguments
-    args = {A, B, x_len, y_len};
+    args = {A, B, x_len, y_len, r_len};
     }
 
     void compile_cpu() {
@@ -248,8 +249,8 @@ public:
         hw_output.update(0).reorder(r.x, xi, yi, xo, yo, r.y);
 
         hw_output.compute_at(output, xo);
-        A_buf_copy.compute_at(output, xo);
-        B_buf_copy.compute_at(output, xo);
+        A_buf_copy.compute_at(hw_output, r.y);
+        B_buf_copy.compute_at(hw_output, r.y);
         //hw_output.update(0).unroll(r.x);
         //hw_output.update().tile(x, y, xo, yo, xi, yi, 16, 16);
         //hw_output.update().reorder(xi, yi, xo, yo);

@@ -271,16 +271,17 @@ extract_stencil_specs(Box box, const set<string> &scan_loops,
         Expr extent = simplify(expand_expr(max - min + 1, stencil_bounds));
 
         dim_specs.min_pos = min;
-        const IntImm *extent_int = extent.as<IntImm>();
-        internal_assert(extent_int) << "stencil window extent ("
-                                    << extent << ") is not a const.\n";
-        dim_specs.size = extent_int->value;
+        // xuan remove this
+        // const IntImm *extent_int = extent.as<IntImm>();
+        // internal_assert(extent_int) << "stencil window extent ("
+        //                            << extent << ") is not a const.\n";
+        // dim_specs.size = extent_int->value;
 
         Expr store_min = simplify(expand_expr(box[i].min, store_bounds));
         Expr store_max = simplify(expand_expr(box[i].max, store_bounds));
         dim_specs.store_bound = Interval(store_min, store_max);
 
-        dim_specs.step = dim_specs.size;
+        // dim_specs.step = dim_specs.size;
         dim_specs.loop_var = "undef";
         // look for loop var that slides along this dimensions
         //for (size_t j = 0; j < scan_loops.size(); j++) {
@@ -645,7 +646,8 @@ class BuildDAGForFunction : public IRVisitor {
                         for (ReductionVariable i : update_schedule.rvars()) {
                             string arg = cur_func.name() + ".s" + std::to_string(stage.stage) + "." + i.var;
                             internal_assert(is_const(i.min));
-                            internal_assert(is_const(i.extent));
+                            //xuan remove this
+                            //internal_assert(is_const(i.extent));  
                             Expr min = i.min;
                             Expr max = simplify(i.extent + i.min - 1);
                             stencil_bounds.push(arg + ".min", min);
