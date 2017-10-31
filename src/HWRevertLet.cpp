@@ -3,41 +3,93 @@
 #include "IROperator.h"
 #include "Scope.h"
 #include "Simplify.h"
+#include "CodeGen_Internal.h"
 
 namespace Halide {
 namespace Internal {
 
 using std::string;
 using std::vector;
+using std::pair;
 
-class ExtractExprScope : public IRMutator {
+class FindInputScope : public Closure {
+public:
+    FindInputScope(Stmt s)  {
+        s.accept(this);
+    }
+
+    vector<string> arguments();
+
+protected:
+    using Closure::visit;
+
+};
+
+
+vector<string> FindInputScope::arguments() {
+    vector<string> res;
+    for (const pair<string, Buffer> &it : buffers) {
+        res.push_back(it.first);
+        debug(0) << "add " << it.first << "to scope\n";
+    }
+    return res;
+}
+
+class ExtractInputScope : public IRVisitor {
+    using IRVisitor::visit;
+    vector<string> input_scope;
+
+    void visit(const ProducerConsumer *op){
+        if (op->is_producer && starts_with(op->name, "_hls_target.")) {
+            Stmt body = op->body;
+            FindInputScope c(body);
+            input_scope = c.arguments();
+        }else{
+            IRVisitor::visit(op);
+        }
+    
+    }
+public:
+    vector<string> get_input_scope(){
+        return input_scope;
+    }
+};
+
+vector<string> extract_intput_scope(Stmt s){
+    ExtractInputScope eis;
+    s.accept(&eis);
+    return eis.get_input_scope();
+}
+
+class ExtractExprScope : public IRVisitor {
     using IRVisitor::visit;
     vector<string> hidden;
 
     void visit(const Variable *op){
+        IRVisitor::visit(op);
         hidden.push_back(op->name);
         debug(0) << "Find hidden: " << op->name << "\n";
-        IRVisitor::visit(op);
     }
 public:
     vector<string> get_hidden(){
         return hidden;
     }
-}
+};
 
 vector<string> extract_expr_scope(Expr e){
     ExtractExprScope evs;
-    evs.mutate(e);
+    e.accept(&evs);
     return evs.get_hidden();
 }
 
+struct ExprInfo {
+    Expr value;
+    vector<string> expr_scope;
+};
 class FindRevertArgs : public IRMutator {
     using IRMutator::visit;
-    struct ExprInfo {
-        Expr value;
-        vector<string> expr_scope;
-    };
-    Scope<ExprInfo> expr_info;
+    
+    Scope<ExprInfo>& expr_info;
     
     void visit(const For *op) {
         string loop_name = op->name;
@@ -47,7 +99,7 @@ class FindRevertArgs : public IRMutator {
             debug(0) << "Find loop extent that is not a const: " << loop_name << " " << loop_extent << "\n";
             vector<string> hidden_scope = extract_expr_scope(loop_extent);
             string loop_extent_var_name = op->name + ".loop_extent";
-            Expr loop_extent_var = Variable::make(loop_extent.type().element_of(), loop_extent_var_name);
+            Expr loop_extent_var = Variable::make(loop_extent.type(), loop_extent_var_name);
             ExprInfo info;
             info.value = loop_extent;
             info.expr_scope = hidden_scope;
@@ -59,11 +111,50 @@ class FindRevertArgs : public IRMutator {
             IRMutator::visit(op);
         }
     }
+public:
+    FindRevertArgs(Scope<ExprInfo>& s) : expr_info(s) {}
+};
+
+class AddRevertLets : public IRMutator {
+    using IRMutator::visit;
+    Scope<int> arg_scope;
+    Scope<int> used_scope;
+    vector<string>& input_scope;
+    Scope<ExprInfo>& expr_info;
+    void visit(const For *op) {
+        for(auto it=expr_info.cbegin(); it!=expr_info.cend(); ++it){
+            string name = it.name();
+            if(used_scope.contains(name)){
+                continue;
+            }
+            ExprInfo info = it.value();
+            //bool add_here = true;
+            for(auto const& value: info.expr_scope) {
+                if(!arg_scope.contains(value)){
+                    //add_here = false;
+                }
+            }
+        }
+        Stmt new_body = mutate(op->body);
+        stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, new_body);
+    }
+   
+public:
+    AddRevertLets(vector<string>& i, Scope<ExprInfo>& s) : input_scope(i), expr_info(s) {
+        for(auto const& value: input_scope) {
+            arg_scope.push(value, 0);
+        }
+    }
 };
 
 Stmt hwrevert_let(Stmt s) {
-    Stmt result = FindRevertArgs().mutate(s);
-    return result;
+    vector<string> input_scope = extract_intput_scope(s);
+    Scope<ExprInfo> expr_info;
+    FindRevertArgs fra(expr_info);
+    s = fra.mutate(s);
+    AddRevertLets arl(input_scope, expr_info);
+    s = arl.mutate(s);
+    return s;
 }
 
 }

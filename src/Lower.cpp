@@ -55,6 +55,7 @@
 #include "StorageFlattening.h"
 #include "StorageFolding.h"
 #include "HWKernelOpt.h"
+#include "HWRevertLet.h"
 #include "HWSimplify.h"
 #include "Substitute.h"
 #include "Tracing.h"
@@ -345,6 +346,11 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     s = remove_trivial_for_loops(s);
     s = simplify(s);
     debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
+
+    {
+        // HLS backend
+        s = hwrevert_let(s);
+    }
 
     debug(1) << "Splitting off Hexagon offload...\n";
     s = inject_hexagon_rpc(s, t, result_module);
