@@ -274,6 +274,7 @@ public:
 
         conv1.update(0).split(c, co, ci, 8);
         conv1.update(0).reorder(r.x, ci, co, x, y, r.y, r.z, r.w);//.tile(x, y, xo, yo, xi, yi, 64, 64).reorder(xi, yi, r.w, c, xo, yo);
+        conv1.update(0).unroll(r.x);//.unroll(ci);
         //conv1.compute_at(hw_output, xo);//.store_at(hw_output, xo);
         conv1.compute_at(output, co);
 
