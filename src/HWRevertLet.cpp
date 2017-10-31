@@ -32,6 +32,10 @@ vector<string> FindInputScope::arguments() {
         res.push_back(it.first);
         debug(0) << "add " << it.first << "to scope\n";
     }
+    for (const pair<string, Type> &it : vars) {
+        res.push_back(it.first);
+        debug(0) << "add " << it.first << "to scope\n";
+    }
     return res;
 }
 
@@ -106,7 +110,8 @@ class FindRevertArgs : public IRMutator {
             expr_info.push(loop_extent_var_name, info);
             Stmt new_body = mutate(op->body);
             // To be corrected later
-            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, new_body);
+            stmt = For::make(op->name, op->min, loop_extent_var, op->for_type, op->device_api, new_body);
+            stmt = LetStmt::make(loop_extent_var_name, loop_extent, stmt);
         }else{
             IRMutator::visit(op);
         }
@@ -121,22 +126,61 @@ class AddRevertLets : public IRMutator {
     Scope<int> used_scope;
     vector<string>& input_scope;
     Scope<ExprInfo>& expr_info;
+
+    void visit(const Let *op) {
+        Expr new_value = mutate(op->value);
+        arg_scope.push(op->name, 0);
+        Expr new_body = mutate(op->body);
+        arg_scope.pop(op->name);
+
+        if (new_value.same_as(op->value) &&
+            new_body.same_as(op->body)) {
+            expr = op;
+        } else {
+            expr = Let::make(op->name, new_value, new_body);
+        }
+    }
+
+    void visit(const LetStmt *op) {
+        Expr new_value = mutate(op->value);
+        arg_scope.push(op->name, 0);
+        Stmt new_body = mutate(op->body);
+        arg_scope.pop(op->name);
+
+        if (new_value.same_as(op->value) &&
+            new_body.same_as(op->body)) {
+            stmt = op;
+        } else {
+            stmt = LetStmt::make(op->name, new_value, new_body);
+        }
+    }
+
     void visit(const For *op) {
+        Scope<Expr> let_to_make;
+        arg_scope.push(op->name, 0);
         for(auto it=expr_info.cbegin(); it!=expr_info.cend(); ++it){
             string name = it.name();
             if(used_scope.contains(name)){
                 continue;
             }
             ExprInfo info = it.value();
-            //bool add_here = true;
+            bool add_here = true;
             for(auto const& value: info.expr_scope) {
                 if(!arg_scope.contains(value)){
-                    //add_here = false;
+                    add_here = false;
                 }
+            }
+            if(add_here){
+                let_to_make.push(name, info.value);
+                used_scope.push(name, 0);
             }
         }
         Stmt new_body = mutate(op->body);
+        arg_scope.pop(op->name);
         stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, new_body);
+        for(auto it=let_to_make.cbegin(); it!=let_to_make.cend(); ++it){
+            stmt = LetStmt::make(it.name(), it.value(), stmt);
+        }
     }
    
 public:

@@ -350,6 +350,8 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     {
         // HLS backend
         s = hwrevert_let(s);
+        s = unify_duplicate_lets(s);
+        debug(1) << "Reverting some loop extent to let stmt again:\n" << s << "\n";
     }
 
     debug(1) << "Splitting off Hexagon offload...\n";
