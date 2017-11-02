@@ -485,12 +485,12 @@ class BuildDAGForFunction : public IRVisitor {
                     StencilDimSpecs dim_specs;
                     dim_specs.min_pos = tap.param.min_constraint(i);
                     Expr extent = tap.param.extent_constraint(i);
-                    const IntImm *extent_int = extent.as<IntImm>();
+                    // const IntImm *extent_int = extent.as<IntImm>();
                     // xuan remove this
                     //internal_assert(extent_int) << "tap window extent ("
                     //                            << extent << ") is not a const.\n";
-                    dim_specs.size = extent_int->value;
-                    dim_specs.step = dim_specs.size;
+                    // dim_specs.size = extent_int->value;
+                    // dim_specs.step = dim_specs.size;
                     dim_specs.loop_var = "undef";
                     tap.dims.push_back(dim_specs);
                 }
