@@ -16,7 +16,7 @@ using namespace std;
 
 int main()
 {
-	static t image[(ROWS + FS - 1)*(COLS + FS - 1)*OCH*OCH];
+	static t image[(ROWS + FS - 1)*(COLS + FS - 1)*ICH];
 	static rt res[ROWS * COLS * OCH];
 	static t weight_0[FS*FS*ICH*OCH];
 

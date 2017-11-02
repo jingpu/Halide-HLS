@@ -30,11 +30,11 @@ vector<string> FindInputScope::arguments() {
     vector<string> res;
     for (const pair<string, Buffer> &it : buffers) {
         res.push_back(it.first);
-        debug(0) << "add " << it.first << "to scope\n";
+        debug(0) << "add " << it.first << " to scope\n";
     }
     for (const pair<string, Type> &it : vars) {
         res.push_back(it.first);
-        debug(0) << "add " << it.first << "to scope\n";
+        debug(0) << "add " << it.first << " to scope\n";
     }
     return res;
 }
@@ -120,6 +120,30 @@ public:
     FindRevertArgs(Scope<ExprInfo>& s) : expr_info(s) {}
 };
 
+class VarUsed : public IRVisitor {
+    using IRVisitor::visit;
+    string var_to_check;
+    bool used = false;
+
+    void visit(const Variable *op){
+        IRVisitor::visit(op);
+        if(var_to_check == op->name){
+            used = true;
+        }
+    }
+public:
+    VarUsed(string& s) : var_to_check(s) {}
+    bool get_used(){
+        return used;
+    }
+};
+
+bool var_used(Stmt s, string var_to_check){
+    VarUsed vu(var_to_check);
+    s.accept(&vu);
+    return vu.get_used();
+}
+
 class AddRevertLets : public IRMutator {
     using IRMutator::visit;
     Scope<int> arg_scope;
@@ -170,7 +194,7 @@ class AddRevertLets : public IRMutator {
                     add_here = false;
                 }
             }
-            if(add_here){
+            if(add_here && var_used(op->body, name)){
                 let_to_make.push(name, info.value);
                 used_scope.push(name, 0);
             }

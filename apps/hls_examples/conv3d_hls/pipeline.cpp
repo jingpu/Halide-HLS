@@ -345,18 +345,18 @@ public:
         weight.dim(3).set_bounds(0, outch_len);
         weight.dim(0).set_stride(1);
         weight.dim(1).set_stride(inch_len);
-        weight.dim(2).set_stride(96);
-        weight.dim(3).set_stride(288);
-        input.dim(0).set_bounds(0, image_width + 2);
-        input.dim(1).set_bounds(0, image_height + 2);
+        weight.dim(2).set_stride(inch_len * 3);
+        weight.dim(3).set_stride(inch_len * 9);
+        input.dim(0).set_bounds(0, image_height + 2);
+        input.dim(1).set_bounds(0, image_width + 2);
         input.dim(2).set_bounds(0, inch_len);
         input.dim(0).set_stride(1);
-        input.dim(1).set_stride(image_width + 2);
+        input.dim(1).set_stride(image_height + 2);
         input.dim(2).set_stride((image_width + 2) * (image_height + 2));
         
         output.bound(c, 0, outch_len);
-        output.bound(x, 0, image_width);
-        output.bound(y, 0, image_height);
+        output.bound(x, 0, image_height);
+        output.bound(y, 0, image_width);
 
         //args.push_back(input);
         //args.push_back(weight);
