@@ -322,12 +322,11 @@ public:
         
         // define the algorithm
         //clamped = BoundaryConditions::repeat_edge(input);
-        clamped(x, y, c) = input(x+1, y+1, c);
         //clamped = BoundaryConditions::constant_exterior(input, 0, {{0, 260}, {0,260}, {0, 12}});
         //clamped_buf_copy = BoundaryConditions::constant_exterior(input, 0, {{0, 124}, {0, 32}, {0, 32}});
-        clamped_buf_copy(x, y, c) = clamped(x, y, c); 
-        weight_buf_copy(x, y, c, k) = weight(x, y, c, k); 
-        conv1(c, x, y) += cast<uint16_t>(clamped_buf_copy(r.x+r.w*8, x+r.y-1, y+r.z-1)) * cast<uint16_t>(weight_buf_copy(r.x+r.w*8, r.y, r.z, c));
+        clamped_buf_copy(k, x, y) = input(k, x, y); 
+        weight_buf_copy(k, x, y, c) = weight(k, x, y, c); 
+        conv1(c, x, y) += cast<uint16_t>(clamped_buf_copy(r.x+r.w*8, x+r.y, y+r.z)) * cast<uint16_t>(weight_buf_copy(r.x+r.w*8, r.y, r.z, c));
         //hw_output(x, y, c) = conv1(x, y, c);
         //hw_output = convolve55_rd(clamped);
         output(c, x, y) = conv1(c, x, y); //hw_output(x, y, c);
@@ -347,12 +346,12 @@ public:
         weight.dim(1).set_stride(inch_len);
         weight.dim(2).set_stride(inch_len * 3);
         weight.dim(3).set_stride(inch_len * 9);
-        input.dim(0).set_bounds(0, image_height + 2);
-        input.dim(1).set_bounds(0, image_width + 2);
-        input.dim(2).set_bounds(0, inch_len);
+        input.dim(0).set_bounds(0, inch_len);
+        input.dim(1).set_bounds(0, image_height + 2);
+        input.dim(2).set_bounds(0, image_width + 2);
         input.dim(0).set_stride(1);
-        input.dim(1).set_stride(image_height + 2);
-        input.dim(2).set_stride((image_width + 2) * (image_height + 2));
+        input.dim(1).set_stride(inch_len);
+        input.dim(2).set_stride(inch_len * (image_height + 2));
         
         output.bound(c, 0, outch_len);
         output.bound(x, 0, image_height);
