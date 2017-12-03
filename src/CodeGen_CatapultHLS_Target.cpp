@@ -75,8 +75,9 @@ const string hls_header_includes =
     "#include <assert.h>\n"
     "#include <stdio.h>\n"
     "#include <stdlib.h>\n"
-    "#include <hls_stream.h>\n"
-    "#include \"Stencil.h\"\n";
+    "//#include <hls_stream.h>\n"
+    "//#include \"Stencil.h\"\n"
+    "#include<stdint.h>";
 }
 
 void CodeGen_CatapultHLS_Target::init_module() {
@@ -96,9 +97,10 @@ void CodeGen_CatapultHLS_Target::init_module() {
     hdr_stream << hls_header_includes << '\n';
 
     // initialize the source file
-    src_stream << "#include \"" << target_name << ".h\"\n\n";
-    src_stream << "#include \"Linebuffer.h\"\n"
-               << "#include \"halide_math.h\"\n";
+    src_stream << "#include \"" << target_name << ".h\"\n\n"
+               << "//#include \"halide_math.h\"\n"
+               << "#include <mc_scverify.h>\n"
+               << "#include <algorithm>\n\n";
 
 }
 
@@ -140,6 +142,9 @@ void CodeGen_CatapultHLS_Target::CodeGen_CatapultHLS_C::add_kernel(Stmt stmt,
                                                    const string &name,
                                                    const vector<CatapultHLS_Argument> &args) {
     // Emit the function prototype
+  if (!is_header()) {
+    stream << "#pragma hls_design top\n";
+  }
     stream << "void " << name << "(\n";
     for (size_t i = 0; i < args.size(); i++) {
         string arg_name = "arg_" + std::to_string(i);
@@ -176,33 +181,33 @@ void CodeGen_CatapultHLS_Target::CodeGen_CatapultHLS_C::add_kernel(Stmt stmt,
         open_scope();
 
         // add HLS pragma at function scope
-        stream << "#pragma HLS DATAFLOW\n"
-               << "#pragma HLS INLINE region\n"
-               << "#pragma HLS INTERFACE s_axilite port=return"
+        stream << "//#pragma HLS DATAFLOW\n"
+               << "//#pragma HLS INLINE region\n"
+               << "//#pragma HLS INTERFACE s_axilite port=return"
                << " bundle=config\n";
         for (size_t i = 0; i < args.size(); i++) {
             string arg_name = "arg_" + std::to_string(i);
             if (args[i].is_stencil) {
                 if (ends_with(args[i].name, ".stream")) {
                     // stream arguments use AXI-stream interface
-                    stream << "#pragma HLS INTERFACE axis register "
+                    stream << "//#pragma HLS INTERFACE axis register "
                            << "port=" << arg_name << "\n";
                 } else {
                     // stencil arguments use AXI-lite interface
-                    stream << "#pragma HLS INTERFACE s_axilite "
+                    stream << "//#pragma HLS INTERFACE s_axilite "
                            << "port=" << arg_name
                            << " bundle=config\n";
-                    stream << "#pragma HLS ARRAY_PARTITION "
+                    stream << "//#pragma HLS ARRAY_PARTITION "
                            << "variable=" << arg_name << ".value complete dim=0\n";
                 }
             } else {
                 // add Array
                 if (args[i].stencil_type.type == Stencil_Type::StencilContainerType::Array) {
-                    stream << "#pragma HLS INTERFACE m_axi " 
+                    stream << "//#pragma HLS INTERFACE m_axi " 
                            << "port=" << arg_name << "\n";
                 } else {
                     // scalar arguments use AXI-lite interface
-                    stream << "#pragma HLS INTERFACE s_axilite "
+                    stream << "//#pragma HLS INTERFACE s_axilite "
                            << "port=" << arg_name << " bundle=config\n";
                 }
             }
@@ -279,6 +284,19 @@ void CodeGen_CatapultHLS_Target::CodeGen_CatapultHLS_C::visit(const For *op) {
     op->body.accept(this);
     close_scope("for " + print_name(op->name));
 }
+
+  void CodeGen_CatapultHLS_Target::CodeGen_CatapultHLS_C::visit(const Min *op) {
+    // clang doesn't support the ternary operator on OpenCL style vectors.
+    // See: https://bugs.llvm.org/show_bug.cgi?id=33103
+    if (op->type.is_scalar()) {
+        print_expr(Call::make(op->type, "std::min", {op->a, op->b}, Call::Extern));
+    } else {
+        ostringstream rhs;
+        rhs << print_type(op->type) << "::min(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
+        print_assignment(op->type, rhs.str());
+    }
+}
+
 
 class RenameAllocation : public IRMutator {
     const string &orig_name;

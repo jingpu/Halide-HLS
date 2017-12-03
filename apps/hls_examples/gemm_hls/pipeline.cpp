@@ -241,7 +241,7 @@ public:
     */
     void compile_hls() {
         std::cout << "\ncompiling HLS code..." << std::endl;
-        output.tile(x, y, xo, yo, xi, yi, 192, 192);
+        output.tile(x, y, xo, yo, xi, yi, 24, 24);
         output.reorder(xi, yi, xo, yo);
 
         hw_output.update(0).split(x, xo, xi, 6);
@@ -270,6 +270,39 @@ public:
         output.compile_to_header("pipeline_hls.h", args, "pipeline_hls", hls_target);
  
     }
+
+    void compile_catapult() {
+        std::cout << "\ncompiling Catapult HLS code..." << std::endl;
+        output.tile(x, y, xo, yo, xi, yi, 24, 24);
+        output.reorder(xi, yi, xo, yo);
+
+        hw_output.update(0).split(x, xo, xi, 6);
+        hw_output.update(0).split(y, yo, yi, 4);
+        hw_output.update(0).reorder(r.x, xi, yi, xo, yo, r.y);
+
+        hw_output.compute_at(output, xo);
+        A_buf_copy.compute_at(hw_output, r.y);
+        B_buf_copy.compute_at(hw_output, r.y);
+        //hw_output.update(0).unroll(r.x);
+        //hw_output.update().tile(x, y, xo, yo, xi, yi, 16, 16);
+        //hw_output.update().reorder(xi, yi, xo, yo);
+        //hw_output_buf.update().tile(x, y, xo, yo, xi, yi, 16, 16);
+        //hw_output_buf.update().reorder(xi, yi, xo, yo);
+
+        //output_buf.compute_at(hw_output, xi);
+        //hw_output.compute_root(); //compute_at(output, yo);
+
+        output.accelerate({A,B}, xo, xo);
+ 
+        Target catapult_hls_target = get_target_from_environment();
+        catapult_hls_target.set_feature(Target::CPlusPlusMangling);
+        output.print_loop_nest();
+        output.compile_to_lowered_stmt("pipeline_catapult_hls.ir.html", args, HTML, catapult_hls_target);
+        output.compile_to_catapult_hls("pipeline_catapult_hls.cpp", args, "pipeline_catapult_hls", catapult_hls_target);
+        output.compile_to_header("pipeline_catapult_catapult_hls.h", args, "pipeline_catapult_hls", catapult_hls_target);
+ 
+    }
+
 };
 
 
@@ -284,8 +317,11 @@ int main(int argc, char **argv) {
     MyPipelineConfigurable p3;
     p3.compile_cpu();
     
-    MyPipelineConfigurable p4;
-    p4.compile_hls();
+    //MyPipelineConfigurable p4;
+    //p4.compile_hls();
+
+    MyPipelineConfigurable p5;
+    p5.compile_catapult();
     
     return 0;
 }

@@ -60,6 +60,7 @@ protected:
 
         void visit(const For *op);
         void visit(const Allocate *op);
+        void visit(const Min *op);
     };
 
     /** A name for the CatapultHLS target */
