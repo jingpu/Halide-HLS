@@ -219,7 +219,7 @@ class ReplaceReferencesWithStencil : public IRMutator {
     }
 
     void visit(const Let *op) {
-        Expr new_value = simplify(expand_expr(mutate(op->value), scope));
+        Expr new_value = simplify(mutate(op->value));
         scope.push(op->name, new_value);
         Expr new_body = mutate(op->body);
         if (new_value.same_as(op->value) &&
