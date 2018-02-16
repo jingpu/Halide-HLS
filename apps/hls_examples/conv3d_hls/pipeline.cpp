@@ -302,6 +302,7 @@ public:
     Param<int32_t> image_height;
     Param<int32_t> inch_len;
     Param<int32_t> outch_len;
+    Param<int32_t> filter_size;
 
     Func in;
     Func clamped;
@@ -317,14 +318,15 @@ public:
  
     MyPipelineGemmConfigurable() : input(UInt(8), 3, "input"), weight(UInt(8), 4, "weight"),
                    image_width("image_width"), image_height("image_height"), inch_len("inch_len"), outch_len("outch_len"),
-                   in("in"), clamped("clamped"), output("output"), //hw_output("hw_output"),
+                   filter_size("filter_size"), in("in"), clamped("clamped"), output("output"), //hw_output("hw_output"),
                    conv1("conv1"), r(0, 8, 0, 3, 0, 3, 0, 4) {
         
         // define the algorithm
         //clamped = BoundaryConditions::repeat_edge(input);
         //clamped = BoundaryConditions::constant_exterior(input, 0, {{0, 260}, {0,260}, {0, 12}});
         //clamped_buf_copy = BoundaryConditions::constant_exterior(input, 0, {{0, 124}, {0, 32}, {0, 32}});
-        clamped_buf_copy(k, x, y) = input(k, x, y); 
+        clamped(k, x, y) = input(k, x+1, y+1);
+        clamped_buf_copy(k, x, y) = clamped(k, x, y); 
         weight_buf_copy(k, x, y, c) = weight(k, x, y, c); 
         conv1(c, x, y) += cast<uint16_t>(clamped_buf_copy(r.x+r.w*8, x+r.y, y+r.z)) * cast<uint16_t>(weight_buf_copy(r.x+r.w*8, r.y, r.z, c));
         //hw_output(x, y, c) = conv1(x, y, c);
@@ -339,19 +341,19 @@ public:
 
         // restrict arguments
         weight.dim(0).set_bounds(0, inch_len);
-        weight.dim(1).set_bounds(0, 3);
-        weight.dim(2).set_bounds(0, 3);
+        weight.dim(1).set_bounds(0, filter_size);
+        weight.dim(2).set_bounds(0, filter_size);
         weight.dim(3).set_bounds(0, outch_len);
         weight.dim(0).set_stride(1);
         weight.dim(1).set_stride(inch_len);
-        weight.dim(2).set_stride(inch_len * 3);
-        weight.dim(3).set_stride(inch_len * 9);
+        weight.dim(2).set_stride(inch_len * filter_size);
+        weight.dim(3).set_stride(inch_len * filter_size * filter_size);
         input.dim(0).set_bounds(0, inch_len);
-        input.dim(1).set_bounds(0, image_height + 2);
-        input.dim(2).set_bounds(0, image_width + 2);
+        input.dim(1).set_bounds(0, image_height);
+        input.dim(2).set_bounds(0, image_width);
         input.dim(0).set_stride(1);
         input.dim(1).set_stride(inch_len);
-        input.dim(2).set_stride(inch_len * (image_height + 2));
+        input.dim(2).set_stride(inch_len * image_height);
         
         output.bound(c, 0, outch_len);
         output.bound(x, 0, image_height);
@@ -360,7 +362,7 @@ public:
         //args.push_back(input);
         //args.push_back(weight);
         //args.push_back(bias);
-        args = {input, weight, image_width, image_height, inch_len, outch_len};
+        args = {input, weight, image_width, image_height, inch_len, outch_len, filter_size};
     }
 
     void compile_cpu() {

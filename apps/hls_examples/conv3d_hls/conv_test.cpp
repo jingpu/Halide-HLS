@@ -1,6 +1,6 @@
 #include<iostream>
 #include "hls_target.h"
-
+#include "halide_math.h"
 #define HW_COSIM
 
 
@@ -37,8 +37,8 @@ int main()
 	int err_cnt = 0;
 
 #ifdef HW_COSIM
-
-	hls_target(image, res, weight_0, (ICH * (COLS + 2)), COLS, ROWS, ICH, OCH);
+		int redundant_param = COLS + 1;
+		hls_target(image, res, weight_0, redundant_param, FS, COLS, ROWS, ICH, OCH);
 
     static rt res_sw_0[ROWS * COLS * OCH];
     for (int i = 0 ; i < ROWS * COLS * OCH; i++)
