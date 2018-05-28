@@ -229,6 +229,7 @@ public:
         std::vector<Target::Feature> features({Target::Zynq});
         Target target(Target::Linux, Target::ARM, 32, features);
         output.compile_to_lowered_stmt("pipeline_zynq.ir.html", args, HTML, target);
+        output.compile_to_lowered_stmt("pipeline_zynq.stmt", args, Text, target);
         output.compile_to_zynq_c("pipeline_zynq.c", args, "pipeline_zynq", target);
         output.compile_to_header("pipeline_zynq.h", args, "pipeline_zynq", target);
         output.compile_to_object("pipeline_zynq.o", args, "pipeline_zynq", target);
