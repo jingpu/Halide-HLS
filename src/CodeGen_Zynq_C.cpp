@@ -35,14 +35,21 @@ const string zynq_runtime =
     "  unsigned int mmap_offset;\n"
     "} cma_buffer_t;\n"
     "#endif\n"
+    "\n"
+    "#ifdef __cplusplus\n"
+    "extern \"C\" {\n"
+    "#endif\n"
     "// Zynq runtime API\n"
     "int halide_zynq_init();\n"
     "void halide_zynq_free(void *user_context, void *ptr);\n"
-    "int halide_zynq_cma_alloc(struct buffer_t *buf);\n"
-    "int halide_zynq_cma_free(struct buffer_t *buf);\n"
-    "int halide_zynq_subimage(const struct buffer_t* image, struct cma_buffer_t* subimage, void *address_of_subimage_origin, int width, int height);\n"
+    "int halide_zynq_cma_alloc(struct halide_buffer_t *buf);\n"
+    "int halide_zynq_cma_free(struct halide_buffer_t *buf);\n"
+    "int halide_zynq_subimage(const struct halide_buffer_t* image, struct cma_buffer_t* subimage, void *address_of_subimage_origin, int width, int height);\n"
     "int halide_zynq_hwacc_launch(struct cma_buffer_t bufs[]);\n"
-    "int halide_zynq_hwacc_sync(int task_id);\n";
+    "int halide_zynq_hwacc_sync(int task_id);\n"
+    "#ifdef __cplusplus\n"
+    "}  // extern \"C\" {\n"
+    "#endif\n";
 }
 
 CodeGen_Zynq_C::CodeGen_Zynq_C(ostream &dest,

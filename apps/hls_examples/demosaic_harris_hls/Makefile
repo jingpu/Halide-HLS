@@ -14,7 +14,7 @@ run_hls: $(HLS_LOG)
 pipeline: pipeline.cpp
 	$(CXX) $(CXXFLAGS) -Wall -g $^ $(LIB_HALIDE) -o $@ $(LDFLAGS) -ltinfo
 
-pipeline_hls.cpp pipeline_native.o pipeline_zynq.o: pipeline
+pipeline_hls.cpp pipeline_native.o pipeline_zynq.c: pipeline
 	HL_DEBUG_CODEGEN=0 ./pipeline
 
 run: run.cpp pipeline_hls.cpp hls_target.cpp pipeline_native.o
@@ -34,8 +34,8 @@ $(HLS_LOG): ../hls_support/run_hls.tcl pipeline_hls.cpp run.cpp
 	RUN_ARGS=$(realpath ./../../images/zynq_raw.png) \
 	vivado_hls -f $< -l $(HLS_LOG)
 
-#pipeline_zynq.o: pipeline_zynq.c
-#	$(CXX) -c -O2 $(CXXFLAGS) -g -Wall -Werror $^ -o $@
+pipeline_zynq.o: pipeline_zynq.c
+	$(CXX) -c -O2 $(CXXFLAGS) -g -Wall -Werror $^ -o $@
 
 pipeline_zynq_bypass.o: pipeline_zynq_bypass.c
 	$(CXX) -c -O2 $(CXXFLAGS) -g -Wall -Werror $^ -o $@
@@ -60,3 +60,4 @@ clean:
 	rm -f pipeline_native.h pipeline_native.o
 	rm -f pipeline_hls.h pipeline_hls.cpp
 	rm -f hls_target.h hls_target.cpp
+	rm -f pipeline_zynq.c pipeline_zynq.o
