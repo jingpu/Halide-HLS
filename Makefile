@@ -697,7 +697,7 @@ ifeq ($(UNAME), Darwin)
 	install_name_tool -id $(CURDIR)/$(BIN_DIR)/libHalide.$(SHARED_EXT) $(BIN_DIR)/libHalide.$(SHARED_EXT)
 endif
 
-zynq_runtime: $(LIB_DIR)/libHalide.a $(ROOT_DIR)/apps/hls_examples/hls_support/HalideRuntimeZynq.cpp $(INCLUDE_DIR)/HalideRuntime.h
+zynq_runtime: $(ROOT_DIR)/apps/hls_examples/hls_support/HalideRuntimeZynq.cpp $(INCLUDE_DIR)/HalideRuntime.h
 	$(CXX) -c -Wall $(ROOT_DIR)/apps/hls_examples/hls_support/HalideRuntimeZynq.cpp -o $(BUILD_DIR)/HalideRuntimeZynq.o -I$(INCLUDE_DIR)
 	ar rvs $(LIB_DIR)/libZynqRuntime.a $(BUILD_DIR)/HalideRuntimeZynq.o
 
