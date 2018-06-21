@@ -135,6 +135,29 @@ string CodeGen_HLS_Target::CodeGen_HLS_C::print_stencil_pragma(const string &nam
     return oss.str();
 }
 
+string CodeGen_HLS_Target::CodeGen_HLS_C::guess_name(const string &arg_name,
+                                                     uint32_t index) {
+
+    /**
+     * Attempt to extract useful names from the arg name.
+     * If it fails, fall back to arg_%d as before.
+     */
+    string name = arg_name;
+    auto pos = name.find(":");
+    if (pos != std::string::npos) {
+        /* we don't need the pipe: part */
+        name = name.substr(++pos);
+    }
+    pos = name.find(".");
+    if (pos != std::string::npos) {
+        /* $ does compile, but it's more confusing since it implies a naming
+         * conflift in Halide */
+        if (name.find("$") == std::string::npos)
+            return name.substr(0, pos);
+    }
+    /* fall back */
+    return "arg_" + std::to_string(index);
+}
 
 void CodeGen_HLS_Target::CodeGen_HLS_C::add_kernel(Stmt stmt,
                                                    const string &name,
@@ -142,7 +165,7 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::add_kernel(Stmt stmt,
     // Emit the function prototype
     stream << "void " << name << "(\n";
     for (size_t i = 0; i < args.size(); i++) {
-        string arg_name = "arg_" + std::to_string(i);
+        string arg_name = guess_name(args[i].name, i);
         if (args[i].is_stencil) {
             CodeGen_HLS_Base::Stencil_Type stype = args[i].stencil_type;
             internal_assert(args[i].stencil_type.type == Stencil_Type::StencilContainerType::AxiStream ||
