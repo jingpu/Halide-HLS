@@ -196,7 +196,7 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::add_kernel(Stmt stmt,
                << "#pragma HLS INTERFACE s_axilite port=return"
                << " bundle=config\n";
         for (size_t i = 0; i < args.size(); i++) {
-            string arg_name = "arg_" + std::to_string(i);
+            string arg_name = guess_name(args[i].name, i);
             if (args[i].is_stencil) {
                 if (ends_with(args[i].name, ".stream")) {
                     // stream arguments use AXI-stream interface
@@ -222,7 +222,7 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::add_kernel(Stmt stmt,
         do_indent();
         stream << "// alias the arguments\n";
         for (size_t i = 0; i < args.size(); i++) {
-            string arg_name = "arg_" + std::to_string(i);
+            string arg_name = guess_name(args[i].name, i);
             do_indent();
             if (args[i].is_stencil) {
                 CodeGen_HLS_Base::Stencil_Type stype = args[i].stencil_type;
