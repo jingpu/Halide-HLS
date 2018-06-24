@@ -58,6 +58,8 @@ protected:
 
         void visit(const For *op);
         void visit(const Allocate *op);
+    private:
+        std::string guess_name(const std::string &name, uint32_t index);
     };
 
     /** A name for the HLS target */

@@ -41,13 +41,16 @@ pipeline_zynq_bypass.o: pipeline_zynq_bypass.c
 	$(CXX) -c -O2 $(CXXFLAGS) -g -Wall -Werror $^ -o $@
 
 run_zynq.o: run_zynq.cpp
-	$(CXX) -c $(CXXFLAGS) -g -Wall -Werror $^ -o $@  $(PNGFLAGS)
+	$(CXX) -c $(CXXFLAGS) -g -Wall -Werror $^ -o $@  $(IMAGE_IO_FLAGS)
 
 run_zynq_bypass.o: run_zynq_bypass.cpp
 	$(CXX) -c $(CXXFLAGS) -g -Wall -Werror $^ -o $@  $(PNGFLAGS)
 
-run_zynq: pipeline_zynq.o pipeline_native.o run_zynq.o
-	$(CXX) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
+HalideRuntimeZynq.o: ../hls_support/HalideRuntimeZynq.cpp
+	$(CXX) -c -O2 $(CXXFLAGS) -g -Wall -Werror $^ -o $@
+
+run_zynq: pipeline_zynq.o pipeline_native.o run_zynq.o HalideRuntimeZynq.o
+	$(CXX) -Wall -Werror $^ -lpthread -ldl -o $@  $(IMAGE_IO_FLAGS)
 
 run_zynq_bypass: pipeline_zynq_bypass.o pipeline_native.o run_zynq_bypass.o
 	$(CXX) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)

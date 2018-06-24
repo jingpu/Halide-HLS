@@ -20,21 +20,25 @@ namespace {
 
 // copied from src/runtime/zynq.cpp
 const string zynq_runtime =
-    "#ifndef CMA_BUFFER_T_DEFINED\n"
-    "#define CMA_BUFFER_T_DEFINED\n"
-    "struct mMap;\n"
-    "typedef struct cma_buffer_t {\n"
-    "  unsigned int id; // ID flag for internal use\n"
-    "  unsigned int width; // Width of the image\n"
-    "  unsigned int stride; // Stride between rows, in pixels. This must be >= width\n"
-    "  unsigned int height; // Height of the image\n"
-    "  unsigned int depth; // Byte-depth of the image\n"
-    "  unsigned int phys_addr; // Bus address for DMA\n"
-    "  void* kern_addr; // Kernel virtual address\n"
-    "  struct mMap* cvals;\n"
-    "  unsigned int mmap_offset;\n"
-    "} cma_buffer_t;\n"
-    "#endif\n"
+	"#ifndef _UBUFFER_H_\n"
+	"#define _UBUFFER_H_\n"
+	"#ifdef __KERNEL__\n"
+	"#include <linux/types.h>\n"
+	"#define U32_TYPE	u32\n"
+	"#else\n"
+	"#include <stdint.h>\n"
+	"#define U32_TYPE	uint32_t\n"
+	"#endif /* __KERNEL__ */\n"
+	"/* user buffer declaration */\n"
+	"typedef struct UBuffer {\n"
+		"U32_TYPE id;		// ID flag for internal use\n"
+        "U32_TYPE offset;   // used for slicing purposes\n"
+		"U32_TYPE width;		// width of the image\n"
+		"U32_TYPE height;	// height of the image\n"
+		"U32_TYPE stride;	// stride of the image\n"
+		"U32_TYPE depth;		// byte-depth of the image\n"
+	"} UBuffer;\n"
+	"#endif /* _UBUFFER_H_ */\n"
     "\n"
     "#ifdef __cplusplus\n"
     "extern \"C\" {\n"
@@ -44,9 +48,14 @@ const string zynq_runtime =
     "void halide_zynq_free(void *user_context, void *ptr);\n"
     "int halide_zynq_cma_alloc(struct halide_buffer_t *buf);\n"
     "int halide_zynq_cma_free(struct halide_buffer_t *buf);\n"
-    "int halide_zynq_subimage(const struct halide_buffer_t* image, struct cma_buffer_t* subimage, void *address_of_subimage_origin, int width, int height);\n"
+    "int halide_zynq_subimage(const struct halide_buffer_t* image, struct UBuffer* subimage, void *address_of_subimage_origin, int width, int height);\n"
     "int halide_zynq_hwacc_launch(struct cma_buffer_t bufs[]);\n"
     "int halide_zynq_hwacc_sync(int task_id);\n"
+    "int halide_zynq_cma_alloc_fd(struct halide_buffer_t *buf, int cma);\n"
+    "int halide_zynq_cma_free_fd(struct halide_buffer_t *buf, int cma);\n"
+    "int halide_zynq_hwacc_launch_fd(struct UBuffer bufs[], int hwacc);\n"
+    "int halide_zynq_hwacc_sync_fd(int task_id, int hwacc);\n"
+    "void buffer_to_stencil(struct halide_buffer_t* image, struct UBuffer* stencil, int cma);\n"
     "#ifdef __cplusplus\n"
     "}  // extern \"C\" {\n"
     "#endif\n";
@@ -60,13 +69,13 @@ CodeGen_Zynq_C::CodeGen_Zynq_C(ostream &dest,
 }
 
 void CodeGen_Zynq_C::visit(const Realize *op) {
-    internal_assert(ends_with(op->name, ".stream"));
+    //internal_assert(ends_with(op->name, ".stream"));
     open_scope();
     string slice_name = op->name;
     buffer_slices.push_back(slice_name);
 
     do_indent();
-    stream << "cma_buffer_t " << print_name(slice_name) << ";\n";
+    stream << "UBuffer " << print_name(slice_name) << ";\n";
     // Recurse
     print_stmt(op->body);
     close_scope(slice_name);
@@ -76,25 +85,25 @@ void CodeGen_Zynq_C::visit(const ProducerConsumer *op) {
     if (op->is_producer && starts_with(op->name, "_hls_target.")) {
         // reachs the HW boundary
         /* C code:
-           cma_buffer_t kbufs[3];
+           UBuffer kbufs[3];
            kbufs[0] = kbuf_in0;
            kbufs[1] = kbuf_in1;
            kbufs[2] = kbuf_out;
-           int process_id halide_zynq_hwacc_launch(kbufs);
-           halide_pend_processed(process_id);
+           int process_id halide_zynq_hwacc_launch_fd(kbufs, _fd_hwacc);
+           halide_pend_processed_fd(process_id, _fd_hwacc);
         */
         // TODO check the order of buffer slices is consistent with
         // the order of DMA ports in the driver
         do_indent();
-        stream << "cma_buffer_t _cma_bufs[" << buffer_slices.size() << "];\n";
+        stream << "UBuffer _cma_bufs[" << buffer_slices.size() << "];\n";
         for (size_t i = 0; i < buffer_slices.size(); i++) {
             do_indent();
             stream << "_cma_bufs[" << i << "] = " << print_name(buffer_slices[i]) << ";\n";
         }
         do_indent();
-        stream << "int _process_id = halide_zynq_hwacc_launch(_cma_bufs);\n";
+        stream << "int _process_id = halide_zynq_hwacc_launch_fd(_cma_bufs, _fd_hwacc);\n";
         do_indent();
-        stream << "halide_zynq_hwacc_sync(_process_id);\n";
+        stream << "halide_zynq_hwacc_sync_fd(_process_id, _fd_hwacc);\n";
 
         buffer_slices.clear();
     } else {
@@ -107,13 +116,13 @@ void CodeGen_Zynq_C::visit(const Call *op) {
     if (op->is_intrinsic("halide_zynq_cma_alloc")) {
         internal_assert(op->args.size() == 1);
         string buffer = print_expr(op->args[0]);
-        rhs << "halide_zynq_cma_alloc(" << buffer << ")";
+        rhs << "halide_zynq_cma_alloc_fd(" << buffer << ", _fd_cma)";
         print_assignment(op->type, rhs.str());
     } else if (op->is_intrinsic("halide_zynq_cma_free")) {
         internal_assert(op->args.size() == 1);
         string buffer = print_expr(op->args[0]);
         do_indent();
-        stream << "halide_zynq_cma_free(" << buffer << ");\n";
+        stream << "halide_zynq_cma_free_fd(" << buffer << ", _fd_cma);\n";
     } else if (op->is_intrinsic("stream_subimage")) {
         /* IR:
            stream_subimage(direction, buffer_var, stream_var,
@@ -153,6 +162,18 @@ void CodeGen_Zynq_C::visit(const Call *op) {
             << print_expr(l->index)
             << ")";
         print_assignment(op->type, rhs.str());
+    } else if (op->name == "buffer_to_stencil") {
+        /**
+         * disguise tap value as buffer and handle that in the kernel driver,
+         * assuming tap values are one-dimensional array
+         * (at least for the current applications).
+         */
+        internal_assert(op->args.size() == 2);
+        do_indent();
+        stream << "buffer_to_stencil("
+                  << print_expr(op->args[0]) << ", &"
+                  << print_expr(op->args[1]) << ", _fd_cma);\n";
+        id = "0"; // skip evaluation
     } else {
         CodeGen_C::visit(op);
     }

@@ -645,6 +645,7 @@ public:
 // Perform streaming optimization for all functions
 class StreamOpt : public IRMutator {
     const HWKernelDAG &dag;
+    const Target &t;
     Scope<Expr> scope;
 
     using IRMutator::visit;
@@ -700,6 +701,12 @@ class StreamOpt : public IRMutator {
             Stmt new_body = mutate(body);
 
             //stmt = For::make(dag.name + ".accelerator", 0, 1, ForType::Serial, DeviceAPI::Host, body);
+            /* Keyi: inject fwacc (this is a hack) FIXME*/
+            if (t.has_feature(Halide::Target::Zynq)) {
+                Expr fd_hwacc = Variable::make(Int(32), "_fd_hwacc");
+                Stmt fd = Evaluate::make(fd_hwacc);
+                new_body = Block::make(new_body, fd);
+            }
             const string target_name = "_hls_target." + dag.name;
             new_body = Block::make(ProducerConsumer::make(target_name, true, new_body),
                                    ProducerConsumer::make(target_name, false, Evaluate::make(0)));
@@ -815,13 +822,13 @@ class StreamOpt : public IRMutator {
     }
 
 public:
-    StreamOpt(const HWKernelDAG &d)
-        : dag(d) {}
+    StreamOpt(const HWKernelDAG &d, const Target &t)
+        : dag(d), t(t) {}
 };
 
-Stmt stream_opt(Stmt s, const HWKernelDAG &dag) {
+Stmt stream_opt(Stmt s, const HWKernelDAG &dag, const Target &t) {
     debug(3) << s << "\n";
-    s = StreamOpt(dag).mutate(s);
+    s = StreamOpt(dag, t).mutate(s);
     debug(3) << s << "\n";
     return s;
 }

@@ -186,7 +186,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
         s = extract_hw_kernel_dag(s, env, inlined_stages, dags);
 
         for(const HWKernelDAG &dag : dags) {
-            s = stream_opt(s, dag);
+            s = stream_opt(s, dag, t);
             //s = replace_image_param(s, dag);
         }
 
@@ -364,6 +364,13 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
                                            buf.type(), buf.dimensions()));
         }
     }
+
+     /* Zynq driver variables */
+     if (t.has_feature(Target::Zynq)) {
+         /* insert at the back. well sort of*/
+         public_args.emplace_back(Argument("_fd_hwacc", Argument::InputScalar, Int(32), 0));
+         public_args.emplace_back(Argument("_fd_cma", Argument::InputScalar, Int(32), 0));
+     }
 
     vector<InferredArgument> inferred_args = infer_arguments(s, outputs);
     for (const InferredArgument &arg : inferred_args) {

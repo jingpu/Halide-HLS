@@ -14,7 +14,7 @@ namespace Internal {
 
 /** Perform streaming optimization
  */
-Stmt stream_opt(Stmt s, const HWKernelDAG &dag);
+Stmt stream_opt(Stmt s, const HWKernelDAG &dag, const Target &t);
 
 }
 }

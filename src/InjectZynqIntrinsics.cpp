@@ -42,14 +42,16 @@ class InjectCmaIntrinsics : public IRMutator {
 
     Stmt make_zynq_malloc(const string &buf_name) const {
         Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), buf_name + ".buffer");
-        Stmt device_malloc = call_extern_and_assert("halide_zynq_cma_alloc", {buf});
+        Expr cma_buf = Variable::make(type_of<int>(), "_fd_cma");
+        Stmt device_malloc = call_extern_and_assert("halide_zynq_cma_alloc_fd", {buf, cma_buf});
         return device_malloc;
     }
 
     Stmt make_zynq_free(const string &buf_name) const {
         Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), buf_name + ".buffer");
-        Stmt device_free = Evaluate::make(Call::make(Int(32), "halide_zynq_cma_free",
-                                                     {buf}, Call::Extern));
+        Expr cma_buf = Variable::make(type_of<int>(), "_fd_cma");
+        Stmt device_free = Evaluate::make(Call::make(Int(32), "halide_zynq_cma_free_fd",
+                                                     {buf, cma_buf}, Call::Extern));
         return device_free;
     }
 

@@ -136,7 +136,7 @@ public:
         output.compile_to_header("pipeline_hls.h", args, "pipeline_hls", hls_target);
 
         std::vector<Target::Feature> features({Target::Zynq});
-        Target target(Target::Linux, Target::ARM, 32, features);
+        Target target(Target::Linux, Target::ARM, 64, features);
         output.compile_to_zynq_c("pipeline_zynq.c", args, "pipeline_zynq", target);
         output.compile_to_header("pipeline_zynq.h", args, "pipeline_zynq", target);
 

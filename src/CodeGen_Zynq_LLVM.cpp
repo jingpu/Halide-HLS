@@ -16,8 +16,8 @@ CodeGen_Zynq_LLVM::CodeGen_Zynq_LLVM(Target t)
     : CodeGen_ARM(t) { }
 
 void CodeGen_Zynq_LLVM::visit(const Realize *op) {
-    internal_assert(ends_with(op->name, ".stream"));
-    llvm::StructType *kbuf_type = module->getTypeByName("struct.cma_buffer_t");
+    //internal_assert(ends_with(op->name, ".stream"));
+    llvm::StructType *kbuf_type = module->getTypeByName("struct.UBuffer");
     internal_assert(kbuf_type);
     llvm::Constant *one = llvm::ConstantInt::get(i32_t, 1);
     Value *slice_ptr = builder->CreateAlloca(kbuf_type, one, op->name);
@@ -33,16 +33,16 @@ void CodeGen_Zynq_LLVM::visit(const ProducerConsumer *op) {
     if (op->is_producer && starts_with(op->name, "_hls_target.")) {
         // reachs the HW boundary
         /* C code:
-           cma_buffer_t kbufs[3];
+           UBuffer kbufs[3];
            kbufs[0] = kbuf_in0;
            kbufs[1] = kbuf_in1;
            kbufs[2] = kbuf_out;
-           int process_id halide_zynq_hwacc_launch(kbufs);
-           halide_pend_processed(process_id);
+           int process_id halide_zynq_hwacc_launch_fd(kbufs, _fd_hwacc);
+           halide_pend_processed_fd(process_id, _fd_hwacc);
         */
         // TODO check the order of buffer slices is consistent with
         // the order of DMA ports in the driver
-        llvm::StructType *kbuf_type = module->getTypeByName("struct.cma_buffer_t");
+        llvm::StructType *kbuf_type = module->getTypeByName("struct.UBuffer");
         internal_assert(kbuf_type);
         Value *set_size = llvm::ConstantInt::get(i32_t, buffer_slices.size());
         Value *slice_set = builder->CreateAlloca(kbuf_type, set_size);
@@ -58,14 +58,14 @@ void CodeGen_Zynq_LLVM::visit(const ProducerConsumer *op) {
                                                                         i);
             builder->CreateMemCpy(elem_ptr, slice_ptr, size_of_kbuf, 0);
         }
-
-        vector<Value *> process_args({slice_set});
-        llvm::Function *process_fn = module->getFunction("halide_zynq_hwacc_launch");
+        Value *fd = sym_get("_fd_hwacc", true);
+        vector<Value *> process_args({slice_set, fd});
+        llvm::Function *process_fn = module->getFunction("halide_zynq_hwacc_launch_fd");
         internal_assert(process_fn);
         Value *process_id = builder->CreateCall(process_fn, process_args);
 
-        vector<Value *> pend_args({process_id});
-        llvm::Function *pend_fn = module->getFunction("halide_zynq_hwacc_sync");
+        vector<Value *> pend_args({process_id, fd});
+        llvm::Function *pend_fn = module->getFunction("halide_zynq_hwacc_sync_fd");
         internal_assert(pend_fn);
         builder->CreateCall(pend_fn, pend_args);
 
@@ -76,18 +76,20 @@ void CodeGen_Zynq_LLVM::visit(const ProducerConsumer *op) {
 }
 
 void CodeGen_Zynq_LLVM::visit(const Call *op) {
-    if (op->is_intrinsic("halide_zynq_cma_alloc")) {
+    if (op->is_intrinsic("halide_zynq_cma_alloc_fd")) {
         internal_assert(op->args.size() == 1);
         Value *buffer = codegen(op->args[0]);
-        llvm::Function *fn = module->getFunction("halide_zynq_cma_alloc");
+        Value *fd = codegen(op->args[1]);
+        llvm::Function *fn = module->getFunction("halide_zynq_cma_alloc_fd");
         internal_assert(fn);
-        value = builder->CreateCall(fn, {buffer});
+        value = builder->CreateCall(fn, {buffer, fd});
     } else if (op->is_intrinsic("halide_zynq_cma_free")) {
         internal_assert(op->args.size() == 1);
         Value *buffer = codegen(op->args[0]);
-        llvm::Function *fn = module->getFunction("halide_zynq_cma_free");
+        Value *fd = codegen(op->args[1]);
+        llvm::Function *fn = module->getFunction("halide_zynq_cma_free_fd");
         internal_assert(fn);
-        value = builder->CreateCall(fn, {buffer});
+        value = builder->CreateCall(fn, {buffer, fd});
     } else if (op->is_intrinsic("stream_subimage")) {
         /* IR:
            stream_subimage(direction, buffer_var, stream_var,
@@ -124,6 +126,19 @@ void CodeGen_Zynq_LLVM::visit(const Call *op) {
         internal_assert(load->index.type().is_scalar()) << "Can't take the address of a vector load\n";
 
         value = codegen_buffer_pointer(load->name, load->type, load->index);
+    } else if (op->name == "buffer_to_stencil") {
+        /**
+         * disguise tap value as buffer and handle that in the kernel driver,
+         * assuming tap values are one-dimensional array
+         * (at least for the current applications).
+         */
+        internal_assert(op->args.size() == 2);
+        Value *buffer = codegen(op->args[0]);
+        Value *stencil = codegen(op->args[1]);
+        Value *fd = sym_get("_fd_hwacc", true);
+        llvm::Function *fn = module->getFunction("buffer_to_stencil");
+        internal_assert(fn);
+        value = builder->CreateCall(fn, {buffer, stencil, fd});
     } else {
         CodeGen_ARM::visit(op);
     }
