@@ -63,7 +63,7 @@ protected:
          * Attempt to extract useful names from the arg name.
          * If it fails, fall back to arg_%d as before.
          */
-        static std::string get_arg_name(const std::string &name, uint32_t index);
+        static std::string get_arg_name(const std::string &name, uint32_t index) const;
     };
 
     /** A name for the HLS target */

@@ -146,8 +146,8 @@ string CodeGen_HLS_Target::CodeGen_HLS_C::get_arg_name(const string &arg_name,
     }
     pos = name.find(".");
     if (pos != std::string::npos) {
-        /* $ does compile, but it's more confusing since it implies a naming
-         * conflift in Halide */
+        // $ does compile, but it's more confusing since it implies a naming
+        // conflift in Halide
         if (name.find("$") == std::string::npos)
             return name.substr(0, pos);
     }
