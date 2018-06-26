@@ -36,31 +36,58 @@ typedef struct buffer_t {
 } buffer_t;
 #endif
 
-#ifndef CMA_BUFFER_T_DEFINED
-#define CMA_BUFFER_T_DEFINED
-struct mMap;
-typedef struct cma_buffer_t {
-  unsigned int id; // ID flag for internal use
-  unsigned int width; // Width of the image
-  unsigned int stride; // Stride between rows, in pixels. This must be >= width
-  unsigned int height; // Height of the image
-  unsigned int depth; // Byte-depth of the image
-  unsigned int phys_addr; // Bus address for DMA
-  void* kern_addr; // Kernel virtual address
-  struct mMap* cvals;
-  unsigned int mmap_offset;
-} cma_buffer_t;
-#endif
+/**
+ * Userspace buffer
+ */
+#ifndef _UBUFFER_H_
+#define _UBUFFER_H_
+
+#ifdef __KERNEL__
+#include <linux/types.h>
+#define U32_TYPE    u32
+#else
+#include <stdint.h>
+#define U32_TYPE    uint32_t
+#endif /* __KERNEL__ */
+
+/* user buffer declaration */
+typedef struct UBuffer {
+    U32_TYPE id;        // ID flag for internal use
+    U32_TYPE offset;    // used for slicing purposes
+                        // this is the offset in bytes
+                        // from the beginning of root buffer
+    U32_TYPE width;     // width of the image
+    U32_TYPE height;    // height of the image
+    U32_TYPE stride;    // stride of the image
+    U32_TYPE depth;     // byte-depth of the image
+} UBuffer;
+
+#endif /* _UBUFFER_H_ */
 
 #ifndef _IOCTL_CMDS_H_
 #define _IOCTL_CMDS_H_
-// TODO: switch these out for "proper" mostly-system-unique ioctl numbers
-#define GET_BUFFER 1000 // Get an unused buffer
-#define GRAB_IMAGE 1001 // Acquire image from camera
-#define FREE_IMAGE 1002 // Release buffer
-#define PROCESS_IMAGE 1003 // Push to stencil path
-#define PEND_PROCESSED 1004 // Retreive from stencil path
-#endif
+
+#define MAGIC           'Z'
+
+/* cma driver */
+#define GET_BUFFER      _IOWR(MAGIC, 0x20, void *)   // Get an unused buffer
+#define FREE_BUFFER     _IOWR(MAGIC, 0x21, void *)   // Release buffer
+
+/* dma driver */
+#define ENROLL_BUFFER   _IOWR(MAGIC, 0x40, void *)
+#define WAIT_COMPLETE   _IOWR(MAGIC, 0x41, void *)
+#define STATUS_CHECK    _IOWR(MAGIC, 0x42, void *)
+#define DMA_COMPLETED   2
+#define DMA_IN_PROGRESS 1
+
+/* hwacc */
+#define GRAB_IMAGE      _IOWR(MAGIC, 0x22, void *)  // Acquire image from camera
+#define FREE_IMAGE      _IOWR(MAGIC, 0x23, void *)  // Release buffer
+#define PROCESS_IMAGE   _IOWR(MAGIC, 0x24, void *)  // Push to stencil path
+#define PEND_PROCESSED  _IOWR(MAGIC, 0x25, void *)  // Retreive from stencil path
+#define READ_TIMER      _IOWR(MAGIC, 0x26, void *)  // Retreive hw timer count
+
+#endif /* _IOCTL_CMDS_H_ */
 
 #ifdef __cplusplus
 extern "C" {
@@ -109,11 +136,11 @@ void halide_zynq_free(void *user_context, void *ptr) {
     // do nothing
 }
 
-static int cma_get_buffer(cma_buffer_t* ptr) {
+static int cma_get_buffer(UBuffer* ptr) {
     return ioctl(fd_cma, GET_BUFFER, (long unsigned int)ptr);
 }
 
-static int cma_free_buffer(cma_buffer_t* ptr) {
+static int cma_free_buffer(UBuffer* ptr) {
     return ioctl(fd_cma, FREE_IMAGE, (long unsigned int)ptr);
 }
 
@@ -123,7 +150,7 @@ int halide_zynq_cma_alloc(struct halide_buffer_t *buf) {
         return -1;
     }
 
-    cma_buffer_t *cbuf = (cma_buffer_t *)malloc(sizeof(cma_buffer_t));
+    UBuffer *cbuf = (UBuffer *)malloc(sizeof(UBuffer));
     if (cbuf == NULL) {
         printf("malloc failed.\n");
         return -1;
@@ -136,7 +163,7 @@ int halide_zynq_cma_alloc(struct halide_buffer_t *buf) {
     size_t nDims = buf->dimensions;
     if (nDims < 2) {
         free(cbuf);
-        printf("buffer_t has less than 2 dimension, not supported in CMA driver.");
+        printf("buffer_t has less than 2 dimension, not supported in CMA driver.\n");
         return -3;
     }
     cbuf->depth = (buf->type.bits + 7) / 8;
@@ -155,10 +182,10 @@ int halide_zynq_cma_alloc(struct halide_buffer_t *buf) {
         printf("cma_get_buffer() returned %d (failed).\n", status);
         return -2;
     }
-
+    uint32_t cma_buf_id = cbuf->id << 12;
     buf->device = (uint64_t) cbuf;
     buf->host = (uint8_t*) mmap(NULL, cbuf->stride * cbuf->height * cbuf->depth,
-                                PROT_WRITE, MAP_SHARED, fd_cma, cbuf->mmap_offset);
+                                PROT_WRITE, MAP_SHARED, fd_cma, cma_buf_id);
 
     if ((void *) buf->host == (void *) -1) {
         free(cbuf);
@@ -173,25 +200,33 @@ int halide_zynq_cma_free(struct halide_buffer_t *buf) {
         printf("Zynq runtime is uninitialized.\n");
         return -1;
     }
-
-    cma_buffer_t *cbuf = (cma_buffer_t *)buf->device;
+	UBuffer *cbuf = (UBuffer *)buf->device;
     munmap((void*)buf->host, cbuf->stride * cbuf->height * cbuf->depth);
     cma_free_buffer(cbuf);
     free(cbuf);
+    buf->device = 0;
     return 0;
 }
 
-int halide_zynq_subimage(const struct halide_buffer_t* image, struct cma_buffer_t* subimage, void *address_of_subimage_origin, int width, int height) {
-    *subimage = *((cma_buffer_t *)image->device); // copy depth, stride, data, etc.
+int halide_zynq_subimage(const struct halide_buffer_t* image, struct UBuffer* subimage, void *address_of_subimage_origin, int width, int height) {
+    *subimage = *((UBuffer *)image->device); // copy depth, stride, data, etc.
     subimage->width = width;
     subimage->height = height;
     size_t offset = (uint8_t *)address_of_subimage_origin - image->host;
-    subimage->phys_addr += offset;
-    subimage->mmap_offset += offset;
+
+    //subimage->phys_addr += offset;
+    //subimage->mmap_offset += offset;
+
+    /* the current implementation doesn't support offset any more */
+    if (offset != 0) {
+        printf("subimage offset not 0\n");
+        return -1;
+    }
+
     return 0;
 }
 
-int halide_zynq_hwacc_launch(struct cma_buffer_t bufs[]) {
+int halide_zynq_hwacc_launch(struct UBuffer bufs[]) {
     if (fd_hwacc == 0) {
         printf("Zynq runtime is uninitialized.\n");
         return -1;
