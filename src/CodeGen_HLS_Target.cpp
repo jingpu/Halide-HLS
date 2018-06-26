@@ -135,6 +135,25 @@ string CodeGen_HLS_Target::CodeGen_HLS_C::print_stencil_pragma(const string &nam
     return oss.str();
 }
 
+string CodeGen_HLS_Target::CodeGen_HLS_C::get_arg_name(const string &arg_name,
+                                                       uint32_t index) {
+
+    string name = arg_name;
+    auto pos = name.find(":");
+    if (pos != std::string::npos) {
+        // we don't need the pipe: part
+        name = name.substr(++pos);
+    }
+    pos = name.find(".");
+    if (pos != std::string::npos) {
+        // $ does compile, but it's more confusing since it implies a naming
+        // conflift in Halide
+        if (name.find("$") == std::string::npos)
+            return name.substr(0, pos);
+    }
+    // fall back
+    return "arg_" + std::to_string(index);
+}
 
 void CodeGen_HLS_Target::CodeGen_HLS_C::add_kernel(Stmt stmt,
                                                    const string &name,
@@ -142,7 +161,7 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::add_kernel(Stmt stmt,
     // Emit the function prototype
     stream << "void " << name << "(\n";
     for (size_t i = 0; i < args.size(); i++) {
-        string arg_name = "arg_" + std::to_string(i);
+        string arg_name = get_arg_name(args[i].name, i);
         if (args[i].is_stencil) {
             CodeGen_HLS_Base::Stencil_Type stype = args[i].stencil_type;
             internal_assert(args[i].stencil_type.type == Stencil_Type::StencilContainerType::AxiStream ||
@@ -173,7 +192,7 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::add_kernel(Stmt stmt,
                << "#pragma HLS INTERFACE s_axilite port=return"
                << " bundle=config\n";
         for (size_t i = 0; i < args.size(); i++) {
-            string arg_name = "arg_" + std::to_string(i);
+            string arg_name = get_arg_name(args[i].name, i);
             if (args[i].is_stencil) {
                 if (ends_with(args[i].name, ".stream")) {
                     // stream arguments use AXI-stream interface
@@ -199,7 +218,7 @@ void CodeGen_HLS_Target::CodeGen_HLS_C::add_kernel(Stmt stmt,
         do_indent();
         stream << "// alias the arguments\n";
         for (size_t i = 0; i < args.size(); i++) {
-            string arg_name = "arg_" + std::to_string(i);
+            string arg_name = get_arg_name(args[i].name, i);
             do_indent();
             if (args[i].is_stencil) {
                 CodeGen_HLS_Base::Stencil_Type stype = args[i].stencil_type;
