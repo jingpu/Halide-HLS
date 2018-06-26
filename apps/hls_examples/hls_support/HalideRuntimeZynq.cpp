@@ -166,7 +166,7 @@ int halide_zynq_cma_alloc(struct halide_buffer_t *buf) {
         printf("buffer_t has less than 2 dimension, not supported in CMA driver.\n");
         return -3;
     }
-    cbuf->depth = (buf->type.bits + 7) / 8;
+    cbuf->depth = buf->type.bytes();
     if (nDims > 2) {
         for (size_t i = 0; i < nDims - 2; i++) {
             cbuf->depth *= buf->dim[i].extent;
@@ -200,7 +200,7 @@ int halide_zynq_cma_free(struct halide_buffer_t *buf) {
         printf("Zynq runtime is uninitialized.\n");
         return -1;
     }
-	UBuffer *cbuf = (UBuffer *)buf->device;
+    UBuffer *cbuf = (UBuffer *)buf->device;
     munmap((void*)buf->host, cbuf->stride * cbuf->height * cbuf->depth);
     cma_free_buffer(cbuf);
     free(cbuf);
@@ -216,12 +216,7 @@ int halide_zynq_subimage(const struct halide_buffer_t* image, struct UBuffer* su
 
     //subimage->phys_addr += offset;
     //subimage->mmap_offset += offset;
-
-    /* the current implementation doesn't support offset any more */
-    if (offset != 0) {
-        printf("subimage offset not 0\n");
-        return -1;
-    }
+    subimage->offset = offset;
 
     return 0;
 }

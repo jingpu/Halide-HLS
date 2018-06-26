@@ -63,10 +63,10 @@ extern "C" {
 
 // forward declarations of some POSIX APIs
 /* open-only flags */
-#define	O_RDONLY	0x0000		/* open for reading only */
-#define	O_WRONLY	0x0001		/* open for writing only */
-#define	O_RDWR		0x0002		/* open for reading and writing */
-#define	O_ACCMODE	0x0003		/* mask for above modes */
+#define O_RDONLY    0x0000      /* open for reading only */
+#define O_WRONLY    0x0001      /* open for writing only */
+#define O_RDWR      0x0002      /* open for reading and writing */
+#define O_ACCMODE   0x0003      /* mask for above modes */
 /* mmap-only flags */
 #define PROT_WRITE       0x2
 #define MAP_SHARED       0x01
@@ -153,7 +153,7 @@ WEAK int halide_zynq_cma_alloc(struct halide_buffer_t *buf) {
         error(NULL) << "buffer_t has less than 2 dimension, not supported in CMA driver.\n";
         return -3;
     }
-    cbuf->depth = (buf->type.bits + 7) / 8;
+    cbuf->depth = buf->type.bytes();
     if (nDims > 2) {
         for (size_t i = 0; i < nDims - 2; i++) {
             cbuf->depth *= buf->dim[i].extent;
@@ -166,7 +166,7 @@ WEAK int halide_zynq_cma_alloc(struct halide_buffer_t *buf) {
     int status = cma_get_buffer(cbuf);
     if (status != 0) {
         free(cbuf);
-        error(NULL) << "cma_get_buffer() returned " << status << "(failed).\n";
+        error(NULL) << "cma_get_buffer() returned " << status << " (failed).\n";
         return -2;
     }
     uint32_t cma_buf_id = cbuf->id << 12;
@@ -183,11 +183,12 @@ WEAK int halide_zynq_cma_alloc(struct halide_buffer_t *buf) {
 }
 
 WEAK int halide_zynq_cma_free(struct halide_buffer_t *buf) {
+    debug(0) << "halide_zynq_cma_free\n";
     if (fd_cma == 0) {
         error(NULL) << "Zynq runtime is uninitialized.\n";
         return -1;
     }
-	UBuffer *cbuf = (UBuffer *)buf->device;
+    UBuffer *cbuf = (UBuffer *)buf->device;
     munmap((void*)buf->host, cbuf->stride * cbuf->height * cbuf->depth);
     cma_free_buffer(cbuf);
     free(cbuf);
@@ -204,17 +205,13 @@ WEAK int halide_zynq_subimage(const struct halide_buffer_t* image, struct UBuffe
 
     //subimage->phys_addr += offset;
     //subimage->mmap_offset += offset;
-
-    /* the current implementation doesn't support offset any more */
-    if (offset != 0) {
-        error(NULL) << "subimage offset not 0\n";
-        return -1;
-    }
+    subimage->offset = offset;
 
     return 0;
 }
 
 WEAK int halide_zynq_hwacc_launch(struct UBuffer bufs[]) {
+    debug(0) << "halide_zynq_hwacc_launch\n";
     if (fd_hwacc == 0) {
         error(NULL) << "Zynq runtime is uninitialized.\n";
         return -1;
@@ -224,6 +221,7 @@ WEAK int halide_zynq_hwacc_launch(struct UBuffer bufs[]) {
 }
 
 WEAK int halide_zynq_hwacc_sync(int task_id){
+    debug(0) << "halide_zynq_hwacc_sync\n";
     if (fd_hwacc == 0) {
         error(NULL) << "Zynq runtime is uninitialized.\n";
         return -1;
