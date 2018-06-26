@@ -17,7 +17,7 @@ CodeGen_Zynq_LLVM::CodeGen_Zynq_LLVM(Target t)
 
 void CodeGen_Zynq_LLVM::visit(const Realize *op) {
     internal_assert(ends_with(op->name, ".stream"));
-    llvm::StructType *kbuf_type = module->getTypeByName("struct.cma_buffer_t");
+    llvm::StructType *kbuf_type = module->getTypeByName("struct.UBuffer");
     internal_assert(kbuf_type);
     llvm::Constant *one = llvm::ConstantInt::get(i32_t, 1);
     Value *slice_ptr = builder->CreateAlloca(kbuf_type, one, op->name);
@@ -33,7 +33,7 @@ void CodeGen_Zynq_LLVM::visit(const ProducerConsumer *op) {
     if (op->is_producer && starts_with(op->name, "_hls_target.")) {
         // reachs the HW boundary
         /* C code:
-           cma_buffer_t kbufs[3];
+           UBuffer kbufs[3];
            kbufs[0] = kbuf_in0;
            kbufs[1] = kbuf_in1;
            kbufs[2] = kbuf_out;
@@ -42,7 +42,7 @@ void CodeGen_Zynq_LLVM::visit(const ProducerConsumer *op) {
         */
         // TODO check the order of buffer slices is consistent with
         // the order of DMA ports in the driver
-        llvm::StructType *kbuf_type = module->getTypeByName("struct.cma_buffer_t");
+        llvm::StructType *kbuf_type = module->getTypeByName("struct.UBuffer");
         internal_assert(kbuf_type);
         Value *set_size = llvm::ConstantInt::get(i32_t, buffer_slices.size());
         Value *slice_set = builder->CreateAlloca(kbuf_type, set_size);
