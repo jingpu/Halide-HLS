@@ -35,6 +35,20 @@ extern int munmap(void *addr, size_t length);
 static int fd_hwacc = 0;
 static int fd_cma = 0;
 
+WEAK int halide_zynq_set_fd(int hwacc, int cma) {
+    if (!hwacc) {
+        error(NULL) << "hwacc is uninitialized\n";
+        return -1;
+    }
+    if (!cma) {
+        error(NULL) << "cma is uninitialized\n";
+        return -1;
+    }
+    fd_hwacc = hwacc;
+    fd_cma = cma;
+    return 0;
+}
+
 WEAK int halide_zynq_init() {
     debug(0) << "halide_zynq_init\n";
     if (fd_cma || fd_hwacc) {

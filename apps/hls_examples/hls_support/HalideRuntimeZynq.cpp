@@ -70,6 +70,20 @@ extern "C" {
 static int fd_hwacc = 0;
 static int fd_cma = 0;
 
+int halide_zynq_set_fd(int hwacc, int cma) {
+    if (!hwacc) {
+        printf("hwacc is uninitialized\n");
+        return -1;
+    }
+    if (!cma) {
+        printf("cma is uninitialized\n");
+        return -1;
+    }
+    fd_hwacc = hwacc;
+    fd_cma = cma;
+    return 0;
+}
+
 int halide_zynq_init() {
     if (fd_cma || fd_hwacc) {
         printf("Zynq runtime is already initialized.\n");
