@@ -35,6 +35,12 @@ typedef struct cma_buffer_t {
 } cma_buffer_t;
 #endif
 
+
+/**
+ * Set Zynq runtime by providing char driver file descriptor
+ */
+extern int halide_zynq_set_fd(int hwacc, int cma);
+
 /** Initialize Zynq runtime environment and must be called
     before any other function from the runtime API. */
 extern int halide_zynq_init();

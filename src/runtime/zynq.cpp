@@ -35,6 +35,20 @@ extern int munmap(void *addr, size_t length);
 static int fd_hwacc = 0;
 static int fd_cma = 0;
 
+WEAK int halide_zynq_set_fd(int hwacc, int cma) {
+    if (!hwacc) {
+        error(NULL) << "hwacc is uninitialized\n";
+        return -1;
+    }
+    if (!cma) {
+        error(NULL) << "cma is uninitialized\n";
+        return -1;
+    }
+    fd_hwacc = hwacc;
+    fd_cma = cma;
+    return 0;
+}
+
 WEAK int halide_zynq_init() {
     debug(0) << "halide_zynq_init\n";
     if (fd_cma || fd_hwacc) {
@@ -44,14 +58,14 @@ WEAK int halide_zynq_init() {
     fd_cma = open("/dev/cmabuffer0", O_RDWR, 0644);
     if(fd_cma == -1) {
         error(NULL) << "Failed to open cma provider!\n";
-        fd_cma = fd_hwacc = 0;
+        halide_zynq_set_fd(0, 0);
         return -2;
     }
     fd_hwacc = open("/dev/hwacc0", O_RDWR, 0644);
     if(fd_hwacc == -1) {
         error(NULL) << "Failed to open hwacc device!\n";
         close(fd_cma);
-        fd_cma = fd_hwacc = 0;
+        halide_zynq_set_fd(0, 0);
         return -2;
     }
     return 0;

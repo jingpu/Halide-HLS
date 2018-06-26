@@ -70,6 +70,20 @@ extern "C" {
 static int fd_hwacc = 0;
 static int fd_cma = 0;
 
+int halide_zynq_set_fd(int hwacc, int cma) {
+    if (!hwacc) {
+        printf("hwacc is uninitialized\n");
+        return -1;
+    }
+    if (!cma) {
+        printf("cma is uninitialized\n");
+        return -1;
+    }
+    fd_hwacc = hwacc;
+    fd_cma = cma;
+    return 0;
+}
+
 int halide_zynq_init() {
     if (fd_cma || fd_hwacc) {
         printf("Zynq runtime is already initialized.\n");
@@ -78,14 +92,14 @@ int halide_zynq_init() {
     fd_cma = open("/dev/cmabuffer0", O_RDWR, 0644);
     if(fd_cma == -1) {
         printf("Failed to open cma provider!\n");
-        fd_cma = fd_hwacc = 0;
+        halide_zynq_set_fd(0, 0);
         return -2;
     }
     fd_hwacc = open("/dev/hwacc0", O_RDWR, 0644);
     if(fd_hwacc == -1) {
         printf("Failed to open hwacc device!\n");
         close(fd_cma);
-        fd_cma = fd_hwacc = 0;
+        halide_zynq_set_fd(0, 0);
         return -2;
     }
     return 0;
