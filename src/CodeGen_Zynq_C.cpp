@@ -20,25 +20,21 @@ namespace {
 
 // copied from src/runtime/zynq.cpp
 const string zynq_runtime =
-    "#ifndef _UBUFFER_H_\n"
-    "#define _UBUFFER_H_\n"
-    "#ifdef __KERNEL__\n"
-    "#include <linux/types.h>\n"
-    "#define U32_TYPE   u32\n"
-    "#else\n"
-    "#include <stdint.h>\n"
-    "#define U32_TYPE   uint32_t\n"
-    "#endif /* __KERNEL__ */\n"
-    "/* user buffer declaration */\n"
-    "typedef struct UBuffer {\n"
-        "U32_TYPE id;           // ID flag for internal use\n"
-        "U32_TYPE offset;       // used for slicing purposes\n"
-        "U32_TYPE width;        // width of the image\n"
-        "U32_TYPE height;       // height of the image\n"
-        "U32_TYPE stride;       // stride of the image\n"
-        "U32_TYPE depth;        // byte-depth of the image\n"
-    "} UBuffer;\n"
-    "#endif /* _UBUFFER_H_ */\n"
+    "#ifndef CMA_BUFFER_T_DEFINED\n"
+    "#define CMA_BUFFER_T_DEFINED\n"
+    "struct mMap;\n"
+    "typedef struct cma_buffer_t {\n"
+    "  unsigned int id; // ID flag for internal use\n"
+    "  unsigned int width; // Width of the image\n"
+    "  unsigned int stride; // Stride between rows, in pixels. This must be >= width\n"
+    "  unsigned int height; // Height of the image\n"
+    "  unsigned int depth; // Byte-depth of the image\n"
+    "  unsigned int phys_addr; // Bus address for DMA\n"
+    "  void* kern_addr; // Kernel virtual address\n"
+    "  struct mMap* cvals;\n"
+    "  unsigned int mmap_offset;\n"
+    "} cma_buffer_t;\n"
+    "#endif\n"
     "\n"
     "#ifdef __cplusplus\n"
     "extern \"C\" {\n"
@@ -48,8 +44,8 @@ const string zynq_runtime =
     "void halide_zynq_free(void *user_context, void *ptr);\n"
     "int halide_zynq_cma_alloc(struct halide_buffer_t *buf);\n"
     "int halide_zynq_cma_free(struct halide_buffer_t *buf);\n"
-    "int halide_zynq_subimage(const struct halide_buffer_t* image, struct UBuffer* subimage, void *address_of_subimage_origin, int width, int height);\n"
-    "int halide_zynq_hwacc_launch(struct UBuffer bufs[]);\n"
+    "int halide_zynq_subimage(const struct halide_buffer_t* image, struct cma_buffer_t* subimage, void *address_of_subimage_origin, int width, int height);\n"
+    "int halide_zynq_hwacc_launch(struct cma_buffer_t bufs[]);\n"
     "int halide_zynq_hwacc_sync(int task_id);\n"
     "#ifdef __cplusplus\n"
     "}  // extern \"C\" {\n"
@@ -70,7 +66,7 @@ void CodeGen_Zynq_C::visit(const Realize *op) {
     buffer_slices.push_back(slice_name);
 
     do_indent();
-    stream << "UBuffer " << print_name(slice_name) << ";\n";
+    stream << "cma_buffer_t " << print_name(slice_name) << ";\n";
     // Recurse
     print_stmt(op->body);
     close_scope(slice_name);
@@ -80,7 +76,7 @@ void CodeGen_Zynq_C::visit(const ProducerConsumer *op) {
     if (op->is_producer && starts_with(op->name, "_hls_target.")) {
         // reachs the HW boundary
         /* C code:
-           UBuffer kbufs[3];
+           cma_buffer_t kbufs[3];
            kbufs[0] = kbuf_in0;
            kbufs[1] = kbuf_in1;
            kbufs[2] = kbuf_out;
@@ -90,7 +86,7 @@ void CodeGen_Zynq_C::visit(const ProducerConsumer *op) {
         // TODO check the order of buffer slices is consistent with
         // the order of DMA ports in the driver
         do_indent();
-        stream << "UBuffer _cma_bufs[" << buffer_slices.size() << "];\n";
+        stream << "cma_buffer_t _cma_bufs[" << buffer_slices.size() << "];\n";
         for (size_t i = 0; i < buffer_slices.size(); i++) {
             do_indent();
             stream << "_cma_bufs[" << i << "] = " << print_name(buffer_slices[i]) << ";\n";
