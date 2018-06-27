@@ -182,6 +182,9 @@ int halide_zynq_cma_alloc(struct halide_buffer_t *buf) {
         printf("cma_get_buffer() returned %d (failed).\n", status);
         return -2;
     }
+    // use mem offset filed as cambuffer ID
+    // notice that since page size is 4K, the kernel will automatically
+    // shift the mem offset >> by 12. Hence we need to shift left 12 bits
     uint32_t cma_buf_id = cbuf->id << 12;
     buf->device = (uint64_t) cbuf;
     buf->host = (uint8_t*) mmap(NULL, cbuf->stride * cbuf->height * cbuf->depth,

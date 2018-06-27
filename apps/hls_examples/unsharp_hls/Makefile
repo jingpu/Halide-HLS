@@ -14,7 +14,7 @@ run_hls: $(HLS_LOG)
 pipeline: pipeline.cpp
 	$(CXX) $(CXXFLAGS) -Wall -g $^ $(LIB_HALIDE) -o $@ $(LDFLAGS) -ltinfo
 
-pipeline_hls.cpp pipeline_native.o pipeline_cuda.o pipeline_zynq.o: pipeline
+pipeline_hls.cpp pipeline_native.o pipeline_cuda.o pipeline_zynq.c: pipeline
 	HL_DEBUG_CODEGEN=0 ./pipeline
 
 run: run.cpp pipeline_hls.cpp hls_target.cpp pipeline_native.o
@@ -34,14 +34,17 @@ $(HLS_LOG): ../hls_support/run_hls.tcl pipeline_hls.cpp run.cpp
 	RUN_ARGS=$(realpath ./../../images/benchmark_8mp_rgb.png) \
 	vivado_hls -f $< -l $(HLS_LOG)
 
-#pipeline_zynq.o: pipeline_zynq.c
-#	$(CXX) -c -O2 $(CXXFLAGS) -g -Wall -Werror $^ -o $@
+pipeline_zynq.o: pipeline_zynq.c
+	$(CXX) -c -O2 $(CXXFLAGS) -g -Wall -Werror $^ -o $@
 
 run_zynq.o: run_zynq.cpp
 	$(CXX) -c $(CXXFLAGS) -g -Wall -Werror $^ -o $@  $(PNGFLAGS)
 
-run_zynq: pipeline_zynq.o pipeline_native.o run_zynq.o
-	$(CXX) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
+HalideRuntimeZynq.o: ../hls_support/HalideRuntimeZynq.cpp
+	$(CXX) -Wall -Werror -I ../../../src/runtime $^ -c -o $@
+
+run_zynq: pipeline_zynq.o pipeline_native.o run_zynq.o HalideRuntimeZynq.o
+	$(CXX) -Wall -Werror $^ -lpthread -ldl -o $@  $(IMAGE_IO_FLAGS)
 
 out_zynq.png: run_zynq
 	HL_NUM_THREADS=3 ./run_zynq  ../../images/benchmark_8mp_rgb.png

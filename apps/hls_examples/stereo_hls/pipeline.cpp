@@ -305,8 +305,8 @@ void compile_hls() {
     output.compile_to_header("pipeline_hls.h", args, "pipeline_hls", hls_target);
 
     // Create the Zynq platform target
-    std::vector<Target::Feature> features({Target::Zynq});
-    Target target(Target::Linux, Target::ARM, 32, features);
+    Target target = get_target_from_environment();
+    target.set_feature(Target::Zynq, true);
     output.compile_to_zynq_c("pipeline_zynq.c", args, "pipeline_zynq", target);
     output.compile_to_header("pipeline_zynq.h", args, "pipeline_zynq", target);
 
