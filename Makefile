@@ -700,6 +700,9 @@ endif
 zynq_runtime: $(ROOT_DIR)/apps/hls_examples/hls_support/HalideRuntimeZynq.cpp $(INCLUDE_DIR)/HalideRuntime.h
 	$(CXX) -c -Wall $(ROOT_DIR)/apps/hls_examples/hls_support/HalideRuntimeZynq.cpp -o $(BUILD_DIR)/HalideRuntimeZynq.o -I$(INCLUDE_DIR)
 	ar rvs $(LIB_DIR)/libZynqRuntime.a $(BUILD_DIR)/HalideRuntimeZynq.o
+	# test zynq codegen
+	make -C apps/hls_examples/unsharp_hls/ run_zynq	
+	make -C apps/hls_examples/stereo_hls/ pipeline_zynq.o
 
 $(INCLUDE_DIR)/Halide.h: $(HEADERS) $(SRC_DIR)/HalideFooter.h $(BIN_DIR)/build_halide_h
 	mkdir -p $(INCLUDE_DIR)
