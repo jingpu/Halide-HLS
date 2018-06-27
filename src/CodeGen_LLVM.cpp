@@ -279,11 +279,6 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
                         Target::OpenGL,
                         Target::OpenGLCompute,
                         Target::Metal})) << "Zynq feature cannot be enabled with GPU features.\n";
-        user_assert(target.arch == Target::ARM &&
-                    target.os == Target::Linux &&
-                    (target.bits == 32
-                     || target.bits == 64))
-            << "Zynq runtime only suport ARM Linux.\n";
         return make_codegen<CodeGen_Zynq_LLVM>(target, context);
     }
 

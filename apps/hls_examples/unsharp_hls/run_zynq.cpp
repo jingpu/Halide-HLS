@@ -8,11 +8,11 @@
 #include "pipeline_zynq.h"
 #include "pipeline_native.h"
 
-#include "BufferMinimal.h"
+#include "HalideBuffer.h"
 #include "halide_image_io.h"
 
 using namespace Halide::Tools;
-using namespace Halide::Runtime::HLS;
+using namespace Halide::Runtime;
 
 extern "C" {
 extern int halide_zynq_init();
@@ -24,9 +24,9 @@ int main(int argc, char **argv) {
     // Open the buffer allocation device
     halide_zynq_init();
 
-    BufferMinimal<uint8_t> input = load_image(argv[1]);
-    BufferMinimal<uint8_t> out_native(2400, 3200, 3);
-    BufferMinimal<uint8_t> out_zynq(480*5, 640*5, 3);
+    Buffer<uint8_t> input = load_image(argv[1]);
+    Buffer<uint8_t> out_native(2400, 3200, 3);
+    Buffer<uint8_t> out_zynq(480*5, 640*5, 3);
 
     printf("start.\n");
 

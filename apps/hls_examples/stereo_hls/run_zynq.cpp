@@ -8,11 +8,11 @@
 #include "pipeline_zynq.h"
 #include "pipeline_native.h"
 
-#include "BufferMinimal.h"
+#include "HalideBuffer.h"
 #include "halide_image_io.h"
 
 using namespace Halide::Tools;
-using namespace Halide::Runtime::HLS;
+using namespace Halide::Runtime;
 
 extern "C" {
 extern int halide_zynq_init();
@@ -28,13 +28,13 @@ int main(int argc, char **argv) {
 
     // Halide::Buffer<T> cannot be automatically converted to halide_buffer_t*
     // use BufferMinimal<T> instead
-    BufferMinimal<uint8_t> left = load_image(argv[1]);
-    BufferMinimal<uint8_t> left_remap = load_image(argv[2]);
-    BufferMinimal<uint8_t> right = load_image(argv[3]);
-    BufferMinimal<uint8_t> right_remap = load_image(argv[4]);
+    Buffer<uint8_t> left = load_image(argv[1]);
+    Buffer<uint8_t> left_remap = load_image(argv[2]);
+    Buffer<uint8_t> right = load_image(argv[3]);
+    Buffer<uint8_t> right_remap = load_image(argv[4]);
 
-    BufferMinimal<uint8_t> out_native(left.width(), left.height());
-    BufferMinimal<uint8_t> out_zynq(600*4, 400*8);
+    Buffer<uint8_t> out_native(left.width(), left.height());
+    Buffer<uint8_t> out_zynq(600*4, 400*8);
 
     printf("start.\n");
 
