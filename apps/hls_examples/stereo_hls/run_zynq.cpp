@@ -14,14 +14,16 @@
 using namespace Halide::Tools;
 using namespace Halide::Runtime::HLS;
 
+extern "C" {
 extern int halide_zynq_init();
+}
 
 int main(int argc, char **argv) {
     if (argc < 5) {
         printf("Usage: ./run left.png left-remap.png right0224.png right-remap.png\n");
         return 0;
     }
-    // Open the buffer allocation device
+    // Initialize zynq runtime
     halide_zynq_init();
 
     // Halide::Buffer<T> cannot be automatically converted to halide_buffer_t*
