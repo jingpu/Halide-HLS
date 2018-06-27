@@ -26,8 +26,6 @@ int main(int argc, char **argv) {
     // Initialize zynq runtime
     halide_zynq_init();
 
-    // Halide::Buffer<T> cannot be automatically converted to halide_buffer_t*
-    // use BufferMinimal<T> instead
     Buffer<uint8_t> left = load_image(argv[1]);
     Buffer<uint8_t> left_remap = load_image(argv[2]);
     Buffer<uint8_t> right = load_image(argv[3]);

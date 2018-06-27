@@ -38,7 +38,7 @@ pipeline_zynq.o: pipeline_zynq.c
 	$(CXX) -c -O2 $(CXXFLAGS) -g -Wall -Werror $^ -o $@
 
 run_zynq.o: run_zynq.cpp
-	$(CXX) -c $(CXXFLAGS) $(HLS_IFLAG) -g -Wall -Werror $^ -o $@  $(PNGFLAGS)
+	$(CXX) -c $(CXXFLAGS) -g -Wall -Werror $^ -o $@  $(PNGFLAGS)
 
 HalideRuntimeZynq.o: ../hls_support/HalideRuntimeZynq.cpp
 	$(CXX) -Wall -Werror -I ../../../src/runtime $^ -c -o $@
