@@ -148,7 +148,6 @@ public:
         //in.set_stride(0, 3).set_stride(2, 1).set_bounds(2, 0, 3);
         output.output_buffer().set_stride(0, 3).set_stride(2, 1);
 
-        output.compile_to_object("pipeline_zynq.o", args, "pipeline_zynq", target);
         output.compile_to_lowered_stmt("pipeline_zynq.ir.html", args, HTML, target);
         output.compile_to_assembly("pipeline_zynq.s", args, "pipeline_zynq", target);
     }
