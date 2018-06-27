@@ -33,7 +33,7 @@ $(HLS_LOG): ../hls_support/run_hls.tcl pipeline_hls.cpp run.cpp
 #	$(CXX) -c -O2 $(CXXFLAGS) -g -Wall -Werror $^ -o $@  $(PNGFLAGS)
 
 run_zynq: pipeline_zynq.o pipeline_native.o run_zynq.cpp
-	$(CXX) -O3 $(CXXFLAGS) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
+	$(CXX) -O3 $(CXXFLAGS) $(HLS_IFLAG) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS)
 
 run_cuda: pipeline_native.o pipeline_cuda.o run_cuda.cpp
 	$(CXX) -O3 $(CXXFLAGS) -Wall -Werror $^ -lpthread -ldl -o $@  $(PNGFLAGS) `pkg-config --libs opencv`

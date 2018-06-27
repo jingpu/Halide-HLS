@@ -306,7 +306,8 @@ void compile_hls() {
 
     // Create the Zynq platform target
     std::vector<Target::Feature> features({Target::Zynq});
-    Target target(Target::Linux, Target::ARM, 32, features);
+    // use 64 bit since Zynq-ultrascale is 64bit
+    Target target(Target::Linux, Target::ARM, 64, features);
     output.compile_to_zynq_c("pipeline_zynq.c", args, "pipeline_zynq", target);
     output.compile_to_header("pipeline_zynq.h", args, "pipeline_zynq", target);
 
