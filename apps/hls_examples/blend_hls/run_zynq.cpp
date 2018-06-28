@@ -37,8 +37,6 @@ int main(int argc, char **argv) {
     blend_cpu(input1, input2, weight, out_native);
     save_image(out_native, "out.png");
     printf("cpu program results saved.\n");
-    //out_native = load_image("out_native.png");
-    //printf("cpu program results loaded.\n");
 
     pipeline_zynq(input1, input2, weight, out_zynq);
     save_image(out_zynq, "out_zynq.png");

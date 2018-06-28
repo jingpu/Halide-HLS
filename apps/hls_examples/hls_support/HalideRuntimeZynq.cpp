@@ -249,7 +249,7 @@ void buffer_to_stencil(struct halide_buffer_t* image, struct UBuffer* stencil) {
     }
     stencil->width = image->dim[nDims - 2].extent; // length of the array
     stencil->height = image->dim[nDims - 1].extent;
-    stencil->depth = (image->type.bits + 7) / 8;
+    stencil->depth = image->type.bytes();
     if (stencil->height != 1)
         printf("stencil height is not 1\n");
     // we assume tap values are 1D array. hence its height = 1,
