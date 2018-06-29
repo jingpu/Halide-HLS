@@ -242,6 +242,23 @@ int halide_zynq_hwacc_sync(int task_id){
     return res;
 }
 
+void buffer_to_stencil(struct halide_buffer_t* image, struct UBuffer* stencil) {
+    size_t nDims = image->dimensions;
+    if (nDims < 2) {
+        printf("buffer_t has less than 2 dimension, not supported in CMA driver.");
+    }
+    stencil->width = image->dim[nDims - 2].extent; // length of the array
+    stencil->height = image->dim[nDims - 1].extent;
+    stencil->depth = image->type.bytes();
+    if (stencil->height != 1)
+        printf("stencil height is not 1\n");
+    // we assume tap values are 1D array. hence its height = 1,
+    // as a result, we can use this to tell tap/stream apart
+    // wrap user memory addr to the id(high) and stride(low) field
+    uint64_t addr = (uint64_t)image->host;
+    stencil->id = 0xFFFFFFFF & (addr >> 32);
+    stencil->stride = 0xFFFFFFFF & addr;
+}
 
 #ifdef __cplusplus
 } // End extern "C"

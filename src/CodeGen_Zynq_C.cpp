@@ -51,6 +51,7 @@ const string zynq_runtime =
     "int halide_zynq_subimage(const struct halide_buffer_t* image, struct UBuffer* subimage, void *address_of_subimage_origin, int width, int height);\n"
     "int halide_zynq_hwacc_launch(struct UBuffer bufs[]);\n"
     "int halide_zynq_hwacc_sync(int task_id);\n"
+    "void buffer_to_stencil(struct halide_buffer_t* image, struct UBuffer* stencil);\n"
     "#ifdef __cplusplus\n"
     "}  // extern \"C\" {\n"
     "#endif\n";
@@ -64,7 +65,8 @@ CodeGen_Zynq_C::CodeGen_Zynq_C(ostream &dest,
 }
 
 void CodeGen_Zynq_C::visit(const Realize *op) {
-    internal_assert(ends_with(op->name, ".stream"));
+    internal_assert(ends_with(op->name, ".stream") ||
+                    ends_with(op->name, ".tap.stencil"));
     open_scope();
     string slice_name = op->name;
     buffer_slices.push_back(slice_name);
@@ -157,6 +159,18 @@ void CodeGen_Zynq_C::visit(const Call *op) {
             << print_expr(l->index)
             << ")";
         print_assignment(op->type, rhs.str());
+    } else if (op->name == "buffer_to_stencil") {
+        /**
+         * disguise tap value as buffer and handle that in the kernel driver,
+         * assuming tap values are one-dimensional array
+         * (at least for the current applications).
+         */
+        internal_assert(op->args.size() == 2);
+        do_indent();
+        stream << "buffer_to_stencil("
+                  << print_expr(op->args[0]) << ", &"
+                  << print_expr(op->args[1]) << ");\n";
+        id = "0"; // skip evaluation
     } else {
         CodeGen_C::visit(op);
     }

@@ -16,7 +16,8 @@ CodeGen_Zynq_LLVM::CodeGen_Zynq_LLVM(Target t)
     : CodeGen_ARM(t) { }
 
 void CodeGen_Zynq_LLVM::visit(const Realize *op) {
-    internal_assert(ends_with(op->name, ".stream"));
+    internal_assert(ends_with(op->name, ".stream") ||
+                    ends_with(op->name, ".tap.stencil"));
     llvm::StructType *kbuf_type = module->getTypeByName("struct.UBuffer");
     internal_assert(kbuf_type);
     llvm::Constant *one = llvm::ConstantInt::get(i32_t, 1);
@@ -124,6 +125,18 @@ void CodeGen_Zynq_LLVM::visit(const Call *op) {
         internal_assert(load->index.type().is_scalar()) << "Can't take the address of a vector load\n";
 
         value = codegen_buffer_pointer(load->name, load->type, load->index);
+    } else if (op->name == "buffer_to_stencil") {
+        /**
+         * disguise tap value as buffer and handle that in the kernel driver,
+         * assuming tap values are one-dimensional array
+         * (at least for the current applications).
+         */
+        internal_assert(op->args.size() == 2);
+        Value *buffer = codegen(op->args[0]);
+        Value *stencil = codegen(op->args[1]);
+        llvm::Function *fn = module->getFunction("buffer_to_stencil");
+        internal_assert(fn);
+        value = builder->CreateCall(fn, {buffer, stencil});
     } else {
         CodeGen_ARM::visit(op);
     }
