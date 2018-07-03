@@ -669,6 +669,9 @@ class StreamOpt : public IRMutator {
 
             // insert line buffers for input streams
             for (const string &kernel_name : dag.input_kernels) {
+                user_assert(dag.kernels.count(kernel_name)) << kernel_name
+                    << " not found in kernels. Did you forget to schedule for "
+                    << kernel_name << "?";
                 const HWKernel &input_kernel = dag.kernels.find(kernel_name)->second;
                 new_body = add_linebuffer(new_body, input_kernel);
             }
