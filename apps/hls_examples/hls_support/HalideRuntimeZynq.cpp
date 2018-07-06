@@ -141,7 +141,7 @@ static int cma_get_buffer(UBuffer* ptr) {
 }
 
 static int cma_free_buffer(UBuffer* ptr) {
-    return ioctl(fd_cma, FREE_IMAGE, (long unsigned int)ptr);
+    return ioctl(fd_cma, FREE_BUFFER, (long unsigned int)ptr);
 }
 
 int halide_zynq_cma_alloc(struct halide_buffer_t *buf) {
